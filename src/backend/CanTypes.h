@@ -17,6 +17,8 @@ struct FrameRecord {
     quint8 data[8] = {0};
     quint8 bus = 0;
     quint8 seq = 0;
+    bool hasObservedGap = false;
+    quint64 observedGapUs = 0;
     QByteArray raw20;
 };
 

@@ -1681,7 +1681,7 @@ void AppController::flushPendingLiveFrames() {
     while (m_pendingLiveFrameOffset < m_pendingLiveFrames.size()) {
         const FrameRecord& fr = m_pendingLiveFrames[m_pendingLiveFrameOffset++];
         ensureTimeAnchorForFrame(liveSource, fr.tExtUs);
-        ingestFrame(fr, liveSource);
+        if (m_transportModeKey != QStringLiteral("typed")) ingestFrame(fr, liveSource);
         ++processed;
         if (processed >= targetChunk) break;
         if (processed >= m_liveFlushMinChunk && budget.elapsed() >= budgetMs) break;
@@ -2097,6 +2097,16 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         if (!m_liveFlushTimer.isActive()) {
             m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 0 : 6);
         }
+    });
+    connect(m_worker, &SerialWorker::truthFramesReceived, this, [this](const FrameRecordList& frames) {
+        if (frames.isEmpty()) return;
+        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        const QString liveSource = QStringLiteral("live");
+        for (const FrameRecord& frame : frames) {
+            ensureTimeAnchorForFrame(liveSource, frame.tExtUs);
+            ingestFrame(frame, liveSource);
+        }
+        requestLiveStatsRefresh(false);
     });
     connect(m_worker, &SerialWorker::typedRecordsReceived, this, [this](const TypedRecordList& records) {
         if (records.isEmpty()) return;
@@ -2689,14 +2699,6 @@ bool AppController::projectionBackpressureActive() const {
     if (backlog > kLiveProjectionSoftBacklog) return true;
     if (m_transportModeKey == QStringLiteral("typed") && m_lastStats.rxFps1s >= 900) return true;
     return false;
-}
-
-bool AppController::liveTimingProjectionSampled() const {
-    if (m_transportModeKey != QStringLiteral("typed")) return false;
-    return projectionBackpressureActive()
-        || m_liveProjectionWorkerSampledFrames > 0
-        || m_liveProjectionDroppedFrames > 0
-        || m_liveProjectionWorkerDroppedFrames > 0;
 }
 
 bool AppController::timingStructureSyncAllowed() const {
@@ -8966,7 +8968,9 @@ void AppController::ingestFrame(const FrameRecord& fr, const QString& source) {
     QHash<quint32, IdState>& states = stateMapForSource(source);
     IdState& st = states[fr.canId];
     const qint64 nowMs = qint64(fr.tExtUs / 1000ULL);
-    if (st.seen && fr.tExtUs >= st.lastBoardSeenUs) {
+    if (fr.hasObservedGap) {
+        st.lastGapMs = double(fr.observedGapUs) / 1000.0;
+    } else if (st.seen && fr.tExtUs >= st.lastBoardSeenUs) {
         st.lastGapMs = double(fr.tExtUs - st.lastBoardSeenUs) / 1000.0;
     }
     st.seen = true;
@@ -8974,7 +8978,6 @@ void AppController::ingestFrame(const FrameRecord& fr, const QString& source) {
     st.lastSource = source;
     st.lastLocalSeenMs = nowMs;
     st.lastBoardSeenUs = fr.tExtUs;
-    st.liveProjectionSampledTiming = source == QStringLiteral("live") && liveTimingProjectionSampled();
     appendGraphSamples(fr, source);
     const auto ruleIt = m_rules.constFind(fr.canId);
     const RuleSpec* rule = (m_modelEnabled && ruleIt != m_rules.cend()) ? &ruleIt.value() : nullptr;
@@ -9001,8 +9004,6 @@ AppController::EvalResult AppController::evaluateId(quint32 id, const IdState* s
     input.nowMs = nowMs;
     input.lastLocalSeenMs = (state && state->seen) ? state->lastLocalSeenMs : -1;
     input.gapMs = (state && state->seen) ? state->lastGapMs : -1.0;
-    input.projectionSampled = state && state->seen && state->lastSource == QStringLiteral("live") &&
-        (state->liveProjectionSampledTiming || liveTimingProjectionSampled());
     const auto ruleIt = m_rules.constFind(id);
     input.rule = (m_modelEnabled && ruleIt != m_rules.cend()) ? &ruleIt.value() : nullptr;
     return CanMonitorAnalysis::TimingEvaluator::evaluate(input);

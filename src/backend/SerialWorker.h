@@ -45,6 +45,7 @@ signals:
     void stateChanged(bool connected, const QString& message);
     void errorOccurred(const QString& message);
     void framesReceived(const FrameRecordList& frames);
+    void truthFramesReceived(const FrameRecordList& frames);
     void statsReceived(const StatsRecord& st);
     void typedRecordsReceived(const TypedRecordList& records);
     void typedProjectionStatusChanged(quint64 observedCanRxFrames,
@@ -79,6 +80,8 @@ private:
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
     void queueProjectedFrames(const FrameRecordList& frames);
     void flushQueuedProjectionFrames(bool force = false);
+    void queueTruthFrames(const TypedRecordList& records);
+    void flushQueuedTruthFrames(bool force = false);
     void emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
     void resetProjectionQueue();
     static quint64 projectionKeyForFrame(const FrameRecord& frame);
@@ -98,8 +101,12 @@ private:
     CanMonitorTransport::HostTxRuntime m_hostTx;
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
     QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
+    QHash<quint64, FrameRecord> m_pendingTruthFramesByKey;
+    QHash<quint64, quint64> m_truthLastMonoUsByKey;
     QElapsedTimer m_projectionFlushClock;
+    QElapsedTimer m_truthFlushClock;
     int m_projectionFlushTimerId = 0;
+    int m_truthFlushTimerId = 0;
     quint64 m_projectionQueueSampledFrames = 0;
     quint64 m_projectionQueueDroppedFrames = 0;
     CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;

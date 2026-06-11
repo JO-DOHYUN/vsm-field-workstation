@@ -689,7 +689,6 @@ private:
         int timingEventCount = 0;
         QString lastTimingIssueKey;
         bool timingIssueLatched = false;
-        bool liveProjectionSampledTiming = false;
     };
 
     struct ReplayIssueMarker {
@@ -893,7 +892,6 @@ private:
     int liveFlushBudgetForBacklog(qint64 backlog) const;
     void compactPendingLiveFrames();
     void coalescePendingLiveFramesToLatest();
-    bool liveTimingProjectionSampled() const;
     void updateNextTimingEvalMs(quint32 id, IdState& state, qint64 nowMs);
     bool analyzeTimingState(quint32 id, IdState& state, const QString& source, qint64 nowMs);
     bool syncValueAlarmState(quint32 id, IdState& state, const QString& source, bool allowReplayMarkers);

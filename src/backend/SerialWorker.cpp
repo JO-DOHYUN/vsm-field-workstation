@@ -6,6 +6,7 @@
 #include <QMetaObject>
 
 #include <algorithm>
+#include <cstring>
 
 namespace {
 constexpr int kTypedHandshakeWatchdogIntervalMs = 250;
@@ -13,6 +14,8 @@ constexpr int kTypedHandshakeTimeoutMs = 3500;
 constexpr int kUiProjectionFlushIntervalMs = 55;
 constexpr int kUiProjectionMaxFramesPerFlush = 40;
 constexpr int kUiProjectionHardPendingKeys = 384;
+constexpr int kTruthFlushIntervalMs = 120;
+constexpr int kTruthMaxFramesPerFlush = 160;
 }
 
 SerialWorker::SerialWorker(QObject* parent)
@@ -247,6 +250,15 @@ void SerialWorker::timerEvent(QTimerEvent* event) {
         }
         return;
     }
+    if (event->timerId() == m_truthFlushTimerId) {
+        flushQueuedTruthFrames(false);
+        if (m_pendingTruthFramesByKey.isEmpty()) {
+            killTimer(m_truthFlushTimerId);
+            m_truthFlushTimerId = 0;
+            m_truthFlushClock.invalidate();
+        }
+        return;
+    }
     if (event->timerId() == m_controlCycleTimerId) {
         beginControlCycle();
         return;
@@ -320,6 +332,7 @@ void SerialWorker::processTypedBytes(const QByteArray& bytes) {
         emit errorOccurred(error);
     }
     for (const TypedRecordList& batch : result.recordBatches) {
+        queueTruthFrames(batch);
         const auto projection = m_liveProjection.ingest(batch);
         if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
         if (!projection.projectedFrames.isEmpty()) {
@@ -410,6 +423,82 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
     emitProjectionStatus(m_liveProjection.status());
 }
 
+void SerialWorker::queueTruthFrames(const TypedRecordList& records) {
+    if (records.isEmpty()) return;
+
+    for (const TypedRecord& record : records) {
+        if (!record.isType(TypedRecordType::CanRxRaw)) continue;
+        const auto can = decodeTypedCanRaw(record);
+        if (!can) continue;
+
+        FrameRecord frame;
+        frame.tExtUs = can->monoUs;
+        frame.canId = can->canId;
+        frame.ext = can->extended;
+        frame.rtr = can->rtr;
+        frame.dlc = can->dlc;
+        frame.bus = can->bus;
+        frame.seq = quint8(record.header.seq & 0xFF);
+        std::memcpy(frame.data, can->data, sizeof(frame.data));
+
+        const quint64 key = projectionKeyForFrame(frame);
+        const auto lastMonoIt = m_truthLastMonoUsByKey.constFind(key);
+        if (lastMonoIt != m_truthLastMonoUsByKey.cend() && can->monoUs >= lastMonoIt.value()) {
+            frame.hasObservedGap = true;
+            frame.observedGapUs = can->monoUs - lastMonoIt.value();
+        }
+        m_truthLastMonoUsByKey.insert(key, can->monoUs);
+
+        auto pendingIt = m_pendingTruthFramesByKey.find(key);
+        if (pendingIt != m_pendingTruthFramesByKey.end()) {
+            if (pendingIt.value().hasObservedGap &&
+                (!frame.hasObservedGap || pendingIt.value().observedGapUs > frame.observedGapUs)) {
+                frame.hasObservedGap = true;
+                frame.observedGapUs = pendingIt.value().observedGapUs;
+            }
+            pendingIt.value() = frame;
+        } else {
+            m_pendingTruthFramesByKey.insert(key, frame);
+        }
+    }
+
+    if (m_pendingTruthFramesByKey.isEmpty()) return;
+    if (m_truthFlushTimerId == 0) {
+        m_truthFlushTimerId = startTimer(kTruthFlushIntervalMs, Qt::CoarseTimer);
+    }
+    if (!m_truthFlushClock.isValid() || m_truthFlushClock.elapsed() >= kTruthFlushIntervalMs) {
+        flushQueuedTruthFrames(false);
+    }
+}
+
+void SerialWorker::flushQueuedTruthFrames(bool force) {
+    if (m_pendingTruthFramesByKey.isEmpty()) return;
+    if (!force &&
+        m_truthFlushClock.isValid() &&
+        m_truthFlushClock.elapsed() < kTruthFlushIntervalMs) {
+        return;
+    }
+
+    FrameRecordList frames;
+    frames.reserve(m_pendingTruthFramesByKey.size());
+    for (auto it = m_pendingTruthFramesByKey.cbegin(); it != m_pendingTruthFramesByKey.cend(); ++it) {
+        frames.push_back(it.value());
+    }
+    m_pendingTruthFramesByKey.clear();
+
+    std::sort(frames.begin(), frames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+        if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
+        if (a.bus != b.bus) return a.bus < b.bus;
+        return a.canId < b.canId;
+    });
+    if (frames.size() > kTruthMaxFramesPerFlush) {
+        frames.erase(frames.begin(), frames.begin() + (frames.size() - kTruthMaxFramesPerFlush));
+    }
+
+    if (!frames.isEmpty()) emit truthFramesReceived(frames);
+    m_truthFlushClock.restart();
+}
+
 void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
     m_lastProjectionStatus = status;
     emit typedProjectionStatusChanged(status.observedCanRxFrames,
@@ -428,8 +517,15 @@ void SerialWorker::resetProjectionQueue() {
         killTimer(m_projectionFlushTimerId);
         m_projectionFlushTimerId = 0;
     }
+    if (m_truthFlushTimerId != 0) {
+        killTimer(m_truthFlushTimerId);
+        m_truthFlushTimerId = 0;
+    }
     m_pendingProjectionFramesByKey.clear();
+    m_pendingTruthFramesByKey.clear();
+    m_truthLastMonoUsByKey.clear();
     m_projectionFlushClock.invalidate();
+    m_truthFlushClock.invalidate();
     m_projectionQueueSampledFrames = 0;
     m_projectionQueueDroppedFrames = 0;
     m_lastProjectionStatus = {};
@@ -480,6 +576,7 @@ void SerialWorker::closeSerialPortForRecovery(const QString& reason) {
     stopTypedHandshakeWatchdog();
     stopControlCycle();
     flushQueuedProjectionFrames(true);
+    flushQueuedTruthFrames(true);
     emitTypedStorageUpdate(m_typedIngress.finalizeStorageIfActive());
     if (!m_serial) return;
 

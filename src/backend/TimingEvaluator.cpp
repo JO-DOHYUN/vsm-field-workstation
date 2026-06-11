@@ -73,16 +73,6 @@ TimingEvalResult TimingEvaluator::evaluate(const TimingInput& input) {
 
     out.ageMs = double(input.nowMs - input.lastLocalSeenMs);
 
-    if (input.projectionSampled) {
-        out.severity = QStringLiteral("관찰");
-        out.reason = QStringLiteral("라이브 표시 투사 샘플링 중 · 주기 판정은 저장된 캡처/재생 기준으로 확인");
-        out.severityRank = severityRankFor(out.severity);
-        out.metricText = QStringLiteral("projection sampled");
-        out.gaugePct = 0.0;
-        out.activeAlarm = false;
-        return out;
-    }
-
     const bool ttlWarn = rule->ttlWarnMs > 0.0 && out.ageMs >= rule->ttlWarnMs;
     const bool ttlErr = rule->ttlErrMs > 0.0 && out.ageMs >= rule->ttlErrMs;
 
