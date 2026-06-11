@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QSerialPort>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QStringList>
 #include <QTimerEvent>
 #include <QVector>
@@ -76,6 +77,11 @@ private:
     void emitTypedStatus(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
     void emitTypedStorageUpdate(const CanMonitorTransport::TypedIngressRuntime::StorageUpdate& update);
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
+    void queueProjectedFrames(const FrameRecordList& frames);
+    void flushQueuedProjectionFrames(bool force = false);
+    void emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
+    void resetProjectionQueue();
+    static quint64 projectionKeyForFrame(const FrameRecord& frame);
     void dispatchControlCycleResult(const CanMonitorControl::ControlCycleRuntime::CycleResult& result);
     void startTypedHandshakeWatchdog();
     void stopTypedHandshakeWatchdog();
@@ -91,6 +97,12 @@ private:
     CanMonitorTransport::LiveProjectionRuntime m_liveProjection;
     CanMonitorTransport::HostTxRuntime m_hostTx;
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
+    QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
+    QElapsedTimer m_projectionFlushClock;
+    int m_projectionFlushTimerId = 0;
+    quint64 m_projectionQueueSampledFrames = 0;
+    quint64 m_projectionQueueDroppedFrames = 0;
+    CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;
     QElapsedTimer m_typedHandshakeClock;
     int m_typedHandshakeTimerId = 0;
     int m_controlCycleTimerId = 0;

@@ -41,10 +41,11 @@ constexpr int kRoutineControlWriteUiMinIntervalMs = 250;
 constexpr int kHostTxQueueUiMinIntervalMs = 250;
 constexpr int kControlKeyboardLegacyPulseMs = 120;
 constexpr double kControlKeyboardSteerHoldDeg = 45.0;
-constexpr int kLiveProjectionSoftBacklog = 4096;
-constexpr int kLiveProjectionHardBacklog = 8192;
-constexpr int kLiveProjectionMaxFlushFrames = 512;
-constexpr int kLiveProjectionFlushBudgetMs = 4;
+constexpr int kLiveProjectionSoftBacklog = 512;
+constexpr int kLiveProjectionHardBacklog = 2048;
+constexpr int kLiveProjectionMaxFlushFrames = 96;
+constexpr int kLiveProjectionFlushBudgetMs = 2;
+constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
     if (elapsedUs == 0) return 0;
@@ -1991,6 +1992,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
             m_liveProjectionFlushBudgetHits = 0;
             m_liveProjectionMaxBacklog = 0;
             m_liveProjectionLastFlushMs = 0;
+            m_lastLiveRuntimeLogWallMs = 0;
             m_lastRoutineControlWriteNotifyWallMs = 0;
             m_lastHostTxQueueNotifyWallMs = 0;
             clearGraphHistory(QStringLiteral("live"));
@@ -2538,8 +2540,9 @@ void AppController::processTimingAnalysisSlice() {
     if (ids.isEmpty()) return;
     if (cursor < 0 || cursor >= ids.size()) cursor = 0;
 
-    int sliceBudgetMs = (m_timingPanelActive || m_overviewPanelActive) ? 3 : 2;
-    int maxVisits = (m_timingPanelActive || m_overviewPanelActive) ? 96 : 40;
+    const bool activeTimingSurface = m_timingPanelActive || (m_overviewPanelActive && !projectionBackpressureActive());
+    int sliceBudgetMs = activeTimingSurface ? 3 : 2;
+    int maxVisits = activeTimingSurface ? 96 : 40;
     if (projectionBackpressureActive()) {
         sliceBudgetMs = std::min(sliceBudgetMs, 1);
         maxVisits = std::min(maxVisits, 24);
@@ -2579,14 +2582,17 @@ void AppController::processTimingAnalysisSlice() {
 }
 
 bool AppController::timingScopeActive() const {
+    if (projectionBackpressureActive()) return m_timingPanelActive;
     return m_overviewPanelActive || m_timingPanelActive;
 }
 
 bool AppController::valueScopeActive() const {
+    if (projectionBackpressureActive()) return m_valuePanelActive || m_alarmPanelActive;
     return m_overviewPanelActive || m_valuePanelActive || m_alarmPanelActive;
 }
 
 bool AppController::alarmScopeActive() const {
+    if (projectionBackpressureActive()) return m_alarmPanelActive;
     return m_overviewPanelActive || m_alarmPanelActive;
 }
 
@@ -2637,25 +2643,25 @@ bool AppController::projectionDue(qint64 lastMs, int minIntervalMs) const {
 bool AppController::projectionBackpressureActive() const {
     const qint64 backlog = pendingLiveFrameCount();
     if (backlog > kLiveProjectionSoftBacklog) return true;
-    if (m_transportModeKey == QStringLiteral("typed") && m_lastStats.rxFps1s >= 1200) return true;
+    if (m_transportModeKey == QStringLiteral("typed") && m_lastStats.rxFps1s >= 900) return true;
     return false;
 }
 
 bool AppController::timingStructureSyncAllowed() const {
-    if (m_overviewPanelActive || m_timingPanelActive || m_timingReorderRequested) return true;
     if (!projectionBackpressureActive()) return true;
+    if (m_timingPanelActive || m_timingReorderRequested) return true;
     return projectionDue(m_lastTimingStructureSyncWallMs, 2600);
 }
 
 bool AppController::valueStructureSyncAllowed() const {
-    if (m_overviewPanelActive || m_valuePanelActive || m_valueReorderRequested) return true;
     if (!projectionBackpressureActive()) return true;
+    if (m_valuePanelActive || m_valueReorderRequested) return true;
     return projectionDue(m_lastValueStructureSyncWallMs, 2800);
 }
 
 bool AppController::alarmStructureSyncAllowed() const {
-    if (m_overviewPanelActive || m_alarmPanelActive || m_alarmReorderRequested) return true;
     if (!projectionBackpressureActive()) return true;
+    if (m_alarmPanelActive || m_alarmReorderRequested) return true;
     return projectionDue(m_lastAlarmStructureSyncWallMs, 3200);
 }
 
@@ -5240,6 +5246,22 @@ void AppController::updateTransportDiagnostics() {
                                          m_liveProjectionMaxBacklog,
                                          m_liveProjectionFlushBudgetHits,
                                          m_liveProjectionLastFlushMs);
+    if (m_connected && (m_lastLiveRuntimeLogWallMs <= 0 || (nowWallMs - m_lastLiveRuntimeLogWallMs) >= 5000)) {
+        m_lastLiveRuntimeLogWallMs = nowWallMs;
+        qCInfo(logTransport).noquote()
+            << "Live runtime"
+            << "capture_bytes" << m_logRecordedBytes
+            << "capture_records" << m_logRecordedFrameCount
+            << "pending_projection" << pendingLiveFrameCount()
+            << "projected" << m_liveProjectionProjectedFrames
+            << "sampled" << (m_liveProjectionWorkerSampledFrames + m_liveSampledViewDrops)
+            << "dropped" << (m_liveProjectionDroppedFrames + m_liveProjectionWorkerDroppedFrames)
+            << "budget_hits" << m_liveProjectionFlushBudgetHits
+            << "last_flush_ms" << m_liveProjectionLastFlushMs
+            << "rx_fps" << m_lastStats.rxFps1s
+            << "can_drop" << m_lastStats.droppedTotal
+            << "fifo" << m_lastStats.fifoOverflowTotal;
+    }
 }
 
 void AppController::restoreSessionState() {
@@ -6365,11 +6387,13 @@ void AppController::resetGraphDetailZoomLock() {
 }
 
 void AppController::appendGraphSamples(const FrameRecord& fr, const QString& source) {
+    if (source == QStringLiteral("live") && !m_graphPageActive) return;
     if (m_graphSelectedKeys.isEmpty()) return;
     const auto keys = m_graphKeysById.values(fr.canId);
     if (keys.isEmpty()) return;
 
     auto* history = source == QStringLiteral("replay") ? &m_replayGraphHistory : &m_liveGraphHistory;
+    const bool compactLiveGraph = source == QStringLiteral("live") && projectionBackpressureActive();
     bool changed = false;
     const quint64 retentionUs = quint64(graphHistoryRetentionMs(m_graphWindowMs)) * 1000ULL;
     QSet<QString> updatedHistoryKeys;
@@ -6383,6 +6407,15 @@ void AppController::appendGraphSamples(const FrameRecord& fr, const QString& sou
         if (!graphDecodeDescriptorValue(it.value(), fr, m_signalMessages, &value)) continue;
         auto& series = (*history)[historyKey];
         bool replacedLast = false;
+        if (compactLiveGraph &&
+            !series.isEmpty() &&
+            fr.tExtUs >= series.back().frameUs &&
+            (fr.tExtUs - series.back().frameUs) < kLiveGraphBackpressureSampleGapUs) {
+            series.back().value = value;
+            updatedHistoryKeys.insert(historyKey);
+            changed = true;
+            continue;
+        }
         if (!series.isEmpty() && series.back().frameUs == fr.tExtUs) {
             series.back().value = value;
             replacedLast = true;
@@ -7562,6 +7595,7 @@ void AppController::resetTypedEvidenceState() {
     m_liveProjectionFlushBudgetHits = 0;
     m_liveProjectionMaxBacklog = 0;
     m_liveProjectionLastFlushMs = 0;
+    m_lastLiveRuntimeLogWallMs = 0;
     m_lastRoutineControlWriteNotifyWallMs = 0;
     m_lastHostTxQueueNotifyWallMs = 0;
     m_transportSession.reset();
@@ -8247,6 +8281,7 @@ void AppController::clearFrames() {
     m_liveProjectionFlushBudgetHits = 0;
     m_liveProjectionMaxBacklog = 0;
     m_liveProjectionLastFlushMs = 0;
+    m_lastLiveRuntimeLogWallMs = 0;
     m_lastRoutineControlWriteNotifyWallMs = 0;
     m_lastHostTxQueueNotifyWallMs = 0;
     setReplayAnalysisHeld(false);

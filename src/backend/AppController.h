@@ -1103,10 +1103,10 @@ private:
     int m_pendingLiveFrameOffset = 0;
     FrameRecordList m_pendingLiveViewFrames;
     QStringList m_pendingLiveViewTimeTexts;
-    int m_liveFlushChunk = 768;
-    int m_liveFlushMinChunk = 96;
-    int m_liveViewChunk = 160;
-    int m_liveFlushBudgetMs = 6;
+    int m_liveFlushChunk = 128;
+    int m_liveFlushMinChunk = 24;
+    int m_liveViewChunk = 72;
+    int m_liveFlushBudgetMs = 2;
     quint64 m_liveSampledViewDrops = 0;
     quint64 m_liveProjectionObservedFrames = 0;
     quint64 m_liveProjectionProjectedFrames = 0;
@@ -1119,6 +1119,7 @@ private:
     quint64 m_liveProjectionFlushBudgetHits = 0;
     int m_liveProjectionMaxBacklog = 0;
     int m_liveProjectionLastFlushMs = 0;
+    qint64 m_lastLiveRuntimeLogWallMs = 0;
     qint64 m_lastLiveFrameWallMs = -1;
     qint64 m_lastLiveStatsWallMs = -1;
     StatsRecord m_lastStats;

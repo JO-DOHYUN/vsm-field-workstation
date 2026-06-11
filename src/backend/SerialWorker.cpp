@@ -5,9 +5,14 @@
 #include <QIODevice>
 #include <QMetaObject>
 
+#include <algorithm>
+
 namespace {
 constexpr int kTypedHandshakeWatchdogIntervalMs = 250;
 constexpr int kTypedHandshakeTimeoutMs = 3500;
+constexpr int kUiProjectionFlushIntervalMs = 55;
+constexpr int kUiProjectionMaxFramesPerFlush = 72;
+constexpr int kUiProjectionHardPendingKeys = 384;
 }
 
 SerialWorker::SerialWorker(QObject* parent)
@@ -39,6 +44,7 @@ void SerialWorker::start(const QString& portName) {
     m_serial->setRequestToSend(true);
     m_legacyIngress.resetStreamState();
     m_typedIngress.resetStreamState();
+    resetProjectionQueue();
     connect(m_serial, &QSerialPort::readyRead, this, &SerialWorker::onReadyRead);
     connect(m_serial, &QSerialPort::bytesWritten, this, &SerialWorker::onBytesWritten);
     connect(m_serial, &QSerialPort::errorOccurred, this, [this, portName](QSerialPort::SerialPortError error) {
@@ -232,6 +238,15 @@ void SerialWorker::timerEvent(QTimerEvent* event) {
         }
         return;
     }
+    if (event->timerId() == m_projectionFlushTimerId) {
+        flushQueuedProjectionFrames(false);
+        if (m_pendingProjectionFramesByKey.isEmpty()) {
+            killTimer(m_projectionFlushTimerId);
+            m_projectionFlushTimerId = 0;
+            m_projectionFlushClock.invalidate();
+        }
+        return;
+    }
     if (event->timerId() == m_controlCycleTimerId) {
         beginControlCycle();
         return;
@@ -306,22 +321,12 @@ void SerialWorker::processTypedBytes(const QByteArray& bytes) {
     }
     for (const TypedRecordList& batch : result.recordBatches) {
         const auto projection = m_liveProjection.ingest(batch);
-        if (!projection.criticalRecords.isEmpty()) {
-            emit typedRecordsReceived(projection.criticalRecords);
-        }
+        if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
         if (!projection.projectedFrames.isEmpty()) {
-            emit framesReceived(projection.projectedFrames);
+            queueProjectedFrames(projection.projectedFrames);
         }
         if (projection.statusDue) {
-            emit typedProjectionStatusChanged(projection.status.observedCanRxFrames,
-                                              projection.status.projectedCanRxFrames,
-                                              projection.status.sampledCanRxFrames,
-                                              projection.status.workerDroppedCanRxFrames,
-                                              projection.status.observedBus0CanRxFrames,
-                                              projection.status.observedBus1CanRxFrames,
-                                              projection.status.observedControlEvidenceRecords,
-                                              projection.status.projectedControlEvidenceRecords,
-                                              projection.status.sampledControlEvidenceRecords);
+            emitProjectionStatus(projection.status);
         }
     }
     if (result.storageProgressDue) {
@@ -337,6 +342,97 @@ void SerialWorker::emitTypedStatus(const CanMonitorTransport::TypedIngressRuntim
                                      status.lengthFailures,
                                      status.versionWarnings,
                                      status.seqGaps);
+}
+
+quint64 SerialWorker::projectionKeyForFrame(const FrameRecord& frame) {
+    quint64 key = (quint64(frame.bus) << 56);
+    if (frame.ext) key |= (quint64(1) << 55);
+    if (frame.rtr) key |= (quint64(1) << 54);
+    key |= quint64(frame.canId & 0x1FFFFFFFU);
+    return key;
+}
+
+void SerialWorker::queueProjectedFrames(const FrameRecordList& frames) {
+    if (frames.isEmpty()) return;
+
+    for (const FrameRecord& frame : frames) {
+        const quint64 key = projectionKeyForFrame(frame);
+        auto existing = m_pendingProjectionFramesByKey.find(key);
+        if (existing != m_pendingProjectionFramesByKey.end()) {
+            existing.value() = frame;
+            ++m_projectionQueueSampledFrames;
+            continue;
+        }
+        if (m_pendingProjectionFramesByKey.size() >= kUiProjectionHardPendingKeys) {
+            ++m_projectionQueueDroppedFrames;
+            continue;
+        }
+        m_pendingProjectionFramesByKey.insert(key, frame);
+    }
+
+    if (m_projectionFlushTimerId == 0) {
+        m_projectionFlushTimerId = startTimer(kUiProjectionFlushIntervalMs, Qt::CoarseTimer);
+    }
+    if (!m_projectionFlushClock.isValid() ||
+        m_projectionFlushClock.elapsed() >= kUiProjectionFlushIntervalMs) {
+        flushQueuedProjectionFrames(false);
+    }
+}
+
+void SerialWorker::flushQueuedProjectionFrames(bool force) {
+    if (m_pendingProjectionFramesByKey.isEmpty()) return;
+    if (!force &&
+        m_projectionFlushClock.isValid() &&
+        m_projectionFlushClock.elapsed() < kUiProjectionFlushIntervalMs) {
+        return;
+    }
+
+    FrameRecordList frames;
+    frames.reserve(m_pendingProjectionFramesByKey.size());
+    for (auto it = m_pendingProjectionFramesByKey.cbegin(); it != m_pendingProjectionFramesByKey.cend(); ++it) {
+        frames.push_back(it.value());
+    }
+    m_pendingProjectionFramesByKey.clear();
+
+    std::sort(frames.begin(), frames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+        if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
+        if (a.bus != b.bus) return a.bus < b.bus;
+        return a.canId < b.canId;
+    });
+    if (frames.size() > kUiProjectionMaxFramesPerFlush) {
+        const int dropCount = frames.size() - kUiProjectionMaxFramesPerFlush;
+        m_projectionQueueDroppedFrames += quint64(dropCount);
+        frames.erase(frames.begin(), frames.begin() + dropCount);
+    }
+
+    if (!frames.isEmpty()) emit framesReceived(frames);
+    m_projectionFlushClock.restart();
+    emitProjectionStatus(m_liveProjection.status());
+}
+
+void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
+    m_lastProjectionStatus = status;
+    emit typedProjectionStatusChanged(status.observedCanRxFrames,
+                                      status.projectedCanRxFrames,
+                                      status.sampledCanRxFrames + m_projectionQueueSampledFrames,
+                                      status.workerDroppedCanRxFrames + m_projectionQueueDroppedFrames,
+                                      status.observedBus0CanRxFrames,
+                                      status.observedBus1CanRxFrames,
+                                      status.observedControlEvidenceRecords,
+                                      status.projectedControlEvidenceRecords,
+                                      status.sampledControlEvidenceRecords);
+}
+
+void SerialWorker::resetProjectionQueue() {
+    if (m_projectionFlushTimerId != 0) {
+        killTimer(m_projectionFlushTimerId);
+        m_projectionFlushTimerId = 0;
+    }
+    m_pendingProjectionFramesByKey.clear();
+    m_projectionFlushClock.invalidate();
+    m_projectionQueueSampledFrames = 0;
+    m_projectionQueueDroppedFrames = 0;
+    m_lastProjectionStatus = {};
 }
 
 void SerialWorker::emitLegacyLoggingUpdate(const CanMonitorTransport::LegacyIngressRuntime::LoggingUpdate& update) {
@@ -367,6 +463,7 @@ void SerialWorker::startTypedHandshakeWatchdog() {
     stopTypedHandshakeWatchdog();
     m_typedIngress.resetStreamState();
     m_liveProjection.reset();
+    resetProjectionQueue();
     m_typedHandshakeClock.restart();
     m_typedHandshakeTimerId = startTimer(kTypedHandshakeWatchdogIntervalMs, Qt::CoarseTimer);
 }
@@ -382,6 +479,7 @@ void SerialWorker::stopTypedHandshakeWatchdog() {
 void SerialWorker::closeSerialPortForRecovery(const QString& reason) {
     stopTypedHandshakeWatchdog();
     stopControlCycle();
+    flushQueuedProjectionFrames(true);
     emitTypedStorageUpdate(m_typedIngress.finalizeStorageIfActive());
     if (!m_serial) return;
 
@@ -398,6 +496,7 @@ void SerialWorker::closeSerialPortForRecovery(const QString& reason) {
     m_serial = nullptr;
     m_typedIngress.resetStreamState();
     m_liveProjection.reset();
+    resetProjectionQueue();
 }
 
 void SerialWorker::drainHostTxQueue() {

@@ -80,7 +80,7 @@ private slots:
 
         worker.ingestBytesForTest(frame.mid(12));
         QCOMPARE(typedSpy.size(), 0);
-        QCOMPARE(projectionSpy.size(), 1);
+        QTRY_COMPARE(projectionSpy.size(), 1);
         QVERIFY(projectionStatusSpy.size() >= 1);
         QVERIFY(statusSpy.size() >= 1);
 
@@ -116,7 +116,7 @@ private slots:
         worker.ingestBytesForTest(bad + good);
 
         QCOMPARE(typedSpy.size(), 0);
-        QCOMPARE(projectionSpy.size(), 1);
+        QTRY_COMPARE(projectionSpy.size(), 1);
         const auto frames = qvariant_cast<FrameRecordList>(projectionSpy.takeFirst().at(0));
         QCOMPARE(frames.size(), 1);
         QCOMPARE(frames.first().seq, quint8(21));
@@ -126,6 +126,32 @@ private slots:
         QCOMPARE(status.at(0).toULongLong(), quint64(1));
         QVERIFY(status.at(1).toULongLong() >= 1);
         QCOMPARE(status.at(2).toULongLong(), quint64(1));
+    }
+
+    void liveProjectionQueuesLatestFramePerKeyBetweenFlushes() {
+        SerialWorker worker;
+        worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
+
+        QSignalSpy projectionSpy(&worker, &SerialWorker::framesReceived);
+        QSignalSpy projectionStatusSpy(&worker, &SerialWorker::typedProjectionStatusChanged);
+
+        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 40, makeCanPayload(1000, 1)));
+        QTRY_COMPARE(projectionSpy.size(), 1);
+        projectionSpy.clear();
+        projectionStatusSpy.clear();
+
+        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 41, makeCanPayload(2000, 1)));
+        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 42, makeCanPayload(3000, 1)));
+
+        QTRY_COMPARE(projectionSpy.size(), 1);
+        const auto frames = qvariant_cast<FrameRecordList>(projectionSpy.takeFirst().at(0));
+        QCOMPARE(frames.size(), 1);
+        QCOMPARE(frames.first().tExtUs, quint64(3000));
+        QCOMPARE(frames.first().seq, quint8(42));
+
+        QVERIFY(projectionStatusSpy.size() >= 1);
+        const auto projectionStatus = projectionStatusSpy.takeLast();
+        QVERIFY(projectionStatus.at(2).toULongLong() >= quint64(1));
     }
 
     void typedStorageWritesFinalizedEvidenceSession() {
