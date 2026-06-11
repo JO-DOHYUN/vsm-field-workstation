@@ -16,6 +16,7 @@ struct TimingInput {
     qint64 nowMs = 0;
     qint64 lastLocalSeenMs = -1;
     double gapMs = -1.0;
+    bool projectionSampled = false;
     const CanModel::RuleSpec* rule = nullptr;
 };
 

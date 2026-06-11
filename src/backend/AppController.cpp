@@ -42,8 +42,8 @@ constexpr int kHostTxQueueUiMinIntervalMs = 250;
 constexpr int kControlKeyboardLegacyPulseMs = 120;
 constexpr double kControlKeyboardSteerHoldDeg = 45.0;
 constexpr int kLiveProjectionSoftBacklog = 512;
-constexpr int kLiveProjectionHardBacklog = 2048;
-constexpr int kLiveProjectionMaxFlushFrames = 96;
+constexpr int kLiveProjectionHardBacklog = 768;
+constexpr int kLiveProjectionMaxFlushFrames = 64;
 constexpr int kLiveProjectionFlushBudgetMs = 2;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 
@@ -1575,6 +1575,16 @@ qint64 AppController::pendingLiveFrameCount() const {
     return qint64(m_pendingLiveFrames.size()) - qint64(m_pendingLiveFrameOffset);
 }
 
+namespace {
+quint64 liveProjectionFrameKey(const FrameRecord& frame) {
+    quint64 key = (quint64(frame.bus) << 56);
+    if (frame.ext) key |= (quint64(1) << 55);
+    if (frame.rtr) key |= (quint64(1) << 54);
+    key |= quint64(frame.canId & 0x1FFFFFFFU);
+    return key;
+}
+}
+
 void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     if (m_pendingLiveFrameOffset > 0 &&
@@ -1620,7 +1630,41 @@ void AppController::compactPendingLiveFrames() {
     m_pendingLiveFrameOffset = 0;
 }
 
+void AppController::coalescePendingLiveFramesToLatest() {
+    const qint64 pending = pendingLiveFrameCount();
+    if (pending <= kLiveProjectionSoftBacklog || pending <= 1) return;
+
+    QHash<quint64, FrameRecord> latestByKey;
+    latestByKey.reserve(int(std::min<qint64>(pending, kLiveProjectionHardBacklog)));
+    quint64 replaced = 0;
+    for (int index = m_pendingLiveFrameOffset; index < m_pendingLiveFrames.size(); ++index) {
+        const FrameRecord& frame = m_pendingLiveFrames.at(index);
+        const quint64 key = liveProjectionFrameKey(frame);
+        auto it = latestByKey.find(key);
+        if (it == latestByKey.end()) {
+            latestByKey.insert(key, frame);
+            continue;
+        }
+        if (frame.tExtUs >= it.value().tExtUs) it.value() = frame;
+        ++replaced;
+    }
+
+    FrameRecordList coalesced;
+    coalesced.reserve(latestByKey.size());
+    for (auto it = latestByKey.cbegin(); it != latestByKey.cend(); ++it) coalesced.push_back(it.value());
+    std::sort(coalesced.begin(), coalesced.end(), [](const FrameRecord& a, const FrameRecord& b) {
+        if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
+        if (a.bus != b.bus) return a.bus < b.bus;
+        return a.canId < b.canId;
+    });
+
+    m_pendingLiveFrames.swap(coalesced);
+    m_pendingLiveFrameOffset = 0;
+    m_liveProjectionDroppedFrames += replaced;
+}
+
 void AppController::flushPendingLiveFrames() {
+    if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) coalescePendingLiveFramesToLatest();
     const qint64 backlogBefore = pendingLiveFrameCount();
     if (backlogBefore <= 0) {
         compactPendingLiveFrames();
@@ -2645,6 +2689,14 @@ bool AppController::projectionBackpressureActive() const {
     if (backlog > kLiveProjectionSoftBacklog) return true;
     if (m_transportModeKey == QStringLiteral("typed") && m_lastStats.rxFps1s >= 900) return true;
     return false;
+}
+
+bool AppController::liveTimingProjectionSampled() const {
+    if (m_transportModeKey != QStringLiteral("typed")) return false;
+    return projectionBackpressureActive()
+        || m_liveProjectionWorkerSampledFrames > 0
+        || m_liveProjectionDroppedFrames > 0
+        || m_liveProjectionWorkerDroppedFrames > 0;
 }
 
 bool AppController::timingStructureSyncAllowed() const {
@@ -8922,6 +8974,7 @@ void AppController::ingestFrame(const FrameRecord& fr, const QString& source) {
     st.lastSource = source;
     st.lastLocalSeenMs = nowMs;
     st.lastBoardSeenUs = fr.tExtUs;
+    st.liveProjectionSampledTiming = source == QStringLiteral("live") && liveTimingProjectionSampled();
     appendGraphSamples(fr, source);
     const auto ruleIt = m_rules.constFind(fr.canId);
     const RuleSpec* rule = (m_modelEnabled && ruleIt != m_rules.cend()) ? &ruleIt.value() : nullptr;
@@ -8948,6 +9001,8 @@ AppController::EvalResult AppController::evaluateId(quint32 id, const IdState* s
     input.nowMs = nowMs;
     input.lastLocalSeenMs = (state && state->seen) ? state->lastLocalSeenMs : -1;
     input.gapMs = (state && state->seen) ? state->lastGapMs : -1.0;
+    input.projectionSampled = state && state->seen && state->lastSource == QStringLiteral("live") &&
+        (state->liveProjectionSampledTiming || liveTimingProjectionSampled());
     const auto ruleIt = m_rules.constFind(id);
     input.rule = (m_modelEnabled && ruleIt != m_rules.cend()) ? &ruleIt.value() : nullptr;
     return CanMonitorAnalysis::TimingEvaluator::evaluate(input);

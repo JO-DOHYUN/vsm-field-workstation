@@ -11,7 +11,7 @@ namespace {
 constexpr int kTypedHandshakeWatchdogIntervalMs = 250;
 constexpr int kTypedHandshakeTimeoutMs = 3500;
 constexpr int kUiProjectionFlushIntervalMs = 55;
-constexpr int kUiProjectionMaxFramesPerFlush = 72;
+constexpr int kUiProjectionMaxFramesPerFlush = 40;
 constexpr int kUiProjectionHardPendingKeys = 384;
 }
 

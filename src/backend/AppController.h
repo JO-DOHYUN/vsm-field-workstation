@@ -689,6 +689,7 @@ private:
         int timingEventCount = 0;
         QString lastTimingIssueKey;
         bool timingIssueLatched = false;
+        bool liveProjectionSampledTiming = false;
     };
 
     struct ReplayIssueMarker {
@@ -891,6 +892,8 @@ private:
     int liveFlushChunkForBacklog(qint64 backlog) const;
     int liveFlushBudgetForBacklog(qint64 backlog) const;
     void compactPendingLiveFrames();
+    void coalescePendingLiveFramesToLatest();
+    bool liveTimingProjectionSampled() const;
     void updateNextTimingEvalMs(quint32 id, IdState& state, qint64 nowMs);
     bool analyzeTimingState(quint32 id, IdState& state, const QString& source, qint64 nowMs);
     bool syncValueAlarmState(quint32 id, IdState& state, const QString& source, bool allowReplayMarkers);
@@ -1103,9 +1106,9 @@ private:
     int m_pendingLiveFrameOffset = 0;
     FrameRecordList m_pendingLiveViewFrames;
     QStringList m_pendingLiveViewTimeTexts;
-    int m_liveFlushChunk = 128;
-    int m_liveFlushMinChunk = 24;
-    int m_liveViewChunk = 72;
+    int m_liveFlushChunk = 64;
+    int m_liveFlushMinChunk = 16;
+    int m_liveViewChunk = 40;
     int m_liveFlushBudgetMs = 2;
     quint64 m_liveSampledViewDrops = 0;
     quint64 m_liveProjectionObservedFrames = 0;

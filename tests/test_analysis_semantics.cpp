@@ -127,6 +127,28 @@ private slots:
         QCOMPARE(CanMonitorAnalysis::TimingEvaluator::timingAgeBucket(&rule, 350.0), 2);
     }
 
+    void timingEvaluatorDoesNotAlarmOnSampledLiveProjection() {
+        CanModel::RuleSpec rule = makeRule();
+
+        CanMonitorAnalysis::TimingInput input;
+        input.id = rule.id;
+        input.displayName = rule.name;
+        input.source = QStringLiteral("live");
+        input.modelEnabled = true;
+        input.seen = true;
+        input.nowMs = 1000;
+        input.lastLocalSeenMs = 100;
+        input.gapMs = 500.0;
+        input.projectionSampled = true;
+        input.rule = &rule;
+
+        const auto result = CanMonitorAnalysis::TimingEvaluator::evaluate(input);
+        QCOMPARE(result.severity, QStringLiteral("관찰"));
+        QCOMPARE(result.activeAlarm, false);
+        QVERIFY(result.reason.contains(QStringLiteral("투사 샘플링")));
+        QVERIFY(result.metricText.contains(QStringLiteral("projection sampled")));
+    }
+
     void signalDecoderRaisesValueAlarmForThresholdAndReservedBit() {
         QHash<quint32, CanModel::SignalMessageSpec> messages;
         CanModel::SignalMessageSpec msg;
