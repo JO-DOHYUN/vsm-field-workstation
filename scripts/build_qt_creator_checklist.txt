@@ -1,0 +1,10 @@
+Qt Creator 셋업 체크리스트
+
+1. Qt 6 + MSVC 2022 64bit Kit 선택
+2. Quick / Qml / SerialPort 모듈이 있는지 확인
+3. Configure 후 Build
+4. Run
+5. 실행 후 COM 목록이 보이는지 확인
+6. COM 연결 -> live 리스트에 프레임이 들어오는지 확인
+7. 로그 시작 -> .bin / .meta.json / .model.json 생성 확인
+8. BIN 선택 -> 재생 -> replay source 프레임이 들어오는지 확인

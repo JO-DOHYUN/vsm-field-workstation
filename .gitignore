@@ -1,0 +1,36 @@
+# Local IDE and build output
+.vs/
+out/
+build/
+.logs/
+.obsidian/
+
+# Local CMake/user environment overrides
+CMakeUserPresets.json
+*.user
+__pycache__/
+*.pyc
+
+# Large handoff, reference data, and generated validation artifacts kept outside source policy
+*.zip
+fix*.png
+.ref-replay/
+artifacts/*
+!artifacts/README.md
+
+# Runtime/capture temporary output
+replay_data/*
+!replay_data/README.md
+!replay_data/logs/
+replay_data/logs/*
+!replay_data/logs/README.md
+!replay_data/snapshots/
+replay_data/snapshots/*
+!replay_data/snapshots/README.md
+*.bin
+*.part
+*.tmp
+*.log
+capture.stream
+events.jsonl
+session.meta.json

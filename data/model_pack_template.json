@@ -1,0 +1,46 @@
+{
+  "schema": "can-monitor-model-pack.v1",
+  "model_key": "new_vehicle_model",
+  "model_name": "New Vehicle Model",
+  "model_version": "2026-03-22",
+  "vendor": "",
+  "notes": "fill rules/messages from data chat",
+  "rules": [
+    {
+      "id": "0x100",
+      "name_en": "EXAMPLE_PERIODIC",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0,
+      "timing_enabled": true,
+      "timing_mode": "model"
+    }
+  ],
+  "messages": [
+    {
+      "id": "0x100",
+      "name": "EXAMPLE_PERIODIC",
+      "signals": [
+        {
+          "name": "Example Value",
+          "byte_index_1based": 1,
+          "length_bits": 16,
+          "start_bit_lsb": 0,
+          "scale": 0.1,
+          "offset": 0.0,
+          "signed": true,
+          "unit": "A",
+          "range_text": "-50 to 50",
+          "alarm_mode": "range",
+          "warn_min": -45.0,
+          "warn_max": 45.0,
+          "err_min": -50.0,
+          "err_max": 50.0,
+          "alarm_message": "Example current out of range"
+        }
+      ]
+    }
+  ]
+}

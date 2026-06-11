@@ -1,0 +1,56 @@
+{
+  "schema": "can-monitor-model-pack.v1",
+  "model_key": "fixture_invalid_duplicate_signal",
+  "model_name": "Fixture Invalid Duplicate Signal",
+  "model_version": "2026-04-16",
+  "vendor": "Codex",
+  "rules": [
+    {
+      "id": "0x121",
+      "name_en": "FIXTURE_INVALID",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    }
+  ],
+  "messages": [
+    {
+      "id": "0x121",
+      "name": "FIXTURE_INVALID",
+      "signals": [
+        {
+          "name": "Signal Dup",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "",
+          "description": "",
+          "reserved": false
+        },
+        {
+          "name": "Signal Dup",
+          "byte_index_1based": 2,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "",
+          "description": "",
+          "reserved": false
+        }
+      ]
+    }
+  ]
+}

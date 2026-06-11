@@ -1,0 +1,9 @@
+# Project-scoped Codex settings.
+# AGENTS.md routes BRIEF.md explicitly; keep fallback empty to avoid loading
+# large changing docs as always-on instruction context.
+
+project_root_markers = [".git", "CMakeLists.txt"]
+project_doc_fallback_filenames = []
+project_doc_max_bytes = 32768
+
+sandbox_mode = "danger-full-access"

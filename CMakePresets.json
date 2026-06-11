@@ -1,0 +1,63 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs-base-qt6",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{CAN_MONITOR_QT_PREFIX_PATH}",
+        "CAN_MONITOR_BASELINE_ID": "workspace-direct-edit"
+      }
+    },
+    {
+      "name": "vs-debug-qt6",
+      "displayName": "VS Debug (Qt6)",
+      "inherits": "vs-base-qt6",
+      "binaryDir": "${sourceDir}/out/build/x64-Debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "vs-release-qt6",
+      "displayName": "VS Release (Qt6)",
+      "inherits": "vs-base-qt6",
+      "binaryDir": "${sourceDir}/out/build/x64-Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-debug",
+      "configurePreset": "vs-debug-qt6"
+    },
+    {
+      "name": "build-release",
+      "configurePreset": "vs-release-qt6"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "test-debug",
+      "configurePreset": "vs-debug-qt6",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "test-release",
+      "configurePreset": "vs-release-qt6",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

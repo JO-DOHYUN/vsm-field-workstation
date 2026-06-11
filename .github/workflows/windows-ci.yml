@@ -1,0 +1,55 @@
+name: windows-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.10.2
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+
+      - name: Resolve Qt prefix path
+        shell: powershell
+        run: |
+          $qmake = (Get-Command qmake).Source
+          $qtRoot = Split-Path (Split-Path $qmake -Parent) -Parent
+          "CAN_MONITOR_QT_PREFIX_PATH=$qtRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure Debug
+        shell: powershell
+        run: cmake --preset vs-debug-qt6
+
+      - name: Build Debug
+        shell: powershell
+        run: cmake --build --preset build-debug
+
+      - name: Configure Release
+        shell: powershell
+        run: cmake --preset vs-release-qt6
+
+      - name: Build Release
+        shell: powershell
+        run: cmake --build --preset build-release
+
+      - name: Test Debug
+        shell: powershell
+        run: ctest --preset test-debug
+
+      - name: Test Release
+        shell: powershell
+        run: ctest --preset test-release
+
+      - name: Portable deploy smoke
+        shell: powershell
+        run: |
+          scripts\deploy_release.bat out\build\x64-Release out\build\x64-Release\ci_portable
+          if (!(Test-Path out\build\x64-Release\ci_portable\can_monitor_qml_reboot.exe)) { throw "portable exe missing" }

@@ -1,0 +1,62 @@
+{
+  "schema": "can-monitor-model-pack.v1",
+  "model_key": "fixture_valid",
+  "model_name": "Fixture Valid",
+  "model_version": "2026-04-16",
+  "vendor": "Codex",
+  "control_policy": {
+    "enabled": true,
+    "profile_name": "fixture-lab",
+    "target_role": "system",
+    "allowed_bus_roles": ["system"],
+    "max_rpm": 3200,
+    "max_abs_steering_deg": 35.0,
+    "bus_role_rules": [
+      {
+        "role": "system",
+        "tx_allowed": true,
+        "fingerprints": ["0x120"]
+      },
+      {
+        "role": "drive",
+        "tx_allowed": false,
+        "fingerprints": ["0x321"]
+      }
+    ]
+  },
+  "rules": [
+    {
+      "id": "0x120",
+      "name_en": "FIXTURE_VALID",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    }
+  ],
+  "messages": [
+    {
+      "id": "0x120",
+      "name": "FIXTURE_VALID",
+      "signals": [
+        {
+          "name": "Signal A",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1 count",
+          "description": "fixture signal",
+          "reserved": false,
+          "alarm_mode": "none"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,589 @@
+{
+  "rules": [
+    {
+      "id": "0x111",
+      "name_en": "VEHICLE CONTROL UNIT_INFO02",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x117",
+      "name_en": "VEHICLE CONTROL UNIT_INFO03",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x118",
+      "name_en": "VEHICLE CONTROL UNIT_INFO04",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x119",
+      "name_en": "VEHICLE CONTROL UNIT_INFO05",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x120",
+      "name_en": "VEHICLE CONTROL UNIT_INFO06",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x123",
+      "name_en": "VCU_MTR_CONT (Drive)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x150",
+      "name_en": "MTR_CONTROLLER DRIVE INFO",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x182",
+      "name_en": "MTR_CONTROLLER STEER INFO1",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x183",
+      "name_en": "MTR_CONTROLLER STEER INFO1",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x184",
+      "name_en": "MTR_CONTROLLER STEER INFO1",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x185",
+      "name_en": "MTR_CONTROLLER STEER INFO1",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x1D0",
+      "name_en": "WIRELESS_CHARGER_INFO",
+      "expected_period_ms": 50.0,
+      "ttl_warn_ms": 150.0,
+      "ttl_err_ms": 500.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x200",
+      "name_en": "CHARGER_BASIC_INFO1",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x201",
+      "name_en": "CHARGER_BASIC_INFO2",
+      "expected_period_ms": 500.0,
+      "ttl_warn_ms": 1500.0,
+      "ttl_err_ms": 5000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x202",
+      "name_en": "VCU_MTR_CONT (Steer)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x203",
+      "name_en": "VCU_MTR_CONT (Steer)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x204",
+      "name_en": "VCU_MTR_CONT (Steer)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x205",
+      "name_en": "VCU_MTR_CONT (Steer)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x210",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x211",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x212",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x213",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x214",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x215",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x216",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x217",
+      "name_en": "UNTRASONIC_DATA01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x223",
+      "name_en": "VCU_MTR_CONT (Drive)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x250",
+      "name_en": "MTR_CONTROLLER DRIVE INFO",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x282",
+      "name_en": "MTR_CONTROLLER STEER_INFO2",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x283",
+      "name_en": "MTR_CONTROLLER STEER_INFO2",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x284",
+      "name_en": "MTR_CONTROLLER STEER_INFO2",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x285",
+      "name_en": "MTR_CONTROLLER STEER_INFO2",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x300",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x301",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x302",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x303",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x304",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x305",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x306",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x307",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x308",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x309",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x30A",
+      "name_en": "BATTERY (BMS)",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x323",
+      "name_en": "VCU_MTR_CONT (Drive)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x350",
+      "name_en": "MTR_CONTROLLER DRIVE INFO",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x400",
+      "name_en": "DCDC_CONVERTER_BASIC_INFO01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x401",
+      "name_en": "DCDC_CONVERTER_BASIC_INFO02",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x402",
+      "name_en": "DCDC_CONVERTER_BASIC_INFO03",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x423",
+      "name_en": "VCU_MTR_CONT (Drive)",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x450",
+      "name_en": "MTR_CONTROLLER DRIVE INFO",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x500",
+      "name_en": "ADCU_BASIC_INFO1",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x501",
+      "name_en": "ADCU_BASIC_INFO2",
+      "expected_period_ms": 1000.0,
+      "ttl_warn_ms": 3000.0,
+      "ttl_err_ms": 10000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x502",
+      "name_en": "ADCU_DCDC_CONTROL01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x503",
+      "name_en": "ADCU_MANUAL_CONTROL01",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x504",
+      "name_en": "ADCU_LED_CONTROL01",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x505",
+      "name_en": "ADCU_LED_CONTROL01",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x506",
+      "name_en": "ADCU_LED_CONTROL01",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x507",
+      "name_en": "ADCU_SENSOR_CONTROL01",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x510",
+      "name_en": "VCU_AUTO_DRIVING",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x511",
+      "name_en": "VCU_AUTO_DRIVING",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x512",
+      "name_en": "VCU_AUTO_DRIVING",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x513",
+      "name_en": "VCU_AUTO_DRIVING",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x520",
+      "name_en": "ADCU_BASIC_INFO3",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 60.0,
+      "ttl_err_ms": 200.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x710",
+      "name_en": "VEHICLE CONTROL UNIT_INFO01",
+      "expected_period_ms": 100.0,
+      "ttl_warn_ms": 300.0,
+      "ttl_err_ms": 1000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x800",
+      "name_en": "KEY POWER CONTROL UNIT",
+      "expected_period_ms": 1000.0,
+      "ttl_warn_ms": 3000.0,
+      "ttl_err_ms": 10000.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    }
+  ]
+}

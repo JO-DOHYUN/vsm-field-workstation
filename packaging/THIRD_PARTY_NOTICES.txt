@@ -1,0 +1,11 @@
+CAN Monitor Reboot Third-Party Notices
+======================================
+
+This repository currently ships with the following runtime or build-time third-party components:
+
+- Qt 6.10.2
+- MSVC 2022 runtime
+- Ninja build tool
+
+The definitive dependency inventory is intended to evolve into a generated SBOM plus installer/package notices.
+This file is the placeholder artifact for the production-readiness phase.
