@@ -7,11 +7,13 @@
 - [[BRIEF]]: 현재 기준본, 유지 조건, 검증 상태, 즉시 다음 작업
 - [[docs/PROJECT_FOLDER_GUIDE_KO]]: 현재 폴더 구조와 runtime data/source 구분
 - [[docs/field/2026-05-28_latest_typed_log_triage_KO]]: 최신 typed 실차 로그 triage와 bus/DLC/health/event 근거
+- [[docs/field/2026-06-12_vsm_load_hil_summary_KO]]: VSM 고부하 user-route/debug-gateway HIL 결과와 현재 CSM FIFO 부하 한계
 - [[docs/COMPLETION_TO_RELEASE_PLAN_KO]]: 완성까지 남은 작업과 단계별 gate
 - [[docs/PLAN]]: production-readiness master plan
 - [[docs/BOARD_QT_FINAL_ARCHITECTURE]]: board/Qt typed evidence 최종 방향
 - [[docs/architecture/PROJECT_CONSTITUTION_KO]]: VMS-CSM 통합 목적과 불변조건
 - [[docs/architecture/VSM_WORKSTATION_ARCHITECTURE_KO]]: evidence-first VSM runtime spine
+- [[docs/architecture/VSM_TRUTH_FIRST_LOAD_ARCHITECTURE_KO]]: 고부하 live truth/UI 분리 최종 기준
 
 ## Architecture And Interfaces
 - [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]: typed stream v1 human contract
@@ -27,6 +29,9 @@
 - [[docs/runbooks/STANDALONE_GIT_WORKFLOW_KO]]: VSM 단독 git repo 운영 기준
 - [[docs/runbooks/RELEASE_AND_DEPLOY_KO]]: portable release and installer hook
 - [[docs/runbooks/VSM_HIGH_LOAD_USER_ROUTE_HIL_KO]]: 실제 VSM 앱 경로 고부하 HIL 검증
+- [[docs/runbooks/VSM_ANALYSIS_TRUTH_STRESS_HIL_KO]]: 주기/값/경보/그래프 truth 기준 고부하 HIL 검증
+- [[docs/runbooks/VSM_DEBUG_GATEWAY_FOUNDATION_KO]]: VSM crash/hang 분석용 별도 recorder gateway 기반
+- [[docs/runbooks/VSM_VERIFY_RUNNER_KO]]: 공식 HIL/debug/report 실행기 catalog와 artifact 계약
 - [[docs/ai_harness/BUILD_VERIFY_POLICY_KO]]: VMS-CSM 작업 검증 기준
 - [[docs/ai_harness/AI_WORKFLOW_PHILOSOPHY_KO]]: vertical slice, runtime-boundary-first, subset-first 검증 원칙
 - [[docs/android/ANDROID_FEASIBILITY_KO]]: Android/무선 전환 후보와 현재 미구현 판단 기준

@@ -10,6 +10,7 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 #include <algorithm>
+#include <cmath>
 
 namespace {
 
@@ -95,6 +96,14 @@ QString colorForSeriesKey(const QVariantList& series, const QString& key) {
         if (row.value(QStringLiteral("key")).toString() == key) {
             return row.value(QStringLiteral("color")).toString();
         }
+    }
+    return {};
+}
+
+QVariantMap rowForSeriesKey(const QVariantList& series, const QString& key) {
+    for (const QVariant& item : series) {
+        const QVariantMap row = item.toMap();
+        if (row.value(QStringLiteral("key")).toString() == key) return row;
     }
     return {};
 }
@@ -265,6 +274,22 @@ QString writeReplayFixture(const QString& rootPath) {
     return path;
 }
 
+QString writeGraphPeakReplayFixture(const QString& rootPath) {
+    const QString path = rootPath + QStringLiteral("/graph_peak_replay.bin");
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return {};
+    const QVector<quint8> values = {10, 80, 240, 30, 5, 120};
+    quint8 seq = 1;
+    for (int index = 0; index < values.size(); ++index) {
+        QByteArray payload(8, char(0));
+        payload[0] = char(values.at(index));
+        payload[1] = char(10 + index);
+        file.write(framePacket(quint32(index * 20000), 0x321, 0, seq++, payload));
+    }
+    file.close();
+    return path;
+}
+
 QString writeTypedReplaySession(const QString& rootPath) {
     const QString sessionDir = rootPath + QStringLiteral("/typed_flow.typed");
     QDir().mkpath(sessionDir);
@@ -275,6 +300,7 @@ QString writeTypedReplaySession(const QString& rootPath) {
     metaObj.insert(QStringLiteral("format"), QStringLiteral("typed-evidence-stream-v1"));
     metaObj.insert(QStringLiteral("created_local"), QStringLiteral("2026-04-10T14:27:49.032"));
     metaObj.insert(QStringLiteral("stream_file"), QStringLiteral("capture.stream"));
+    metaObj.insert(QStringLiteral("diagnostics_file"), QStringLiteral("capture.diagnostics.json"));
     meta.write(QJsonDocument(metaObj).toJson(QJsonDocument::Compact));
     meta.close();
 
@@ -303,6 +329,22 @@ QString writeTypedReplaySession(const QString& rootPath) {
     if (!events.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) return {};
     events.write("{\"event\":\"finalized\",\"record_count\":7}\n");
     events.close();
+
+    QFile diagnostics(sessionDir + QStringLiteral("/capture.diagnostics.json"));
+    if (!diagnostics.open(QIODevice::WriteOnly | QIODevice::Truncate)) return {};
+    QJsonObject parser;
+    parser.insert(QStringLiteral("frames"), QStringLiteral("7"));
+    parser.insert(QStringLiteral("bytes_dropped"), QStringLiteral("0"));
+    parser.insert(QStringLiteral("crc_failures"), QStringLiteral("0"));
+    parser.insert(QStringLiteral("length_failures"), QStringLiteral("0"));
+    parser.insert(QStringLiteral("version_warnings"), QStringLiteral("0"));
+    parser.insert(QStringLiteral("seq_gaps"), QStringLiteral("0"));
+    parser.insert(QStringLiteral("buffered_bytes"), QStringLiteral("0"));
+    QJsonObject diagnosticsObj;
+    diagnosticsObj.insert(QStringLiteral("format"), QStringLiteral("typed-capture-diagnostics-v1"));
+    diagnosticsObj.insert(QStringLiteral("parser"), parser);
+    diagnostics.write(QJsonDocument(diagnosticsObj).toJson(QJsonDocument::Compact));
+    diagnostics.close();
     return sessionDir;
 }
 
@@ -376,7 +418,7 @@ private slots:
         QTRY_COMPARE(controller.replayObservedIdCount(), 1);
         QTRY_VERIFY(controller.timingModel()->rowCount() > 0);
         const QVariantMap timingTop = controller.timingModel()->get(0);
-        QCOMPARE(timingTop.value(QStringLiteral("idText")).toString(), QStringLiteral("0X321"));
+        QCOMPARE(timingTop.value(QStringLiteral("idText")).toString(), QStringLiteral("B0 · 0X321"));
         QVERIFY(!timingTop.value(QStringLiteral("reason")).toString().trimmed().isEmpty());
 
         controller.playReplay(1000.0);
@@ -387,7 +429,7 @@ private slots:
         QVERIFY(controller.replayAnalysisHeld());
 
         QVERIFY(controller.seekReplayIssue(QStringLiteral("value"), 1));
-        QTRY_COMPARE(controller.selectedValueId(), QStringLiteral("0X321"));
+        QTRY_COMPARE(controller.selectedValueId(), QStringLiteral("BUS0|STD|DATA|0X321"));
         QVERIFY(controller.seekReplayId(QStringLiteral("0X321"), 1));
         QTRY_COMPARE(controller.valueFilterId(), QStringLiteral("0X321"));
     }
@@ -472,6 +514,60 @@ private slots:
         QCOMPARE(detailSeries.size(), 2);
         QCOMPARE(colorForSeriesKey(detailSeries, rawKeys.first()), firstColor);
         QCOMPARE(colorForSeriesKey(detailSeries, rawKeys.at(1)), secondColor);
+    }
+
+    void graphTruthBucketPeakPreservesMinMax() {
+        QTemporaryDir tempDir;
+        QVERIFY(tempDir.isValid());
+
+        const QByteArray appDataPath = QDir::toNativeSeparators(tempDir.path()).toUtf8();
+        qputenv("APPDATA", appDataPath);
+        qputenv("LOCALAPPDATA", appDataPath);
+
+        const QString modelPath = writeModelFixture(tempDir.path());
+        const QString replayPath = writeGraphPeakReplayFixture(tempDir.path());
+        QVERIFY(!modelPath.isEmpty());
+        QVERIFY(!replayPath.isEmpty());
+
+        AppController controller;
+        controller.clearSavedSession();
+        controller.clearFrames();
+        controller.setRulesPath(modelPath);
+        QTRY_VERIFY(controller.modelActive());
+
+        QString graphKey;
+        for (const QVariant& item : controller.graphCatalog()) {
+            const QVariantMap row = item.toMap();
+            if (row.value(QStringLiteral("key")).toString().startsWith(QStringLiteral("0X321|")) &&
+                row.value(QStringLiteral("label")).toString().contains(QStringLiteral("Temperature"), Qt::CaseInsensitive)) {
+                graphKey = row.value(QStringLiteral("key")).toString();
+                break;
+            }
+        }
+        QVERIFY2(!graphKey.isEmpty(), "graph catalog must expose the fixture temperature signal");
+
+        controller.loadReplay(replayPath);
+        QTRY_VERIFY(controller.replayLoaded());
+        controller.setGraphSelectedKeys(QStringList{graphKey});
+        QTRY_VERIFY_WITH_TIMEOUT(controller.graphOverviewReady(), 5000);
+
+        const QVariantMap series = rowForSeriesKey(controller.graphOverviewSeries(), graphKey);
+        QVERIFY(!series.isEmpty());
+        QCOMPARE(series.value(QStringLiteral("rawPointCount")).toInt(), 6);
+        QVERIFY(std::abs(series.value(QStringLiteral("minText")).toDouble() - 5.0) < 0.01);
+        QVERIFY(std::abs(series.value(QStringLiteral("maxText")).toDouble() - 240.0) < 0.01);
+        QVERIFY(std::abs(series.value(QStringLiteral("latestText")).toDouble() - 120.0) < 0.01);
+
+        const QVariantList buckets = series.value(QStringLiteral("bucketFlat")).toList();
+        QVERIFY(buckets.size() >= 4);
+        bool sawMin = false;
+        bool sawMax = false;
+        for (int i = 0; i + 3 < buckets.size(); i += 4) {
+            sawMin = sawMin || std::abs(buckets.at(i + 1).toDouble() - 5.0) < 0.01;
+            sawMax = sawMax || std::abs(buckets.at(i + 2).toDouble() - 240.0) < 0.01;
+        }
+        QVERIFY2(sawMin, "bucket graph must preserve the true minimum");
+        QVERIFY2(sawMax, "bucket graph must preserve the true peak");
     }
 
     void typedReplaySessionLoadsCanRxFramesOnly() {

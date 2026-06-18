@@ -1,0 +1,122 @@
+{
+  "schema": "can-monitor-model-pack.v1",
+  "model_key": "analysis_truth_stress",
+  "model_name": "Analysis Truth Stress Fixture",
+  "model_version": "2026-06-15",
+  "vendor": "Codex",
+  "rules": [
+    {
+      "id": "0x510",
+      "name_en": "TRUTH_TIMING_20MS",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x520",
+      "name_en": "TRUTH_VALUE_RANGE",
+      "expected_period_ms": 40.0,
+      "ttl_warn_ms": 160.0,
+      "ttl_err_ms": 300.0,
+      "period_err_warn_pct": 25.0,
+      "period_err_err_pct": 75.0
+    },
+    {
+      "id": "0x521",
+      "name_en": "TRUTH_RESERVED_STATUS",
+      "expected_period_ms": 40.0,
+      "ttl_warn_ms": 160.0,
+      "ttl_err_ms": 300.0,
+      "period_err_warn_pct": 25.0,
+      "period_err_err_pct": 75.0
+    },
+    {
+      "id": "0x530",
+      "name_en": "TRUTH_GRAPH_PEAK_RPM",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 100.0,
+      "ttl_err_ms": 250.0,
+      "period_err_warn_pct": 25.0,
+      "period_err_err_pct": 75.0
+    }
+  ],
+  "messages": [
+    {
+      "id": "0x520",
+      "name": "Truth Value Range",
+      "signals": [
+        {
+          "name": "Motor Temperature",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 100",
+          "operating_text": "unit: 1 C",
+          "description": "truth range alarm",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Temperature too high"
+        }
+      ]
+    },
+    {
+      "id": "0x521",
+      "name": "Truth Reserved Status",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "reserved bit must stay zero",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x530",
+      "name": "Truth Graph Peak",
+      "signals": [
+        {
+          "name": "Motor RPM",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1 rpm",
+          "description": "truth graph peak",
+          "reserved": false,
+          "unit": "rpm",
+          "alarm_mode": "none"
+        }
+      ]
+    }
+  ]
+}

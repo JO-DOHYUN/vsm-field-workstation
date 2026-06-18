@@ -34,6 +34,7 @@ CRC-16/CCITT covers `version` through the final payload byte. SOF and CRC field 
 10 HOST_CAN_TX_REQUEST
 11 HOST_HEARTBEAT
 12 HOST_CONTROL_SESSION
+16 CAN_RX_SEGMENT
 ```
 
 ## CAN_RX_RAW / CAN_TX_RAW
@@ -52,6 +53,37 @@ Payload length: 30 bytes.
 
 `CAN_TX_RAW` is emitted only after successful hardware CAN write.
 
+## CAN_RX_SEGMENT
+
+Payload length: `32 + frame_count * 30` bytes. This is a lossless packing record
+for multiple CAN RX frames. It is not compression, sampling, or summary data.
+Each entry is one factual CAN RX frame and must be expanded by VSM analysis,
+ledger, replay, and export paths exactly as `CAN_RX_RAW`.
+
+Segment header:
+
+```text
+0   segment_seq64          u64_le
+8   first_capture_seq64    u64_le
+16  frame_count            u16_le
+18  entry_size             u8      currently 30
+19  flags                  u8      bit0 capture_seq64 valid
+20  dropped_before_segment u32_le  board CAN queue drop counter snapshot
+24  fifo_before_segment    u32_le  board CAN FIFO overflow counter snapshot
+28  reserved               u32_le
+```
+
+Frame entry, repeated `frame_count` times:
+
+```text
+0   capture_seq64   u64_le
+8   mono_us         u64_le
+16  can_id_flags    u32_le
+20  dlc_flags       u8
+21  bus             u8
+22  data            u8[8]
+```
+
 ## ADC_SAMPLE
 
 Payload length: 44 bytes.
@@ -66,6 +98,24 @@ Payload length: 44 bytes.
 19  flags            u8
 20  channel_id       u8[8]
 28  raw_u16          u16_le[8]
+```
+
+## BOARD_HEALTH
+
+Minimum payload length: 52 bytes. Existing CSM firmware may emit only this base
+payload. Newer CSM firmware may emit an extended payload of at least 192 bytes.
+When present, VSM treats these offsets as CSM uplink/segment diagnostics, not
+display sampling counters:
+
+```text
+160  serial_enqueue_fail_total       u32_le
+164  serial_ring_clear_total         u32_le
+168  serial_ring_cleared_bytes_total u32_le
+172  serial_backpressure_total       u32_le
+176  serial_tx_high_water_bytes      u32_le
+180  shared_can_queue_high_water     u32_le
+184  mcp_drain_budget_hit_total      u32_le
+188  can_segment_enqueue_fail_total  u32_le
 ```
 
 ## HOST_CAN_TX_REQUEST

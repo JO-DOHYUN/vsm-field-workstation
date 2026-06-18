@@ -14,6 +14,10 @@ description: Use when working on board typed stream parsing, typed capture stora
 - COM open is not board alive; valid `CAPABILITY` is required.
 - Host-requested TX and `CONTROL_ACK` are not successful CAN TX until board emits matching `CAN_TX_RAW`.
 - Lab control UI may exist for bring-up, but production success display stays gated by capability, health, safety, and CAN TX audit.
+- Performance work must not change factual timing/value/alarm/DLC/control evidence.
+- UI projection/drop/sampling may reduce displayed raw rows only; truth analysis must consume every accepted `CAN_RX_RAW` or report `truth_loss`.
+- Live truth state keys must include bus identity, at minimum `bus + canId + ext + rtr`.
+- Debug gateway capture is opt-in and external to the normal app hot loop; it can preserve raw serial evidence, but it does not replace VSM final capture validation.
 
 ## Workflow
 1. Read `BRIEF.md`, `docs/architecture/PROJECT_CONSTITUTION_KO.md`, and `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`.
@@ -27,3 +31,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 - partial file write becomes final capture
 - control ack is treated as hardware TX confirmation
 - board health degradation is hidden from operator summary
+- timing/value/alarm/DLC/control evidence is computed from sampled or coalesced UI projection
+- analysis input queue grows without a hard bound or overflow diagnostic
+- display drop is reported as parser/storage/CSM CAN drop
+- debug gateway raw capture is used to claim PASS when VSM `capture.stream` is missing, stale, or corrupt

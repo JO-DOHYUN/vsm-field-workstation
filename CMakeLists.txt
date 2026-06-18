@@ -47,6 +47,10 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/LegacyIngressRuntime.cpp
     src/backend/transport/LiveProjectionRuntime.h
     src/backend/transport/LiveProjectionRuntime.cpp
+    src/backend/transport/LiveTruthRuntime.h
+    src/backend/transport/LiveTruthRuntime.cpp
+    src/backend/transport/RawLedgerRuntime.h
+    src/backend/transport/RawLedgerRuntime.cpp
     src/backend/transport/TransportRuntime.h
     src/backend/transport/TransportRuntime.cpp
     src/backend/transport/TransportSession.h
@@ -81,6 +85,10 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/AnalysisTypes.h
     src/backend/TimingEvaluator.h
     src/backend/TimingEvaluator.cpp
+    src/backend/analysis/AnalysisRuntime.h
+    src/backend/analysis/AnalysisRuntime.cpp
+    src/backend/perf/PerformanceProbeRuntime.h
+    src/backend/perf/PerformanceProbeRuntime.cpp
     src/backend/LevelState.h
     src/backend/LevelState.cpp
     src/backend/SignalDecoder.h
@@ -92,6 +100,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/Recorder.cpp
     src/backend/FrameListModel.h
     src/backend/FrameListModel.cpp
+    src/backend/RawFrameTableModel.h
+    src/backend/RawFrameTableModel.cpp
     src/backend/SessionManager.h
     src/backend/SessionManager.cpp
     src/backend/FrameFilterProxyModel.h
@@ -138,6 +148,9 @@ qt_add_qml_module(can_monitor_qml_reboot
         qml/components/SafeButton.qml
         qml/components/SafeCheckBox.qml
         qml/components/SafeTabButton.qml
+        qml/components/AdaptivePage.qml
+        qml/components/TableSurface.qml
+        qml/components/SummaryStrip.qml
 )
 
 
@@ -226,6 +239,18 @@ if (WIN32)
                     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/hil_vsm_user_route_stress.py"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/hil_vsm_user_route_stress.py"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/hil_analysis_truth_stress.py"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/hil_analysis_truth_stress.py"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/vsm_debug_gateway.py"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/vsm_debug_gateway.py"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/vsm_verify.py"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/vsm_verify.py"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${CMAKE_CURRENT_SOURCE_DIR}/scripts/vsm_can_load.py"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/vsm_can_load.py"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/analyze_typed_capture.py"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/analyze_typed_capture.py"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -286,6 +311,10 @@ install(FILES
     scripts/run_release_here.bat
     scripts/hil_control_smoke.py
     scripts/hil_vsm_user_route_stress.py
+    scripts/hil_analysis_truth_stress.py
+    scripts/vsm_debug_gateway.py
+    scripts/vsm_verify.py
+    scripts/vsm_can_load.py
     scripts/analyze_typed_capture.py
     scripts/field_latest_capture_report.py
     scripts/make_release_manifest.py

@@ -101,6 +101,10 @@ if exist "%PROJECT_DIR%\scripts\deploy_release.bat" (
 if exist "%BUILD_DIR%\package_wix_installer.bat" copy /y "%BUILD_DIR%\package_wix_installer.bat" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\hil_control_smoke.py" copy /y "%BUILD_DIR%\hil_control_smoke.py" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\hil_vsm_user_route_stress.py" copy /y "%BUILD_DIR%\hil_vsm_user_route_stress.py" "%OUTPUT%\" >nul
+if exist "%BUILD_DIR%\hil_analysis_truth_stress.py" copy /y "%BUILD_DIR%\hil_analysis_truth_stress.py" "%OUTPUT%\" >nul
+if exist "%BUILD_DIR%\vsm_debug_gateway.py" copy /y "%BUILD_DIR%\vsm_debug_gateway.py" "%OUTPUT%\" >nul
+if exist "%BUILD_DIR%\vsm_verify.py" copy /y "%BUILD_DIR%\vsm_verify.py" "%OUTPUT%\" >nul
+if exist "%BUILD_DIR%\vsm_can_load.py" copy /y "%BUILD_DIR%\vsm_can_load.py" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\analyze_typed_capture.py" copy /y "%BUILD_DIR%\analyze_typed_capture.py" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\field_latest_capture_report.py" copy /y "%BUILD_DIR%\field_latest_capture_report.py" "%OUTPUT%\" >nul
 if exist "%PROJECT_DIR%\scripts\make_release_manifest.py" (
@@ -144,6 +148,24 @@ if exist "%BUILD_DIR%\packaging\THIRD_PARTY_NOTICES.txt" (
 )
 if exist "%PROJECT_DIR%\docs\runbooks\FIELD_VALIDATION_KO.md" (
   copy /y "%PROJECT_DIR%\docs\runbooks\FIELD_VALIDATION_KO.md" "%OUTPUT%\docs\runbooks\" >nul
+)
+if exist "%PROJECT_DIR%\docs\runbooks\VSM_ANALYSIS_TRUTH_STRESS_HIL_KO.md" (
+  copy /y "%PROJECT_DIR%\docs\runbooks\VSM_ANALYSIS_TRUTH_STRESS_HIL_KO.md" "%OUTPUT%\docs\runbooks\" >nul
+)
+if exist "%PROJECT_DIR%\docs\runbooks\VSM_HIGH_LOAD_USER_ROUTE_HIL_KO.md" (
+  copy /y "%PROJECT_DIR%\docs\runbooks\VSM_HIGH_LOAD_USER_ROUTE_HIL_KO.md" "%OUTPUT%\docs\runbooks\" >nul
+)
+if exist "%PROJECT_DIR%\docs\runbooks\VSM_VERIFY_RUNNER_KO.md" (
+  copy /y "%PROJECT_DIR%\docs\runbooks\VSM_VERIFY_RUNNER_KO.md" "%OUTPUT%\docs\runbooks\" >nul
+)
+if exist "%PROJECT_DIR%\scripts\vsm_verify.py" (
+  copy /y "%PROJECT_DIR%\scripts\vsm_verify.py" "%OUTPUT%\" >nul
+)
+if exist "%PROJECT_DIR%\scripts\vsm_can_load.py" (
+  copy /y "%PROJECT_DIR%\scripts\vsm_can_load.py" "%OUTPUT%\" >nul
+)
+if exist "%PROJECT_DIR%\scripts\hil_analysis_truth_stress.py" (
+  copy /y "%PROJECT_DIR%\scripts\hil_analysis_truth_stress.py" "%OUTPUT%\" >nul
 )
 
 echo [5/5] helper and manifest

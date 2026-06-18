@@ -59,17 +59,18 @@ QML smoke는 graph checkbox-click scroll/color, wrapper toggle stability, Contro
 - TypedReplayReader는 stream뿐 아니라 session sidecar integrity를 읽고 timeline/meta/index/events/fault summary를 AppController replay diagnostics로 노출한다.
 - ReplayPage는 typed operator verdict와 DLC preservation verdict를 상단에 보여 replay 길이/DLC 뭉개짐 의심을 즉시 확인하게 한다.
 - Live/Replay/Control/Graph 주요 field UX 상태는 QML state probe로 최소 회귀 방지선을 가진다.
+- 고부하 live truth/UI 경계는 아직 최종 구조가 아니다. 성능 때문에 사실값을 바꾸지 않고 표시량만 줄이는 기준은 [[VSM_TRUTH_FIRST_LOAD_ARCHITECTURE_KO]]를 따른다.
 
 ## Next Implementation Step
 
-실차/HIL을 제외한 코드/기능 큰축은 Windows VSM Field RC 기준으로 닫힌 상태로 본다.
-다음 단계의 우선순위는 새 기능 추가가 아니라 release closure다.
+실차/HIL 전 코드/기능 큰축은 고부하 live truth/UI 경계 재설계를 먼저 닫아야 한다.
+다음 단계의 우선순위는 새 기능 추가가 아니라 truth-first high-load closure다.
 
-1. 최신 Release build로 portable Field RC를 재생성하고 manifest hash/package id를 갱신한다.
-2. synthetic/recorded typed smoke로 bus0/bus1, DLC, replay diagnostics, graph selection stability, live transport diagnostics를 재확인한다.
-3. fresh HIL/vehicle control-policy validation과 결과 아카이브는 field-only gate로 분리한다.
-4. Android USB-OTG/wireless transport는 Windows RC 이후 별도 feasibility/implementation 축으로 진행한다.
-5. 더 깊은 parser/transport 분리는 새 field reliability 이슈가 확인될 때만 별도 slice로 진행한다.
+1. `LiveTruthEngine`으로 모든 `CAN_RX_RAW`를 UI thread 밖에서 처리하고, key를 `bus + canId + ext + rtr`로 고정한다.
+2. timing/value/alarm/DLC/control evidence 계산을 recent-row/graph projection에서 완전히 분리한다.
+3. UI는 truth snapshot/diff를 낮은 주기로 받고, 표시 생략/지연/truth loss를 구분해서 보여준다.
+4. synthetic/recorded typed smoke로 bus0/bus1, DLC, replay diagnostics, graph selection stability, live transport diagnostics를 재확인한다.
+5. fresh HIL/vehicle control-policy validation과 결과 아카이브는 field-only gate로 분리한다.
 
 ## Verification Baseline
 

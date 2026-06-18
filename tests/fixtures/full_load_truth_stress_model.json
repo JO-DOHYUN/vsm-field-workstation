@@ -1,0 +1,5147 @@
+{
+  "schema": "can-monitor-model-pack.v1",
+  "model_key": "full_load_truth_stress",
+  "model_name": "Full Load Truth Stress Fixture",
+  "model_version": "2026-06-16",
+  "vendor": "Codex",
+  "rules": [
+    {
+      "id": "0x510",
+      "name_en": "FULL_LOAD_TIMING_510",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x511",
+      "name_en": "FULL_LOAD_TIMING_511",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x512",
+      "name_en": "FULL_LOAD_TIMING_512",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x513",
+      "name_en": "FULL_LOAD_TIMING_513",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x514",
+      "name_en": "FULL_LOAD_TIMING_514",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x515",
+      "name_en": "FULL_LOAD_TIMING_515",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x516",
+      "name_en": "FULL_LOAD_TIMING_516",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x517",
+      "name_en": "FULL_LOAD_TIMING_517",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x518",
+      "name_en": "FULL_LOAD_TIMING_518",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x519",
+      "name_en": "FULL_LOAD_TIMING_519",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51A",
+      "name_en": "FULL_LOAD_TIMING_51A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51B",
+      "name_en": "FULL_LOAD_TIMING_51B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51C",
+      "name_en": "FULL_LOAD_TIMING_51C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51D",
+      "name_en": "FULL_LOAD_TIMING_51D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51E",
+      "name_en": "FULL_LOAD_TIMING_51E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x51F",
+      "name_en": "FULL_LOAD_TIMING_51F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x520",
+      "name_en": "FULL_LOAD_RANGE_520",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x521",
+      "name_en": "FULL_LOAD_RANGE_521",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x522",
+      "name_en": "FULL_LOAD_RANGE_522",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x523",
+      "name_en": "FULL_LOAD_RANGE_523",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x524",
+      "name_en": "FULL_LOAD_RANGE_524",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x525",
+      "name_en": "FULL_LOAD_RANGE_525",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x526",
+      "name_en": "FULL_LOAD_RANGE_526",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x527",
+      "name_en": "FULL_LOAD_RANGE_527",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x528",
+      "name_en": "FULL_LOAD_RANGE_528",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x529",
+      "name_en": "FULL_LOAD_RANGE_529",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52A",
+      "name_en": "FULL_LOAD_RANGE_52A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52B",
+      "name_en": "FULL_LOAD_RANGE_52B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52C",
+      "name_en": "FULL_LOAD_RANGE_52C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52D",
+      "name_en": "FULL_LOAD_RANGE_52D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52E",
+      "name_en": "FULL_LOAD_RANGE_52E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x52F",
+      "name_en": "FULL_LOAD_RANGE_52F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x530",
+      "name_en": "FULL_LOAD_RANGE_530",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x531",
+      "name_en": "FULL_LOAD_RANGE_531",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x532",
+      "name_en": "FULL_LOAD_RANGE_532",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x533",
+      "name_en": "FULL_LOAD_RANGE_533",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x534",
+      "name_en": "FULL_LOAD_RANGE_534",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x535",
+      "name_en": "FULL_LOAD_RANGE_535",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x536",
+      "name_en": "FULL_LOAD_RANGE_536",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x537",
+      "name_en": "FULL_LOAD_RANGE_537",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x538",
+      "name_en": "FULL_LOAD_RANGE_538",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x539",
+      "name_en": "FULL_LOAD_RANGE_539",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53A",
+      "name_en": "FULL_LOAD_RANGE_53A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53B",
+      "name_en": "FULL_LOAD_RANGE_53B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53C",
+      "name_en": "FULL_LOAD_RANGE_53C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53D",
+      "name_en": "FULL_LOAD_RANGE_53D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53E",
+      "name_en": "FULL_LOAD_RANGE_53E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x53F",
+      "name_en": "FULL_LOAD_RANGE_53F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x540",
+      "name_en": "FULL_LOAD_RANGE_540",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x541",
+      "name_en": "FULL_LOAD_RANGE_541",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x542",
+      "name_en": "FULL_LOAD_RANGE_542",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x543",
+      "name_en": "FULL_LOAD_RANGE_543",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x544",
+      "name_en": "FULL_LOAD_RANGE_544",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x545",
+      "name_en": "FULL_LOAD_RANGE_545",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x546",
+      "name_en": "FULL_LOAD_RANGE_546",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x547",
+      "name_en": "FULL_LOAD_RANGE_547",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x548",
+      "name_en": "FULL_LOAD_RANGE_548",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x549",
+      "name_en": "FULL_LOAD_RANGE_549",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54A",
+      "name_en": "FULL_LOAD_RANGE_54A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54B",
+      "name_en": "FULL_LOAD_RANGE_54B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54C",
+      "name_en": "FULL_LOAD_RANGE_54C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54D",
+      "name_en": "FULL_LOAD_RANGE_54D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54E",
+      "name_en": "FULL_LOAD_RANGE_54E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x54F",
+      "name_en": "FULL_LOAD_RANGE_54F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x550",
+      "name_en": "FULL_LOAD_RANGE_550",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x551",
+      "name_en": "FULL_LOAD_RANGE_551",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x552",
+      "name_en": "FULL_LOAD_RANGE_552",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x553",
+      "name_en": "FULL_LOAD_RANGE_553",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x554",
+      "name_en": "FULL_LOAD_RANGE_554",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x555",
+      "name_en": "FULL_LOAD_RANGE_555",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x556",
+      "name_en": "FULL_LOAD_RANGE_556",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x557",
+      "name_en": "FULL_LOAD_RANGE_557",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x558",
+      "name_en": "FULL_LOAD_RANGE_558",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x559",
+      "name_en": "FULL_LOAD_RANGE_559",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55A",
+      "name_en": "FULL_LOAD_RANGE_55A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55B",
+      "name_en": "FULL_LOAD_RANGE_55B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55C",
+      "name_en": "FULL_LOAD_RANGE_55C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55D",
+      "name_en": "FULL_LOAD_RANGE_55D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55E",
+      "name_en": "FULL_LOAD_RANGE_55E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x55F",
+      "name_en": "FULL_LOAD_RANGE_55F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x560",
+      "name_en": "FULL_LOAD_RESERVED_560",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x561",
+      "name_en": "FULL_LOAD_RESERVED_561",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x562",
+      "name_en": "FULL_LOAD_RESERVED_562",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x563",
+      "name_en": "FULL_LOAD_RESERVED_563",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x564",
+      "name_en": "FULL_LOAD_RESERVED_564",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x565",
+      "name_en": "FULL_LOAD_RESERVED_565",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x566",
+      "name_en": "FULL_LOAD_RESERVED_566",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x567",
+      "name_en": "FULL_LOAD_RESERVED_567",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x568",
+      "name_en": "FULL_LOAD_RESERVED_568",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x569",
+      "name_en": "FULL_LOAD_RESERVED_569",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56A",
+      "name_en": "FULL_LOAD_RESERVED_56A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56B",
+      "name_en": "FULL_LOAD_RESERVED_56B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56C",
+      "name_en": "FULL_LOAD_RESERVED_56C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56D",
+      "name_en": "FULL_LOAD_RESERVED_56D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56E",
+      "name_en": "FULL_LOAD_RESERVED_56E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x56F",
+      "name_en": "FULL_LOAD_RESERVED_56F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x570",
+      "name_en": "FULL_LOAD_RESERVED_570",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x571",
+      "name_en": "FULL_LOAD_RESERVED_571",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x572",
+      "name_en": "FULL_LOAD_RESERVED_572",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x573",
+      "name_en": "FULL_LOAD_RESERVED_573",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x574",
+      "name_en": "FULL_LOAD_RESERVED_574",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x575",
+      "name_en": "FULL_LOAD_RESERVED_575",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x576",
+      "name_en": "FULL_LOAD_RESERVED_576",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x577",
+      "name_en": "FULL_LOAD_RESERVED_577",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x578",
+      "name_en": "FULL_LOAD_RESERVED_578",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x579",
+      "name_en": "FULL_LOAD_RESERVED_579",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57A",
+      "name_en": "FULL_LOAD_RESERVED_57A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57B",
+      "name_en": "FULL_LOAD_RESERVED_57B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57C",
+      "name_en": "FULL_LOAD_RESERVED_57C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57D",
+      "name_en": "FULL_LOAD_RESERVED_57D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57E",
+      "name_en": "FULL_LOAD_RESERVED_57E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x57F",
+      "name_en": "FULL_LOAD_RESERVED_57F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x580",
+      "name_en": "FULL_LOAD_FLAG_580",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x581",
+      "name_en": "FULL_LOAD_FLAG_581",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x582",
+      "name_en": "FULL_LOAD_FLAG_582",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x583",
+      "name_en": "FULL_LOAD_FLAG_583",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x584",
+      "name_en": "FULL_LOAD_FLAG_584",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x585",
+      "name_en": "FULL_LOAD_FLAG_585",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x586",
+      "name_en": "FULL_LOAD_FLAG_586",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x587",
+      "name_en": "FULL_LOAD_FLAG_587",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x588",
+      "name_en": "FULL_LOAD_FLAG_588",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x589",
+      "name_en": "FULL_LOAD_FLAG_589",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58A",
+      "name_en": "FULL_LOAD_FLAG_58A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58B",
+      "name_en": "FULL_LOAD_FLAG_58B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58C",
+      "name_en": "FULL_LOAD_FLAG_58C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58D",
+      "name_en": "FULL_LOAD_FLAG_58D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58E",
+      "name_en": "FULL_LOAD_FLAG_58E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x58F",
+      "name_en": "FULL_LOAD_FLAG_58F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x590",
+      "name_en": "FULL_LOAD_FLAG_590",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x591",
+      "name_en": "FULL_LOAD_FLAG_591",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x592",
+      "name_en": "FULL_LOAD_FLAG_592",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x593",
+      "name_en": "FULL_LOAD_FLAG_593",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x594",
+      "name_en": "FULL_LOAD_FLAG_594",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x595",
+      "name_en": "FULL_LOAD_FLAG_595",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x596",
+      "name_en": "FULL_LOAD_FLAG_596",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x597",
+      "name_en": "FULL_LOAD_FLAG_597",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x598",
+      "name_en": "FULL_LOAD_FLAG_598",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x599",
+      "name_en": "FULL_LOAD_FLAG_599",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59A",
+      "name_en": "FULL_LOAD_FLAG_59A",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59B",
+      "name_en": "FULL_LOAD_FLAG_59B",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59C",
+      "name_en": "FULL_LOAD_FLAG_59C",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59D",
+      "name_en": "FULL_LOAD_FLAG_59D",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59E",
+      "name_en": "FULL_LOAD_FLAG_59E",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x59F",
+      "name_en": "FULL_LOAD_FLAG_59F",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A0",
+      "name_en": "FULL_LOAD_GRAPH_5A0",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A1",
+      "name_en": "FULL_LOAD_GRAPH_5A1",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A2",
+      "name_en": "FULL_LOAD_GRAPH_5A2",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A3",
+      "name_en": "FULL_LOAD_GRAPH_5A3",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A4",
+      "name_en": "FULL_LOAD_GRAPH_5A4",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A5",
+      "name_en": "FULL_LOAD_GRAPH_5A5",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A6",
+      "name_en": "FULL_LOAD_GRAPH_5A6",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A7",
+      "name_en": "FULL_LOAD_GRAPH_5A7",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A8",
+      "name_en": "FULL_LOAD_GRAPH_5A8",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5A9",
+      "name_en": "FULL_LOAD_GRAPH_5A9",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AA",
+      "name_en": "FULL_LOAD_GRAPH_5AA",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AB",
+      "name_en": "FULL_LOAD_GRAPH_5AB",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AC",
+      "name_en": "FULL_LOAD_GRAPH_5AC",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AD",
+      "name_en": "FULL_LOAD_GRAPH_5AD",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AE",
+      "name_en": "FULL_LOAD_GRAPH_5AE",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    },
+    {
+      "id": "0x5AF",
+      "name_en": "FULL_LOAD_GRAPH_5AF",
+      "expected_period_ms": 20.0,
+      "ttl_warn_ms": 80.0,
+      "ttl_err_ms": 150.0,
+      "period_err_warn_pct": 20.0,
+      "period_err_err_pct": 50.0
+    }
+  ],
+  "messages": [
+    {
+      "id": "0x520",
+      "name": "Full Load Range 0x520",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x521",
+      "name": "Full Load Range 0x521",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x522",
+      "name": "Full Load Range 0x522",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x523",
+      "name": "Full Load Range 0x523",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x524",
+      "name": "Full Load Range 0x524",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x525",
+      "name": "Full Load Range 0x525",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x526",
+      "name": "Full Load Range 0x526",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x527",
+      "name": "Full Load Range 0x527",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x528",
+      "name": "Full Load Range 0x528",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x529",
+      "name": "Full Load Range 0x529",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52A",
+      "name": "Full Load Range 0x52A",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52B",
+      "name": "Full Load Range 0x52B",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52C",
+      "name": "Full Load Range 0x52C",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52D",
+      "name": "Full Load Range 0x52D",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52E",
+      "name": "Full Load Range 0x52E",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x52F",
+      "name": "Full Load Range 0x52F",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x530",
+      "name": "Full Load Range 0x530",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x531",
+      "name": "Full Load Range 0x531",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x532",
+      "name": "Full Load Range 0x532",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x533",
+      "name": "Full Load Range 0x533",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x534",
+      "name": "Full Load Range 0x534",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x535",
+      "name": "Full Load Range 0x535",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x536",
+      "name": "Full Load Range 0x536",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x537",
+      "name": "Full Load Range 0x537",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x538",
+      "name": "Full Load Range 0x538",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x539",
+      "name": "Full Load Range 0x539",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53A",
+      "name": "Full Load Range 0x53A",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53B",
+      "name": "Full Load Range 0x53B",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53C",
+      "name": "Full Load Range 0x53C",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53D",
+      "name": "Full Load Range 0x53D",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53E",
+      "name": "Full Load Range 0x53E",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x53F",
+      "name": "Full Load Range 0x53F",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x540",
+      "name": "Full Load Range 0x540",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x541",
+      "name": "Full Load Range 0x541",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x542",
+      "name": "Full Load Range 0x542",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x543",
+      "name": "Full Load Range 0x543",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x544",
+      "name": "Full Load Range 0x544",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x545",
+      "name": "Full Load Range 0x545",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x546",
+      "name": "Full Load Range 0x546",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x547",
+      "name": "Full Load Range 0x547",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x548",
+      "name": "Full Load Range 0x548",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x549",
+      "name": "Full Load Range 0x549",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54A",
+      "name": "Full Load Range 0x54A",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54B",
+      "name": "Full Load Range 0x54B",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54C",
+      "name": "Full Load Range 0x54C",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54D",
+      "name": "Full Load Range 0x54D",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54E",
+      "name": "Full Load Range 0x54E",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x54F",
+      "name": "Full Load Range 0x54F",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x550",
+      "name": "Full Load Range 0x550",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x551",
+      "name": "Full Load Range 0x551",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x552",
+      "name": "Full Load Range 0x552",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x553",
+      "name": "Full Load Range 0x553",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x554",
+      "name": "Full Load Range 0x554",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x555",
+      "name": "Full Load Range 0x555",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x556",
+      "name": "Full Load Range 0x556",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x557",
+      "name": "Full Load Range 0x557",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x558",
+      "name": "Full Load Range 0x558",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x559",
+      "name": "Full Load Range 0x559",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55A",
+      "name": "Full Load Range 0x55A",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55B",
+      "name": "Full Load Range 0x55B",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55C",
+      "name": "Full Load Range 0x55C",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55D",
+      "name": "Full Load Range 0x55D",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55E",
+      "name": "Full Load Range 0x55E",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x55F",
+      "name": "Full Load Range 0x55F",
+      "signals": [
+        {
+          "name": "Range Fault Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 60",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "C",
+          "alarm_mode": "range",
+          "warn_max": 50.0,
+          "err_max": 60.0,
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load range high"
+        }
+      ]
+    },
+    {
+      "id": "0x560",
+      "name": "Full Load Reserved 0x560",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x561",
+      "name": "Full Load Reserved 0x561",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x562",
+      "name": "Full Load Reserved 0x562",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x563",
+      "name": "Full Load Reserved 0x563",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x564",
+      "name": "Full Load Reserved 0x564",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x565",
+      "name": "Full Load Reserved 0x565",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x566",
+      "name": "Full Load Reserved 0x566",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x567",
+      "name": "Full Load Reserved 0x567",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x568",
+      "name": "Full Load Reserved 0x568",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x569",
+      "name": "Full Load Reserved 0x569",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56A",
+      "name": "Full Load Reserved 0x56A",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56B",
+      "name": "Full Load Reserved 0x56B",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56C",
+      "name": "Full Load Reserved 0x56C",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56D",
+      "name": "Full Load Reserved 0x56D",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56E",
+      "name": "Full Load Reserved 0x56E",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x56F",
+      "name": "Full Load Reserved 0x56F",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x570",
+      "name": "Full Load Reserved 0x570",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x571",
+      "name": "Full Load Reserved 0x571",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x572",
+      "name": "Full Load Reserved 0x572",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x573",
+      "name": "Full Load Reserved 0x573",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x574",
+      "name": "Full Load Reserved 0x574",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x575",
+      "name": "Full Load Reserved 0x575",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x576",
+      "name": "Full Load Reserved 0x576",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x577",
+      "name": "Full Load Reserved 0x577",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x578",
+      "name": "Full Load Reserved 0x578",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x579",
+      "name": "Full Load Reserved 0x579",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57A",
+      "name": "Full Load Reserved 0x57A",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57B",
+      "name": "Full Load Reserved 0x57B",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57C",
+      "name": "Full Load Reserved 0x57C",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57D",
+      "name": "Full Load Reserved 0x57D",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57E",
+      "name": "Full Load Reserved 0x57E",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x57F",
+      "name": "Full Load Reserved 0x57F",
+      "signals": [
+        {
+          "name": "Reserved Fault Bit",
+          "byte_index_1based": 2,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "unit: 1",
+          "description": "full-load truth stress signal",
+          "reserved": true,
+          "unit": "",
+          "alarm_mode": "reserved",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load reserved bit set"
+        }
+      ]
+    },
+    {
+      "id": "0x580",
+      "name": "Full Load Flag 0x580",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x581",
+      "name": "Full Load Flag 0x581",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x582",
+      "name": "Full Load Flag 0x582",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x583",
+      "name": "Full Load Flag 0x583",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x584",
+      "name": "Full Load Flag 0x584",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x585",
+      "name": "Full Load Flag 0x585",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x586",
+      "name": "Full Load Flag 0x586",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x587",
+      "name": "Full Load Flag 0x587",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x588",
+      "name": "Full Load Flag 0x588",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x589",
+      "name": "Full Load Flag 0x589",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58A",
+      "name": "Full Load Flag 0x58A",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58B",
+      "name": "Full Load Flag 0x58B",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58C",
+      "name": "Full Load Flag 0x58C",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58D",
+      "name": "Full Load Flag 0x58D",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58E",
+      "name": "Full Load Flag 0x58E",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x58F",
+      "name": "Full Load Flag 0x58F",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x590",
+      "name": "Full Load Flag 0x590",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x591",
+      "name": "Full Load Flag 0x591",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x592",
+      "name": "Full Load Flag 0x592",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x593",
+      "name": "Full Load Flag 0x593",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x594",
+      "name": "Full Load Flag 0x594",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x595",
+      "name": "Full Load Flag 0x595",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x596",
+      "name": "Full Load Flag 0x596",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x597",
+      "name": "Full Load Flag 0x597",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x598",
+      "name": "Full Load Flag 0x598",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x599",
+      "name": "Full Load Flag 0x599",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59A",
+      "name": "Full Load Flag 0x59A",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59B",
+      "name": "Full Load Flag 0x59B",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59C",
+      "name": "Full Load Flag 0x59C",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59D",
+      "name": "Full Load Flag 0x59D",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59E",
+      "name": "Full Load Flag 0x59E",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x59F",
+      "name": "Full Load Flag 0x59F",
+      "signals": [
+        {
+          "name": "Fault Flag",
+          "byte_index_1based": 3,
+          "bit_text": "1",
+          "length_bits": 1,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 1",
+          "operating_text": "0: OK, 1: Fault",
+          "description": "full-load truth stress signal",
+          "reserved": false,
+          "unit": "",
+          "alarm_mode": "flag",
+          "alarm_severity": "ERR",
+          "alarm_message": "Full-load fault flag active"
+        }
+      ]
+    },
+    {
+      "id": "0x5A0",
+      "name": "Full Load Graph 0x5A0",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A1",
+      "name": "Full Load Graph 0x5A1",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A2",
+      "name": "Full Load Graph 0x5A2",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A3",
+      "name": "Full Load Graph 0x5A3",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A4",
+      "name": "Full Load Graph 0x5A4",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A5",
+      "name": "Full Load Graph 0x5A5",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A6",
+      "name": "Full Load Graph 0x5A6",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A7",
+      "name": "Full Load Graph 0x5A7",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A8",
+      "name": "Full Load Graph 0x5A8",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5A9",
+      "name": "Full Load Graph 0x5A9",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AA",
+      "name": "Full Load Graph 0x5AA",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AB",
+      "name": "Full Load Graph 0x5AB",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AC",
+      "name": "Full Load Graph 0x5AC",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AD",
+      "name": "Full Load Graph 0x5AD",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AE",
+      "name": "Full Load Graph 0x5AE",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    },
+    {
+      "id": "0x5AF",
+      "name": "Full Load Graph 0x5AF",
+      "signals": [
+        {
+          "name": "Graph Peak Byte",
+          "byte_index_1based": 1,
+          "bit_text": "8..1",
+          "length_bits": 8,
+          "start_bit_lsb": 0,
+          "bit_positions_lsb": [],
+          "scale": 1.0,
+          "offset": 0.0,
+          "signed": false,
+          "range_text": "0 to 255",
+          "operating_text": "unit: 1",
+          "description": "full-load graph peak/min/max preservation",
+          "reserved": false,
+          "unit": "raw",
+          "alarm_mode": "none"
+        }
+      ]
+    }
+  ]
+}

@@ -37,6 +37,9 @@ RECORD_CAPABILITY = 9
 RECORD_HOST_CAN_TX_REQUEST = 10
 RECORD_HOST_HEARTBEAT = 11
 RECORD_HOST_CONTROL_SESSION = 12
+RECORD_CAN_RX_SEGMENT = 16
+SEGMENT_HEADER_LEN = 32
+SEGMENT_ENTRY_LEN = 30
 
 HOST_CONTROL_DISARM = 0
 HOST_CONTROL_ARM = 1
@@ -307,6 +310,24 @@ class TypedStreamProbe:
                         self.tx_payload_unexpected += 1
                 else:
                     self.rx_control_candidates += 1
+        elif record_type == RECORD_CAN_RX_SEGMENT and len(payload) >= SEGMENT_HEADER_LEN:
+            frame_count = struct.unpack_from("<H", payload, 16)[0]
+            entry_size = payload[18]
+            if entry_size >= SEGMENT_ENTRY_LEN and len(payload) >= SEGMENT_HEADER_LEN + frame_count * entry_size:
+                for index in range(frame_count):
+                    off = SEGMENT_HEADER_LEN + index * entry_size
+                    mono_us = struct.unpack_from("<Q", payload, off + 8)[0]
+                    can_id = struct.unpack_from("<I", payload, off + 16)[0] & 0x1FFFFFFF
+                    dlc = payload[off + 20] & 0x0F
+                    bus = payload[off + 21]
+                    data = bytes(payload[off + 22 : off + 22 + min(dlc, 8)])
+                    key = (bus, can_id)
+                    self.rx_by_bus_id[key] += 1
+                    self.rx_mono_us.append(mono_us)
+                    if len(self.rx_times_by_bus_id[key]) < 10000:
+                        self.rx_times_by_bus_id[key].append(mono_us)
+                    if can_id in CONTROL_IDS:
+                        self.rx_control_candidates += 1
         elif record_type == RECORD_BOARD_HEALTH and len(payload) >= 52:
             mono_us = struct.unpack_from("<Q", payload, 0)[0]
             can_rx_total = struct.unpack_from("<I", payload, 8)[0]
@@ -527,7 +548,7 @@ def main() -> int:
         + ", ".join(f"{ACK_REASON.get(key, key)}:{value}" for key, value in sorted(probe.ack_reason.items()))
     )
     print(f"tx_audit_count={len(probe.tx_audits)} rx_control_candidates={probe.rx_control_candidates}")
-    rx_total = probe.type_counts[RECORD_CAN_RX_RAW]
+    rx_total = sum(probe.rx_by_bus_id.values())
     rx_by_bus = collections.Counter()
     for (bus, _can_id), count in probe.rx_by_bus_id.items():
         rx_by_bus[bus] += count

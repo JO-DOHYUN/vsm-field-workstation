@@ -45,6 +45,7 @@ private:
     static bool isControlFeedbackCanRx(const TypedCanRawRecord& can);
     static FrameRecord toFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can);
     static quint64 projectionKey(const TypedCanRawRecord& can);
+    static quint64 projectionKey(quint8 bus, bool ext, bool rtr, quint32 canId);
     static quint64 controlEvidenceKey(quint8 bus, quint32 canId);
     bool queueSampledControlEvidence(QHash<quint64, TypedRecord>& bucket, quint64 key, const TypedRecord& record);
     bool controlEvidenceFlushDue() const;

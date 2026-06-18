@@ -18,6 +18,8 @@ public:
         QString metaFinal;
         QString eventsPart;
         QString eventsFinal;
+        QString diagnosticsPart;
+        QString diagnosticsFinal;
     };
 
     struct LogSessionPaths {
@@ -47,7 +49,7 @@ public:
     bool startTypedSession(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut = nullptr);
     bool appendTypedRecord(const TypedRecord& record, QString* errorOut = nullptr);
     bool appendEventJsonLine(const QJsonObject& event, QString* errorOut = nullptr);
-    bool finalizeTypedSession(QString* errorOut = nullptr);
+    bool finalizeTypedSession(QString* errorOut = nullptr, const QJsonObject& diagnostics = QJsonObject());
     void discard();
 
     bool isActive() const { return m_active; }
@@ -59,13 +61,17 @@ private:
     static Paths makePaths(const QString& sessionDir);
     static bool replacePartFile(const QString& partPath, const QString& finalPath, QString* errorOut);
     static void setError(QString* errorOut, const QString& message);
+    bool flushTypedBuffers(QString* errorOut = nullptr);
     void closeFiles();
 
     QFile m_stream;
     QFile m_index;
     QFile m_events;
+    QByteArray m_streamBuffer;
+    QByteArray m_indexBuffer;
     Paths m_paths;
     bool m_active = false;
     quint64 m_recordCount = 0;
     quint64 m_bytesWritten = 0;
+    quint64 m_streamLogicalOffset = 0;
 };

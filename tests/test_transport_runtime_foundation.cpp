@@ -1,10 +1,13 @@
 #include "transport/HostTxQueue.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LiveProjectionRuntime.h"
+#include "transport/LiveTruthRuntime.h"
 #include "transport/TransportSession.h"
 #include "transport/TransportRuntime.h"
 
 #include <QtTest/QtTest>
+
+#include <algorithm>
 
 namespace {
 void appendU32(QByteArray& out, quint32 value) {
@@ -200,6 +203,40 @@ private slots:
         QCOMPARE(result.status.sampledControlEvidenceRecords, quint64(3));
     }
 
+    void liveTruthRuntimeConsumesAllCanRxAndSnapshotsLatestPerBusKey() {
+        CanMonitorTransport::LiveTruthRuntime runtime;
+
+        TypedRecordList records;
+        records << makeCanRxRecord(1, 0x120, 1000, 0);
+        records << makeCanRxRecord(2, 0x120, 1200, 0);
+        records << makeCanRxRecord(3, 0x120, 1100, 1);
+        records << makeCanRxRecord(4, 0x120, 2000, 0);
+
+        const auto result = runtime.ingest(records);
+
+        QCOMPARE(result.frames.size(), 2);
+        QCOMPARE(result.status.observedCanRxFrames, quint64(4));
+        QCOMPARE(result.status.observedBus0CanRxFrames, quint64(3));
+        QCOMPARE(result.status.observedBus1CanRxFrames, quint64(1));
+        QCOMPARE(result.status.emittedTruthFrames, quint64(2));
+        QCOMPARE(result.status.coalescedTruthUpdates, quint64(2));
+        QCOMPARE(result.status.truthLoss, quint64(0));
+
+        const auto bus0It = std::find_if(result.frames.cbegin(), result.frames.cend(), [](const FrameRecord& frame) {
+            return frame.bus == 0 && frame.canId == 0x120;
+        });
+        const auto bus1It = std::find_if(result.frames.cbegin(), result.frames.cend(), [](const FrameRecord& frame) {
+            return frame.bus == 1 && frame.canId == 0x120;
+        });
+        QVERIFY(bus0It != result.frames.cend());
+        QVERIFY(bus1It != result.frames.cend());
+        QCOMPARE(bus0It->tExtUs, quint64(2000));
+        QVERIFY(bus0It->hasObservedGap);
+        QCOMPARE(bus0It->observedGapUs, quint64(800));
+        QCOMPARE(bus1It->tExtUs, quint64(1100));
+        QVERIFY(!bus1It->hasObservedGap);
+    }
+
     void transportRuntimeNormalizesProductionModeKeys() {
         QCOMPARE(CanMonitorTransport::TransportRuntime::normalizeModeKey(QStringLiteral("typed-evidence")),
                  QStringLiteral("typed"));
@@ -231,19 +268,33 @@ private slots:
         session.updateHostTxQueue(3, 120, 5, 2, 1);
         QCOMPARE(session.hostBackpressureCount(), quint64(1));
         session.updateCaptureStorage(true, 2048, 31);
-        session.updateBoardHealth(0, 0, 100);
+        CanMonitorTransport::TransportSession::BoardUplinkCounters uplink;
+        uplink.present = true;
+        uplink.serialBackpressureTotal = 2;
+        uplink.serialRingClearTotal = 0;
+        uplink.serialTxHighWaterBytes = 4096;
+        session.updateBoardHealth(0, 0, 100, uplink);
         session.updateLiveRuntime(8000, 7990, 7900, 17, 5, 100, 12, 0, 80, 25, 55, 256, 3, 4);
+        session.updateLiveTruth(100, 80, 20, 50, 50, 3, 2, 4, 30, 2, 1, 0);
+        session.updateRawLedger(100, 80, 4096, 0, 99);
         const QVariantList rows = session.rows();
-        QCOMPARE(rows.size(), 6);
+        QCOMPARE(rows.size(), 9);
         QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_storage"));
         QCOMPARE(rows.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("typed_parser"));
         QCOMPARE(rows.at(1).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("ERR"));
         QCOMPARE(rows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_tx_queue"));
         QCOMPARE(rows.at(2).toMap().value(QStringLiteral("blocking")).toBool(), true);
         QCOMPARE(rows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_health"));
-        QCOMPARE(rows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
-        QVERIFY(rows.at(4).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));
-        QCOMPARE(rows.at(5).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
+        QCOMPARE(rows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
+        QCOMPARE(rows.at(4).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
+        QVERIFY(rows.at(4).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("serial_high_water 4096")));
+        QCOMPARE(rows.at(5).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_truth"));
+        QVERIFY(rows.at(5).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth_loss 0")));
+        QCOMPARE(rows.at(6).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("raw_ledger"));
+        QVERIFY(rows.at(6).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("segment_bytes 4096")));
+        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
+        QVERIFY(rows.at(7).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));
+        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
     }
 
     void transportRuntimeOwnsWorkerThreadAndQueuesModeChanges() {

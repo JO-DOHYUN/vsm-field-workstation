@@ -4,7 +4,7 @@
 #include <cstring>
 
 namespace {
-constexpr int kProjectionStatusIntervalMs = 250;
+constexpr int kProjectionStatusIntervalMs = 500;
 constexpr int kControlEvidenceProjectionIntervalMs = 250;
 constexpr int kControlEvidenceHardPendingRecords = 64;
 constexpr quint32 kControlCanIds[] = {0x503, 0x510, 0x511, 0x512, 0x513};
@@ -23,6 +23,21 @@ QVector<TypedRecord> takeSortedRecords(QHash<quint64, TypedRecord>& bucket) {
         return a.header.seq < b.header.seq;
     });
     return records;
+}
+
+FrameRecord toFrameRecordFromSegmentEntry(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
+    FrameRecord frame;
+    frame.tExtUs = entry.monoUs;
+    frame.canId = entry.canId;
+    frame.ext = entry.extended;
+    frame.rtr = entry.rtr;
+    frame.dlc = entry.dlc;
+    frame.bus = entry.bus;
+    frame.seq = quint8(record.header.seq & 0xFF);
+    frame.hasCaptureSeq = true;
+    frame.captureSeq = entry.captureSeq;
+    std::memcpy(frame.data, entry.data, sizeof(frame.data));
+    return frame;
 }
 }
 
@@ -52,30 +67,45 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingest(const TypedRec
     quint64 observedCanRxInBatch = 0;
     bool sampledControlEvidenceInBatch = false;
     for (const TypedRecord& record : records) {
-        if (record.isType(TypedRecordType::CanRxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (!can) continue;
-
+        auto processCanRx = [&](quint8 bus, quint32 canId, const quint8 data[8], const FrameRecord& frame) {
             ++m_status.observedCanRxFrames;
             ++observedCanRxInBatch;
-            if (can->bus == 0) ++m_status.observedBus0CanRxFrames;
-            else if (can->bus == 1) ++m_status.observedBus1CanRxFrames;
+            if (bus == 0) ++m_status.observedBus0CanRxFrames;
+            else if (bus == 1) ++m_status.observedBus1CanRxFrames;
 
-            if (isControlFeedbackCanRx(*can)) {
+            if (isControlCanId(canId)) {
                 ++m_status.observedControlEvidenceRecords;
                 sampledControlEvidenceInBatch |= queueSampledControlEvidence(
                     m_pendingControlFeedbackRxByKey,
-                    controlEvidenceKey(can->bus, can->canId),
+                    controlEvidenceKey(bus, canId),
                     record);
             }
 
-            const quint64 key = projectionKey(*can);
+            const quint64 key = projectionKey(bus, frame.ext, frame.rtr, canId);
             auto existing = frameIndexByKey.find(key);
             if (existing != frameIndexByKey.end()) {
-                coalescedFrames[*existing] = toFrameRecord(record, *can);
+                coalescedFrames[*existing] = frame;
             } else {
                 frameIndexByKey.insert(key, coalescedFrames.size());
-                coalescedFrames.push_back(toFrameRecord(record, *can));
+                coalescedFrames.push_back(frame);
+            }
+            Q_UNUSED(data);
+        };
+
+        if (record.isType(TypedRecordType::CanRxRaw)) {
+            const auto can = decodeTypedCanRaw(record);
+            if (!can) continue;
+            processCanRx(can->bus, can->canId, can->data, toFrameRecord(record, *can));
+            continue;
+        }
+
+        if (record.isType(TypedRecordType::CanRxSegment)) {
+            const auto header = decodeTypedCanRxSegmentHeader(record);
+            if (!header) continue;
+            for (qsizetype index = 0; index < header->frameCount; ++index) {
+                const auto entry = decodeTypedCanRxSegmentEntry(record, index);
+                if (!entry) continue;
+                processCanRx(entry->bus, entry->canId, entry->data, toFrameRecordFromSegmentEntry(record, *entry));
             }
             continue;
         }
@@ -179,7 +209,15 @@ FrameRecord LiveProjectionRuntime::toFrameRecord(const TypedRecord& record, cons
 }
 
 quint64 LiveProjectionRuntime::projectionKey(const TypedCanRawRecord& can) {
-    return (quint64(can.bus) << 32) | quint64(can.canId);
+    return projectionKey(can.bus, can.extended, can.rtr, can.canId);
+}
+
+quint64 LiveProjectionRuntime::projectionKey(quint8 bus, bool ext, bool rtr, quint32 canId) {
+    quint64 key = (quint64(bus) << 56);
+    if (ext) key |= (quint64(1) << 55);
+    if (rtr) key |= (quint64(1) << 54);
+    key |= quint64(canId & 0x1FFFFFFFu);
+    return key;
 }
 
 quint64 LiveProjectionRuntime::controlEvidenceKey(quint8 bus, quint32 canId) {
@@ -221,7 +259,7 @@ void LiveProjectionRuntime::flushPendingControlEvidence(TypedRecordList& out) {
 }
 
 bool LiveProjectionRuntime::statusDue(bool sampledThisBatch) {
-    if (sampledThisBatch) return true;
+    Q_UNUSED(sampledThisBatch);
     if (m_statusTimer.isValid() && m_statusTimer.elapsed() < kProjectionStatusIntervalMs) return false;
     m_statusTimer.restart();
     return true;

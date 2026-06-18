@@ -64,6 +64,30 @@ void readMetaInfo(const QString& path, TypedReplayReader::Summary& summary) {
     summary.metaFormat = root.value(QStringLiteral("format")).toString();
     summary.metaCreatedLocal = root.value(QStringLiteral("created_local")).toString();
     summary.metaStreamFile = root.value(QStringLiteral("stream_file")).toString();
+    summary.metaDiagnosticsFile = root.value(QStringLiteral("diagnostics_file")).toString();
+}
+
+quint64 jsonCounter(const QJsonObject& object, const QString& key) {
+    const QJsonValue value = object.value(key);
+    if (value.isString()) return value.toString().toULongLong();
+    if (value.isDouble()) return quint64(value.toDouble());
+    return 0;
+}
+
+void readDiagnosticsInfo(const QString& path, TypedReplayReader::Summary& summary) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) return;
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    const QJsonObject root = doc.object();
+    summary.diagnosticsFormat = root.value(QStringLiteral("format")).toString();
+    const QJsonObject parser = root.value(QStringLiteral("parser")).toObject();
+    summary.liveParserFrames = jsonCounter(parser, QStringLiteral("frames"));
+    summary.liveParserBytesDropped = jsonCounter(parser, QStringLiteral("bytes_dropped"));
+    summary.liveParserCrcFailures = jsonCounter(parser, QStringLiteral("crc_failures"));
+    summary.liveParserLengthFailures = jsonCounter(parser, QStringLiteral("length_failures"));
+    summary.liveParserVersionWarnings = jsonCounter(parser, QStringLiteral("version_warnings"));
+    summary.liveParserSeqGaps = jsonCounter(parser, QStringLiteral("seq_gaps"));
+    summary.liveParserBufferedBytes = jsonCounter(parser, QStringLiteral("buffered_bytes"));
 }
 
 IndexFileInfo readIndexFileInfo(const QString& path, const QVector<TypedReplayReader::RecordEntry>& records) {
@@ -114,7 +138,7 @@ void finishSummaryDiagnostics(TypedReplayReader::Summary& summary, int faultCoun
     summary.durationUs = summary.hasRecords && summary.lastMonoUs >= summary.firstMonoUs
         ? summary.lastMonoUs - summary.firstMonoUs
         : 0;
-    summary.partialCapture = summary.streamPart || summary.metaPart || summary.indexPart || summary.eventsPart || summary.trailingBytes > 0;
+    summary.partialCapture = summary.streamPart || summary.metaPart || summary.indexPart || summary.eventsPart || summary.diagnosticsPart || summary.trailingBytes > 0;
     if (summary.partialCapture) {
         summary.captureState = QStringLiteral("PARTIAL");
     } else if (summary.crcFailures > 0 ||
@@ -140,6 +164,9 @@ void finishSummaryDiagnostics(TypedReplayReader::Summary& summary, int faultCoun
     else parts << QStringLiteral("meta missing");
     if (summary.eventsPresent) parts << QStringLiteral("events %1").arg(summary.eventLineCount);
     else parts << QStringLiteral("events missing");
+    if (summary.diagnosticsPresent) parts << QStringLiteral("diagnostics ok");
+    else parts << QStringLiteral("diagnostics missing");
+    if (summary.liveParserSeqGaps > 0) parts << QStringLiteral("live seq gap %1").arg(summary.liveParserSeqGaps);
     if (faultCount > 0) parts << QStringLiteral("faults %1").arg(faultCount);
     summary.diagnosticSummary = parts.join(QStringLiteral(" | "));
 }
@@ -227,6 +254,9 @@ bool TypedReplayReader::loadPath(const QString& path, QString* errorOut) {
     const QString eventsPath = firstExistingPath(dir, streamPart
         ? QStringList{QStringLiteral("events.jsonl.part"), QStringLiteral("events.jsonl")}
         : QStringList{QStringLiteral("events.jsonl"), QStringLiteral("events.jsonl.part")});
+    const QString diagnosticsPath = firstExistingPath(dir, streamPart
+        ? QStringList{QStringLiteral("capture.diagnostics.json.part"), QStringLiteral("capture.diagnostics.json")}
+        : QStringList{QStringLiteral("capture.diagnostics.json"), QStringLiteral("capture.diagnostics.json.part")});
 
     m_summary.inputPath = QDir::fromNativeSeparators(info.absoluteFilePath());
     m_summary.sessionDir = sessionDir;
@@ -234,15 +264,18 @@ bool TypedReplayReader::loadPath(const QString& path, QString* errorOut) {
     m_summary.metaPath = metaPath;
     m_summary.indexPath = indexPath;
     m_summary.eventsPath = eventsPath;
+    m_summary.diagnosticsPath = diagnosticsPath;
     m_summary.sessionContainer = sessionContainer;
     m_summary.streamFinal = streamFinal;
     m_summary.streamPart = streamPart;
     m_summary.metaPresent = !metaPath.isEmpty();
     m_summary.indexPresent = !indexPath.isEmpty();
     m_summary.eventsPresent = !eventsPath.isEmpty();
+    m_summary.diagnosticsPresent = !diagnosticsPath.isEmpty();
     m_summary.metaPart = metaPath.endsWith(QStringLiteral(".part"), Qt::CaseInsensitive);
     m_summary.indexPart = indexPath.endsWith(QStringLiteral(".part"), Qt::CaseInsensitive);
     m_summary.eventsPart = eventsPath.endsWith(QStringLiteral(".part"), Qt::CaseInsensitive);
+    m_summary.diagnosticsPart = diagnosticsPath.endsWith(QStringLiteral(".part"), Qt::CaseInsensitive);
     if (m_summary.metaPresent) {
         readMetaInfo(metaPath, m_summary);
     }
@@ -263,6 +296,9 @@ bool TypedReplayReader::loadPath(const QString& path, QString* errorOut) {
         m_summary.eventLineCount = eventInfo.count;
         m_summary.firstEventText = eventInfo.first;
         m_summary.lastEventText = eventInfo.last;
+    }
+    if (m_summary.diagnosticsPresent) {
+        readDiagnosticsInfo(diagnosticsPath, m_summary);
     }
     finishSummaryDiagnostics(m_summary, m_faults.size());
     return true;

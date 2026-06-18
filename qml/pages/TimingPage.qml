@@ -63,7 +63,14 @@ Item {
     function scrollToFocusedRow() {
         const focusId = (appController.timingFilterId !== "") ? appController.timingFilterId : ""
         if (focusId === "") return
-        const rowIndex = appController.timingModel.findIndex("idText", focusId)
+        let rowIndex = -1
+        for (let i = 0; i < appController.timingModel.count; ++i) {
+            const row = appController.timingModel.get(i)
+            if (row.idText && row.idText.indexOf(focusId) >= 0) {
+                rowIndex = i
+                break
+            }
+        }
         if (rowIndex >= 0) timingList.positionViewAtIndex(rowIndex, ListView.Visible)
     }
 
@@ -110,6 +117,14 @@ Item {
                 Components.SafeButton { text: "프레임 지우기"; uiScale: uiScale; maxButtonWidth: Math.round(104 * uiScale); onClicked: appController.clearFrames() }
                 Components.StatusBadge { text: "행 " + timingList.count; kind: "info"; uiScale: uiScale; maxWidth: Math.round(82 * uiScale) }
             }
+        }
+
+        Components.SummaryStrip {
+            uiScale: uiScale
+            title: "Truth 분석"
+            level: appController.analysisRuntimeLevel || "OK"
+            summary: appController.analysisRuntimeSummary || "truth analysis runtime 대기"
+            detailsModel: appController.analysisRuntimeDiagnostics || []
         }
 
         Frame {
@@ -362,8 +377,8 @@ Item {
                             width: parent.width
                             implicitHeight: bodyColumn.implicitHeight + 8
                             radius: 8
-                            color: appController.timingFilterId !== "" && appController.timingFilterId === idText ? "#eef6ff" : "#fbfdff"
-                            border.color: appController.timingFilterId !== "" && appController.timingFilterId === idText ? "#93c5fd" : "#d7e0ea"
+                            color: appController.timingFilterId !== "" && idText.indexOf(appController.timingFilterId) >= 0 ? "#eef6ff" : "#fbfdff"
+                            border.color: appController.timingFilterId !== "" && idText.indexOf(appController.timingFilterId) >= 0 ? "#93c5fd" : "#d7e0ea"
 
                             ColumnLayout {
                                 id: bodyColumn

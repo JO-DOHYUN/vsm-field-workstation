@@ -39,6 +39,7 @@ Receiver recovery:
 10 HOST_CAN_TX_REQUEST
 11 HOST_HEARTBEAT
 12 HOST_CONTROL_SESSION
+16 CAN_RX_SEGMENT
 ```
 
 `HOST_CAN_TX_REQUEST`, `HOST_HEARTBEAT`, `HOST_CONTROL_SESSION` are host-to-board
@@ -60,6 +61,39 @@ Size: 30 bytes.
 
 `CAN_TX_RAW` is emitted only after hardware CAN write succeeds. This is the only
 actual CAN TX success evidence.
+
+## CAN_RX_SEGMENT Payload
+
+Size: `32 + frame_count * 30` bytes.
+
+`CAN_RX_SEGMENT` is lossless packing for high-load CAN RX. It must not be treated
+as compression, sampling, or summary data. VMS must expand every entry into the
+same truth path used for `CAN_RX_RAW`: typed capture/replay, raw ledger,
+analysis runtime, timing, value, alarm, DLC, and export.
+
+Header:
+
+```text
+0..7    segment_seq64 u64
+8..15   first_capture_seq64 u64
+16..17  frame_count u16
+18      entry_size u8: currently 30
+19      flags u8: bit0 capture_seq64 valid
+20..23  dropped_before_segment u32
+24..27  fifo_before_segment u32
+28..31  reserved u32
+```
+
+Frame entry:
+
+```text
+0..7    capture_seq64 u64
+8..15   mono_us u64
+16..19  can_id_flags u32: bit 0..28 id, bit 29 extended, bit 30 RTR
+20      dlc_flags u8: low nibble DLC
+21      bus u8
+22..29  data[8]
+```
 
 Current bus roles must be resolved from `CAPABILITY`, model rules, observed CAN
 IDs, or operator override. New VMS code must not hard-code `bus=0`/`bus=1` as
@@ -200,6 +234,40 @@ Minimum VMS requirements:
   `4 ControlActive`, `5 HostTimeout`, `6 FaultLockout`, `7 Estop`.
 - Control-capable UI may remain enabled only for states `1..4`, with fault flags
   clear and protocol/profile compatible.
+
+`BOARD_HEALTH` 기본 payload는 52 bytes이며 기존 필드는 계속 유지한다. CSM CDC
+backpressure 대응 이후의 확장 health payload는 192 bytes 이상일 수 있고, VMS는
+아래 offset이 존재하면 USB uplink/segment 손실 진단으로 별도 표시한다.
+
+```text
+160..163  serial_enqueue_fail_total u32_le
+164..167  serial_ring_clear_total u32_le
+168..171  serial_ring_cleared_bytes_total u32_le
+172..175  serial_backpressure_total u32_le
+176..179  serial_tx_high_water_bytes u32_le
+180..183  shared_can_queue_high_water u32_le
+184..187  mcp_drain_budget_hit_total u32_le
+188..191  can_segment_enqueue_fail_total u32_le
+```
+
+`serial_ring_clear_total`, `serial_ring_cleared_bytes_total`,
+`serial_enqueue_fail_total`, `can_segment_enqueue_fail_total`는 capture truth loss
+또는 truth loss 위험 진단이다. VMS는 이를 display sampling/projection drop과 섞지
+말고 transport/CSM uplink 진단으로 노출한다.
+
+Typed capture session sidecars:
+
+```text
+capture.stream              accepted typed frame bytes
+capture.index               sparse record index
+events.jsonl                capture/session events
+session.meta.json           session metadata
+capture.diagnostics.json    live parser/storage counters captured at finalize
+```
+
+`capture.diagnostics.json`의 parser counters는 최종 `capture.stream`을 재파싱해 얻는
+fault counter와 별개다. 저장 당시 live parser가 본 CRC/length/drop/seq 상태를
+보존하기 위한 sidecar다.
 
 ## Replay Rule
 

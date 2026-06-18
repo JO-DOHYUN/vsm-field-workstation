@@ -204,6 +204,7 @@ private slots:
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/capture.index")));
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/session.meta.json")));
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/events.jsonl")));
+        QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/capture.diagnostics.json")));
         QVERIFY(!QFileInfo::exists(sessionDir + QStringLiteral("/capture.stream.part")));
 
         TypedReplayReader reader;
@@ -216,6 +217,12 @@ private slots:
         QCOMPARE(reader.summary().typeCounts.value(quint8(TypedRecordType::CanTxRaw)), quint64(1));
         QCOMPARE(reader.summary().firstMonoUs, quint64(1000));
         QCOMPARE(reader.summary().lastMonoUs, quint64(2000));
+
+        TypedReplayReader sessionReader;
+        QVERIFY2(sessionReader.loadPath(sessionDir, &error), qPrintable(error));
+        QCOMPARE(sessionReader.summary().diagnosticsPresent, true);
+        QCOMPARE(sessionReader.summary().liveParserFrames, quint64(2));
+        QCOMPARE(sessionReader.summary().liveParserSeqGaps, quint64(0));
     }
 
     void stopFinalizesActiveTypedStorageSession() {
@@ -246,6 +253,7 @@ private slots:
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/capture.index")));
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/session.meta.json")));
         QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/events.jsonl")));
+        QVERIFY(QFileInfo::exists(sessionDir + QStringLiteral("/capture.diagnostics.json")));
         QVERIFY(!QFileInfo::exists(sessionDir + QStringLiteral("/capture.stream.part")));
     }
 };

@@ -249,6 +249,49 @@ private slots:
         QCOMPARE(intent.drivingMode, quint8(1));
     }
 
+    void liveAnalysisSeparatesSameCanIdByBus() {
+        AppController controller;
+        controller.clearModel();
+
+        FrameRecord bus0;
+        bus0.canId = 0x321;
+        bus0.bus = 0;
+        bus0.dlc = 2;
+        bus0.tExtUs = 20'000;
+        bus0.data[0] = 0x10;
+        bus0.data[1] = 0x20;
+
+        FrameRecord bus1 = bus0;
+        bus1.bus = 1;
+        bus1.tExtUs = 22'000;
+        bus1.data[0] = 0x30;
+        bus1.data[1] = 0x40;
+
+        controller.ingestFrame(bus0, QStringLiteral("live"));
+        controller.ingestFrame(bus1, QStringLiteral("live"));
+        QCOMPARE(controller.m_liveStates.size(), 2);
+
+        controller.refreshValueRows();
+        QCOMPARE(controller.valueModel()->rowCount(), 2);
+
+        QStringList ids;
+        QStringList keys;
+        for (int i = 0; i < controller.valueModel()->rowCount(); ++i) {
+            const QVariantMap row = controller.valueModel()->get(i);
+            ids << row.value(QStringLiteral("idText")).toString();
+            keys << row.value(QStringLiteral("key")).toString();
+        }
+
+        QVERIFY(ids.join(QLatin1Char('|')).contains(QStringLiteral("B0")));
+        QVERIFY(ids.join(QLatin1Char('|')).contains(QStringLiteral("B1")));
+        QVERIFY(keys.join(QLatin1Char('|')).contains(QStringLiteral("BUS0|STD|DATA|0X321")));
+        QVERIFY(keys.join(QLatin1Char('|')).contains(QStringLiteral("BUS1|STD|DATA|0X321")));
+
+        controller.selectValueId(QStringLiteral("BUS1|STD|DATA|0X321"));
+        QCOMPARE(controller.selectedValueId(), QStringLiteral("BUS1|STD|DATA|0X321"));
+        QCOMPARE(controller.m_selectedValueCanId, quint32(0x321));
+    }
+
     void controlEvidenceStagesSeparateAckFromActualTx() {
         AppController controller;
 
@@ -257,7 +300,9 @@ private slots:
         QVERIFY(controller.controlOperatorSummary().contains(QStringLiteral("제어 차단")));
         QVERIFY(controller.controlOperatorSummary().contains(QStringLiteral("CAN_TX_RAW 미확인")));
         QVERIFY(controller.transportDiagnosticsSummary().contains(QStringLiteral("transport")));
-        QCOMPARE(controller.transportDiagnostics().size(), 6);
+        const QVariantList transportRows = controller.transportDiagnostics();
+        QCOMPARE(transportRows.size(), 9);
+        QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
         QVERIFY(controller.controlActionVerdict().contains(QStringLiteral("COM 연결 없음")));
         QCOMPARE(controller.controlOperatorChecklist().size(), 8);
         QCOMPARE(controller.controlPolicyChecklist().size(), 1);

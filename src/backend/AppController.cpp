@@ -11,7 +11,9 @@
 #include "SignalDecoder.h"
 #include "AlarmManager.h"
 #include "TypedReplayReader.h"
+#include "perf/PerformanceProbeRuntime.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -20,6 +22,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMap>
+#include <QPointer>
 #include <QSerialPortInfo>
 #include <QRegularExpression>
 #include <QSet>
@@ -41,10 +44,10 @@ constexpr int kRoutineControlWriteUiMinIntervalMs = 250;
 constexpr int kHostTxQueueUiMinIntervalMs = 250;
 constexpr int kControlKeyboardLegacyPulseMs = 120;
 constexpr double kControlKeyboardSteerHoldDeg = 45.0;
-constexpr int kLiveProjectionSoftBacklog = 512;
-constexpr int kLiveProjectionHardBacklog = 768;
-constexpr int kLiveProjectionMaxFlushFrames = 64;
-constexpr int kLiveProjectionFlushBudgetMs = 2;
+constexpr int kLiveProjectionSoftBacklog = 128;
+constexpr int kLiveProjectionHardBacklog = 256;
+constexpr int kLiveProjectionMaxFlushFrames = 16;
+constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
@@ -464,11 +467,92 @@ bool parseCanIdText(const QString& text, quint32* out) {
     bool ok = false;
     const QString trimmed = text.trimmed();
     quint32 id = 0;
-    if (trimmed.startsWith(QStringLiteral("0x"), Qt::CaseInsensitive)) id = trimmed.mid(2).toUInt(&ok, 16);
-    else id = trimmed.toUInt(&ok, 10);
+    const QRegularExpression hexRe(QStringLiteral(R"(0x([0-9a-fA-F]+))"), QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch hexMatch = hexRe.match(trimmed);
+    if (hexMatch.hasMatch()) {
+        id = hexMatch.captured(1).toUInt(&ok, 16);
+    } else {
+        id = trimmed.toUInt(&ok, 10);
+    }
     if (!ok) return false;
     *out = id;
     return true;
+}
+
+constexpr quint8 kAnalysisRuleOnlyBus = 0xFF;
+
+quint64 makeAnalysisStateKey(quint8 bus, bool ext, bool rtr, quint32 canId) {
+    quint64 key = (quint64(bus) << 56);
+    if (ext) key |= (quint64(1) << 55);
+    if (rtr) key |= (quint64(1) << 54);
+    key |= quint64(canId & 0x1FFFFFFFU);
+    return key;
+}
+
+quint64 analysisStateKeyForFrame(const FrameRecord& frame) {
+    return makeAnalysisStateKey(frame.bus, frame.ext, frame.rtr, frame.canId);
+}
+
+quint64 ruleOnlyAnalysisStateKey(quint32 canId) {
+    return makeAnalysisStateKey(kAnalysisRuleOnlyBus, false, false, canId);
+}
+
+quint32 canIdFromAnalysisStateKey(quint64 key) {
+    return quint32(key & 0x1FFFFFFFULL);
+}
+
+quint8 busFromAnalysisStateKey(quint64 key) {
+    return quint8((key >> 56) & 0xFF);
+}
+
+bool analysisStateKeyIsRuleOnly(quint64 key) {
+    return busFromAnalysisStateKey(key) == kAnalysisRuleOnlyBus;
+}
+
+QString analysisStateKeyText(quint64 key) {
+    if (analysisStateKeyIsRuleOnly(key)) {
+        return QStringLiteral("RULE|%1").arg(idText(canIdFromAnalysisStateKey(key)));
+    }
+    const bool ext = (key & (quint64(1) << 55)) != 0;
+    const bool rtr = (key & (quint64(1) << 54)) != 0;
+    return QStringLiteral("BUS%1|%2|%3|%4")
+        .arg(busFromAnalysisStateKey(key))
+        .arg(ext ? QStringLiteral("EXT") : QStringLiteral("STD"))
+        .arg(rtr ? QStringLiteral("RTR") : QStringLiteral("DATA"))
+        .arg(idText(canIdFromAnalysisStateKey(key)));
+}
+
+bool parseAnalysisStateKeyText(const QString& text, quint64* out) {
+    if (!out) return false;
+    const QString trimmed = text.trimmed();
+    const QRegularExpression keyRe(QStringLiteral(R"(^BUS(\d+)\|(STD|EXT)\|(DATA|RTR)\|(.+)$)"),
+                                   QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch keyMatch = keyRe.match(trimmed);
+    if (keyMatch.hasMatch()) {
+        bool busOk = false;
+        const uint bus = keyMatch.captured(1).toUInt(&busOk);
+        quint32 id = 0;
+        if (!busOk || bus > 254 || !parseCanIdText(keyMatch.captured(4), &id)) return false;
+        *out = makeAnalysisStateKey(quint8(bus),
+                                    keyMatch.captured(2).compare(QStringLiteral("EXT"), Qt::CaseInsensitive) == 0,
+                                    keyMatch.captured(3).compare(QStringLiteral("RTR"), Qt::CaseInsensitive) == 0,
+                                    id);
+        return true;
+    }
+    quint32 id = 0;
+    if (!parseCanIdText(trimmed, &id)) return false;
+    *out = ruleOnlyAnalysisStateKey(id);
+    return true;
+}
+
+QString analysisStateDisplayIdText(quint64 key, const FrameRecord* frame = nullptr) {
+    if (frame) {
+        return QStringLiteral("B%1 · %2").arg(frame->bus).arg(idText(frame->canId));
+    }
+    if (analysisStateKeyIsRuleOnly(key)) {
+        return idText(canIdFromAnalysisStateKey(key));
+    }
+    return QStringLiteral("B%1 · %2").arg(busFromAnalysisStateKey(key)).arg(idText(canIdFromAnalysisStateKey(key)));
 }
 
 DetailRow makeModelDetailRow(const QString& key, const QString& value, const QString& note = QString()) {
@@ -897,6 +981,12 @@ int compareUInt32(quint32 a, quint32 b) {
     return 0;
 }
 
+int compareUInt64(quint64 a, quint64 b) {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+}
+
 int compareOptionalDouble(double a, double b) {
     const bool aValid = a >= 0.0;
     const bool bValid = b >= 0.0;
@@ -919,6 +1009,16 @@ bool containsFilterText(const QString& haystack, const QString& needle) {
     const QString n = needle.trimmed();
     if (n.isEmpty()) return true;
     return haystack.contains(n, Qt::CaseInsensitive);
+}
+
+QVector<QVariantMap> rowsFromVariantList(const QVariantList& rows) {
+    QVector<QVariantMap> out;
+    out.reserve(rows.size());
+    for (const QVariant& value : rows) {
+        const QVariantMap row = value.toMap();
+        if (!row.isEmpty()) out.push_back(row);
+    }
+    return out;
 }
 
 
@@ -1303,9 +1403,15 @@ void AppController::setReplayTypedDiagnosticsFromReader(const TypedReplayReader&
         }
     }
     const bool projectionMatches = canRxRecordCount == quint64(std::max(0, canRxFrameCount));
-    const bool parserFaults = summary.crcFailures > 0 || summary.lengthFailures > 0 || summary.trailingBytes > 0 || summary.bytesDropped > 0;
-    const bool sidecarPartial = summary.metaPart || summary.indexPart || summary.eventsPart || summary.streamPart;
-    const bool sidecarMissing = !summary.metaPresent || !summary.indexPresent || !summary.eventsPresent;
+    const bool parserFaults = summary.crcFailures > 0 || summary.lengthFailures > 0 || summary.trailingBytes > 0 || summary.bytesDropped > 0 || summary.seqGaps > 0;
+    const bool liveParserFaults = summary.liveParserBytesDropped > 0 ||
+        summary.liveParserCrcFailures > 0 ||
+        summary.liveParserLengthFailures > 0 ||
+        summary.liveParserVersionWarnings > 0 ||
+        summary.liveParserSeqGaps > 0 ||
+        summary.liveParserBufferedBytes > 0;
+    const bool sidecarPartial = summary.metaPart || summary.indexPart || summary.eventsPart || summary.diagnosticsPart || summary.streamPart;
+    const bool sidecarMissing = !summary.metaPresent || !summary.indexPresent || !summary.eventsPresent || !summary.diagnosticsPresent;
     QString verdictLevel = QStringLiteral("OK");
     QStringList verdictParts;
     if (!summary.hasRecords || canRxFrameCount <= 0 || !projectionMatches || parserFaults) {
@@ -1324,7 +1430,7 @@ void AppController::setReplayTypedDiagnosticsFromReader(const TypedReplayReader&
     if (dlcBucketCount > 1) verdictParts << QStringLiteral("DLC 다양성 확인");
     else if (onlyDlc8) verdictParts << QStringLiteral("DLC 8만 관찰");
     if (summary.seqGaps > 0) verdictParts << QStringLiteral("seq gap %1").arg(summary.seqGaps);
-    if (parserFaults) verdictParts << QStringLiteral("parser fault 존재");
+    if (parserFaults || liveParserFaults) verdictParts << QStringLiteral("parser fault 존재");
     appendRow(QStringLiteral("operator_verdict"), verdictParts.join(QStringLiteral(" | ")), verdictLevel,
               QStringLiteral("판정"),
               QStringLiteral("CAN_RX projection, DLC 분포, parser fault, sidecar 상태를 합친 현장용 요약"));
@@ -1412,15 +1518,29 @@ void AppController::setReplayTypedDiagnosticsFromReader(const TypedReplayReader&
         const quint64 droppedDelta = u32CounterDelta(lastHealth->canDroppedTotal, firstHealth->canDroppedTotal);
         const quint64 overflowDelta = u32CounterDelta(lastHealth->canFifoOverflowTotal, firstHealth->canFifoOverflowTotal);
         appendRow(QStringLiteral("board_health"),
-                  QStringLiteral("rx +%1, dropped +%2, fifo_overflow +%3, last safety %4 flags 0x%5 fault 0x%6 queue %7")
+                  QStringLiteral("rx +%1, dropped +%2, fifo_overflow +%3, last safety %4 flags 0x%5 fault 0x%6 queue %7%8")
                       .arg(rxDelta)
                       .arg(droppedDelta)
                       .arg(overflowDelta)
                       .arg(lastHealth->safetyState)
                       .arg(int(lastHealth->flags), 0, 16)
                       .arg(qulonglong(lastHealth->faultFlags), 0, 16)
-                      .arg(lastHealth->queueDepth),
-                  (droppedDelta == 0 && lastHealth->faultFlags == 0) ? QStringLiteral("OK") : QStringLiteral("WARN"),
+                      .arg(lastHealth->queueDepth)
+                      .arg(lastHealth->hasExtendedTransportCounters
+                               ? QStringLiteral(", usb clear %1 bp %2 cleared_bytes %3 seg_fail %4")
+                                     .arg(lastHealth->serialRingClearTotal)
+                                     .arg(lastHealth->serialBackpressureTotal)
+                                     .arg(lastHealth->serialRingClearedBytesTotal)
+                                     .arg(lastHealth->canSegmentEnqueueFailTotal)
+                               : QString()),
+                  (droppedDelta == 0 &&
+                   lastHealth->faultFlags == 0 &&
+                   (!lastHealth->hasExtendedTransportCounters ||
+                    (lastHealth->serialRingClearTotal == 0 &&
+                     lastHealth->serialEnqueueFailTotal == 0 &&
+                     lastHealth->canSegmentEnqueueFailTotal == 0)))
+                      ? QStringLiteral("OK")
+                      : QStringLiteral("WARN"),
                   QStringLiteral("보드 헬스"));
     }
     if (!boardEventCounts.isEmpty()) {
@@ -1442,20 +1562,37 @@ void AppController::setReplayTypedDiagnosticsFromReader(const TypedReplayReader&
                   .arg(summary.seqGaps),
               summary.seqGaps == 0 ? QStringLiteral("OK") : QStringLiteral("WARN"),
               QStringLiteral("시퀀스"));
-    appendRow(QStringLiteral("sidecars"), QStringLiteral("meta %1, index %2, events %3")
+    appendRow(QStringLiteral("sidecars"), QStringLiteral("meta %1, index %2, events %3, diagnostics %4")
                   .arg(summary.metaPresent ? QStringLiteral("ok") : QStringLiteral("missing"))
                   .arg(summary.indexPresent ? QStringLiteral("%1").arg(summary.indexEntryCount) : QStringLiteral("missing"))
-                  .arg(summary.eventsPresent ? QStringLiteral("%1").arg(summary.eventLineCount) : QStringLiteral("missing")),
-              summary.metaPresent && summary.indexPresent && summary.eventsPresent && !sidecarPartial ? QStringLiteral("OK") : QStringLiteral("WARN"),
+                  .arg(summary.eventsPresent ? QStringLiteral("%1").arg(summary.eventLineCount) : QStringLiteral("missing"))
+                  .arg(summary.diagnosticsPresent ? QStringLiteral("ok") : QStringLiteral("missing")),
+              !sidecarMissing && !sidecarPartial ? QStringLiteral("OK") : QStringLiteral("WARN"),
               QStringLiteral("Sidecar"));
-    appendRow(QStringLiteral("faults"), QStringLiteral("crc %1, len %2, tail %3, dropped %4")
+    appendRow(QStringLiteral("capture_diagnostics"),
+              summary.diagnosticsPresent
+                  ? QStringLiteral("%1 | live parser frames %2 drop %3 crc %4 len %5 seq %6 ver %7 buffered %8")
+                        .arg(summary.diagnosticsFormat.isEmpty() ? QStringLiteral("diagnostics") : summary.diagnosticsFormat)
+                        .arg(summary.liveParserFrames)
+                        .arg(summary.liveParserBytesDropped)
+                        .arg(summary.liveParserCrcFailures)
+                        .arg(summary.liveParserLengthFailures)
+                        .arg(summary.liveParserSeqGaps)
+                        .arg(summary.liveParserVersionWarnings)
+                        .arg(summary.liveParserBufferedBytes)
+                  : QStringLiteral("missing"),
+              !summary.diagnosticsPresent ? QStringLiteral("WARN") : (liveParserFaults ? QStringLiteral("ERR") : QStringLiteral("OK")),
+              QStringLiteral("Capture diagnostics"),
+              QStringLiteral("저장 당시 live parser counter sidecar; replay 재파싱 fault와 별도로 보존"));
+    appendRow(QStringLiteral("faults"), QStringLiteral("crc %1, len %2, tail %3, dropped %4, seq %5")
                   .arg(summary.crcFailures)
                   .arg(summary.lengthFailures)
                   .arg(summary.trailingBytes)
-                  .arg(summary.bytesDropped),
-              (summary.crcFailures == 0 && summary.lengthFailures == 0 && summary.trailingBytes == 0)
+                  .arg(summary.bytesDropped)
+                  .arg(summary.seqGaps),
+              (summary.crcFailures == 0 && summary.lengthFailures == 0 && summary.trailingBytes == 0 && summary.bytesDropped == 0 && summary.seqGaps == 0)
                   ? QStringLiteral("OK")
-                  : QStringLiteral("WARN"),
+                  : QStringLiteral("ERR"),
               QStringLiteral("Parser faults"));
     if (!reader.faults().isEmpty()) {
         const auto& fault = reader.faults().first();
@@ -1545,7 +1682,7 @@ void AppController::restoreReplaySnapshotState() {
     emit replayIssueMarkersChanged();
 }
 
-const QHash<quint32, AppController::IdState>& AppController::replaySnapshotStateMap() const {
+const AppController::AnalysisStateMap& AppController::replaySnapshotStateMap() const {
     return (m_replayRebuildActive && m_replaySnapshotValid) ? m_replaySnapshotStates : m_replayStates;
 }
 
@@ -1604,6 +1741,9 @@ void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
         m_liveProjectionDroppedFrames += quint64(excess);
         m_pendingLiveFrames.erase(m_pendingLiveFrames.begin(), m_pendingLiveFrames.begin() + excess);
         m_pendingLiveFrameOffset = 0;
+    }
+    if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) {
+        coalescePendingLiveFramesToLatest();
     }
     m_liveProjectionMaxBacklog = std::max(m_liveProjectionMaxBacklog, int(pendingLiveFrameCount()));
 }
@@ -1716,13 +1856,18 @@ void AppController::flushPendingLiveFrames() {
     compactPendingLiveFrames();
 
     const qint64 backlogAfter = pendingLiveFrameCount();
-    if (backlogAfter > 0) m_liveFlushTimer.start(backlogAfter > kLiveProjectionSoftBacklog ? 0 : 8);
+    if (backlogAfter > 0) m_liveFlushTimer.start(backlogAfter > kLiveProjectionSoftBacklog ? 24 : 16);
 }
 
 void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStringList& timeTexts) {
     if (frames.isEmpty() || timeTexts.isEmpty()) return;
 
     const int count = std::min(int(frames.size()), int(timeTexts.size()));
+    if (m_liveUiPaused || !m_livePanelActive) {
+        m_liveSampledViewDrops += quint64(count);
+        return;
+    }
+
     const int keepLimit = std::max(1, m_liveViewChunk * 2);
     m_pendingLiveViewFrames.reserve(keepLimit);
     m_pendingLiveViewTimeTexts.reserve(keepLimit);
@@ -1750,12 +1895,13 @@ void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStr
         }
     }
 
-    int flushDelayMs = 45;
-    if (projectionBackpressureActive()) flushDelayMs = std::max(flushDelayMs, 90);
+    int flushDelayMs = 320;
+    if (projectionBackpressureActive()) flushDelayMs = std::max(flushDelayMs, 500);
     if (!m_liveViewFlushTimer.isActive()) m_liveViewFlushTimer.start(flushDelayMs);
 }
 
 void AppController::flushQueuedLiveViewBatch() {
+    CanMonitorPerf::ScopedProbe probe("app.live_view_flush", m_pendingLiveViewFrames.size(), 3000);
     if (m_pendingLiveViewFrames.isEmpty()) return;
     if (m_liveUiPaused || !m_livePanelActive) {
         m_pendingLiveViewFrames.clear();
@@ -1790,7 +1936,7 @@ void AppController::processReplayRebuildStep() {
         advanceReplayHistoryToUs(fr.tExtUs);
         ensureTimeAnchorForFrame(QStringLiteral("replay"), fr.tExtUs);
         ingestFrame(fr, QStringLiteral("replay"));
-        auto& state = m_replayStates[fr.canId];
+        auto& state = m_replayStates[analysisStateKeyForFrame(fr)];
         syncReplayValueAlarm(fr.canId, state);
         m_replayDisplayedUs = fr.tExtUs;
         m_replayPlayAnchorUs = fr.tExtUs;
@@ -2004,6 +2150,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_connected = ok;
         m_evidenceRuntime.setSerialOpen(ok);
         m_transportSession.setConnected(ok);
+        if (ok) {
+            m_rawFrameTable.clear();
+        }
         updateTransportDiagnostics();
         if (ok) m_evidenceRuntime.advanceWallTimeMs(quint64(QDateTime::currentMSecsSinceEpoch()));
         if (!ok) {
@@ -2092,14 +2241,30 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
     connect(m_worker, &SerialWorker::framesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.projection_frames_received", frames.size(), 3000);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
         appendPendingLiveFrames(frames);
         if (!m_liveFlushTimer.isActive()) {
-            m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 0 : 6);
+            m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
         }
+    });
+    connect(m_worker, &SerialWorker::rawFramesReceived, this, [this](const FrameRecordList& frames) {
+        if (frames.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.raw_frames_append", frames.size(), 3000);
+        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        m_rawFrameTable.appendFrames(frames);
+        requestLiveStatsRefresh(false);
+    });
+    connect(m_worker, &SerialWorker::rawTypedRecordsReceived, this, [this](const TypedRecordList& records) {
+        if (records.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_append_typed", records.size(), 4000);
+        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        m_rawFrameTable.appendTypedRecords(records);
+        requestLiveStatsRefresh(false);
     });
     connect(m_worker, &SerialWorker::truthFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.truth_frames_ingest", frames.size(), 5000);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
         const QString liveSource = QStringLiteral("live");
         for (const FrameRecord& frame : frames) {
@@ -2110,6 +2275,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
     connect(m_worker, &SerialWorker::typedRecordsReceived, this, [this](const TypedRecordList& records) {
         if (records.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.typed_evidence_records", records.size(), 4000);
         const bool previousBoardAlive = m_evidenceRuntime.boardAlive();
         const bool previousControlCapable = m_evidenceRuntime.controlCapable();
         const quint64 nowWallMs = quint64(QDateTime::currentMSecsSinceEpoch());
@@ -2256,6 +2422,19 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                 m_lastTypedHealthMonoUs = health->monoUs;
                 m_lastTypedHealthCanRxTotal = health->canRxTotal;
                 m_lastTypedHealthSerialTxTotal = health->serialRecordTxTotal;
+                m_lastTypedHealthHasUplinkCounters = health->hasExtendedTransportCounters;
+                m_lastTypedHealthUplinkCounters = {};
+                if (health->hasExtendedTransportCounters) {
+                    m_lastTypedHealthUplinkCounters.present = true;
+                    m_lastTypedHealthUplinkCounters.serialEnqueueFailTotal = health->serialEnqueueFailTotal;
+                    m_lastTypedHealthUplinkCounters.serialRingClearTotal = health->serialRingClearTotal;
+                    m_lastTypedHealthUplinkCounters.serialRingClearedBytesTotal = health->serialRingClearedBytesTotal;
+                    m_lastTypedHealthUplinkCounters.serialBackpressureTotal = health->serialBackpressureTotal;
+                    m_lastTypedHealthUplinkCounters.serialTxHighWaterBytes = health->serialTxHighWaterBytes;
+                    m_lastTypedHealthUplinkCounters.sharedCanQueueHighWater = health->sharedCanQueueHighWater;
+                    m_lastTypedHealthUplinkCounters.mcpDrainBudgetHitTotal = health->mcpDrainBudgetHitTotal;
+                    m_lastTypedHealthUplinkCounters.canSegmentEnqueueFailTotal = health->canSegmentEnqueueFailTotal;
+                }
                 m_lastLiveStatsWallMs = QDateTime::currentMSecsSinceEpoch();
                 ensureTimeAnchorForFrame(QStringLiteral("live"), health->monoUs);
                 if (health->monoUs > m_liveLatestUs) m_liveLatestUs = health->monoUs;
@@ -2301,6 +2480,45 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_liveProjectionSampledControlEvidenceRecords = sampledControlEvidenceRecords;
         requestLiveStatsRefresh(false);
         emit typedEvidenceChanged();
+    });
+    connect(m_worker, &SerialWorker::typedTruthStatusChanged, this, [this](quint64 observedCanRxFrames,
+                                                                            quint64 emittedTruthFrames,
+                                                                            quint64 coalescedTruthUpdates,
+                                                                            quint64 observedBus0CanRxFrames,
+                                                                            quint64 observedBus1CanRxFrames,
+                                                                            quint64 flushCount,
+                                                                            int pendingKeys,
+                                                                            int maxPendingKeys,
+                                                                            int lastInputRecords,
+                                                                            int lastOutputFrames,
+                                                                            int lastFlushMs,
+                                                                            quint64 truthLoss) {
+        m_transportSession.updateLiveTruth(observedCanRxFrames,
+                                           emittedTruthFrames,
+                                           coalescedTruthUpdates,
+                                           observedBus0CanRxFrames,
+                                           observedBus1CanRxFrames,
+                                           flushCount,
+                                           pendingKeys,
+                                           maxPendingKeys,
+                                           lastInputRecords,
+                                           lastOutputFrames,
+                                           lastFlushMs,
+                                           truthLoss);
+        updateTransportDiagnostics();
+        emit transportDiagnosticsChanged();
+        requestDerivedSummaryRefresh(false);
+    });
+    connect(m_worker, &SerialWorker::analysisRuntimeSnapshotChanged, this, [this](const QString& source,
+                                                                                  const QString& level,
+                                                                                  const QString& summary,
+                                                                                  const QVariantList& diagnostics,
+                                                                                  const QVariantList& timingRows,
+                                                                                  const QVariantList& valueRows,
+                                                                                  const QVariantList& alarmRows) {
+        if (source != QStringLiteral("live")) return;
+        CanMonitorPerf::ScopedProbe probe("app.analysis_snapshot_accept", timingRows.size() + valueRows.size() + alarmRows.size(), 5000);
+        acceptLiveAnalysisRuntimeSnapshot(level, summary, diagnostics, timingRows, valueRows, alarmRows);
     });
     connect(m_worker, &SerialWorker::typedTransportStatusChanged, this, [this](quint64 frames,
                                                                                quint64 bytesDropped,
@@ -2406,7 +2624,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_recentFrames.appendReplay(fr, timeText);
         m_replayFrames.appendReplay(fr, timeText);
         ingestFrame(fr, QStringLiteral("replay"));
-        auto& state = m_replayStates[fr.canId];
+        auto& state = m_replayStates[analysisStateKeyForFrame(fr)];
         syncReplayValueAlarm(fr.canId, state);
         m_replayDisplayedUs = fr.tExtUs;
         m_replayPlayAnchorUs = fr.tExtUs;
@@ -2513,6 +2731,8 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     m_operatorPulseTimer.setInterval(1000);
     connect(&m_operatorPulseTimer, &QTimer::timeout, this, [this]() { emit operatorRecentEventsChanged(); });
     m_operatorPulseTimer.start();
+    m_performanceTimer.setInterval(1000);
+    connect(&m_performanceTimer, &QTimer::timeout, this, [this]() { refreshPerformanceDiagnostics(false); });
     connect(this, &AppController::liveUiPausedChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
     connect(&m_liveFrameView, &FrameFilterProxyModel::idFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
     connect(&m_replayFrameView, &FrameFilterProxyModel::idFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
@@ -2521,6 +2741,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 
     m_transportRuntime.startWorkerThread(QThread::TimeCriticalPriority);
     m_transportRuntime.setTransportModeKey(m_transportModeKey);
+    syncAnalysisRuntimeConfig();
     refreshPorts();
     restoreSessionState();
     updateReplayCursor(0, m_replay.frameCount(), 0, m_replay.durationUs(), 0.0);
@@ -2530,6 +2751,31 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 
 AppController::~AppController() {
     prepareControlSafeStopForDisconnect(QStringLiteral("application shutdown safety stop"));
+    stopDebugGateway();
+    stopVerificationRunner();
+    if (m_debugGatewayProcess) {
+        if (m_debugGatewayProcess->state() != QProcess::NotRunning && !m_debugGatewayProcess->waitForFinished(1500)) {
+            m_debugGatewayProcess->terminate();
+            if (!m_debugGatewayProcess->waitForFinished(750)) {
+                m_debugGatewayProcess->kill();
+                m_debugGatewayProcess->waitForFinished(750);
+            }
+        }
+        delete m_debugGatewayProcess;
+        m_debugGatewayProcess = nullptr;
+    }
+    if (m_verificationProcess) {
+        if (m_verificationProcess->state() != QProcess::NotRunning && !m_verificationProcess->waitForFinished(1500)) {
+            m_verificationProcess->terminate();
+            if (!m_verificationProcess->waitForFinished(750)) {
+                m_verificationProcess->kill();
+                m_verificationProcess->waitForFinished(750);
+            }
+        }
+        delete m_verificationProcess;
+        m_verificationProcess = nullptr;
+    }
+    CanMonitorPerf::PerformanceProbeRuntime::setEnabled(false);
     saveSessionState();
     m_session.sync();
     m_transportRuntime.shutdown();
@@ -2540,20 +2786,24 @@ void AppController::rebuildTimingEvalIdCache(const QString& source) {
     auto& ids = timingEvalIdsForSource(source);
     auto& states = stateMapForSource(source);
 
-    QSet<quint32> uniqueIds;
+    QSet<AnalysisStateKey> uniqueIds;
+    QSet<quint32> observedCanIds;
     uniqueIds.reserve((m_modelEnabled ? m_rules.size() : 0) + states.size());
-    if (m_modelEnabled) {
-        for (auto it = m_rules.cbegin(); it != m_rules.cend(); ++it) uniqueIds.insert(it.key());
-    }
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
         if (!it.value().seen) continue;
-        if (!shouldTrackTimingForId(it.key())) continue;
+        if (!shouldTrackTimingForId(it.value().lastFrame.canId)) continue;
+        observedCanIds.insert(it.value().lastFrame.canId);
         uniqueIds.insert(it.key());
+    }
+    if (m_modelEnabled) {
+        for (auto it = m_rules.cbegin(); it != m_rules.cend(); ++it) {
+            if (!observedCanIds.contains(it.key())) uniqueIds.insert(ruleOnlyAnalysisStateKey(it.key()));
+        }
     }
 
     ids.clear();
     ids.reserve(uniqueIds.size());
-    for (quint32 id : uniqueIds) ids.push_back(id);
+    for (AnalysisStateKey key : uniqueIds) ids.push_back(key);
     std::sort(ids.begin(), ids.end());
     int& cursor = timingEvalCursorForSource(source);
     const int idCount = int(ids.size());
@@ -2561,7 +2811,7 @@ void AppController::rebuildTimingEvalIdCache(const QString& source) {
     timingEvalCacheWallMsForSource(source) = QDateTime::currentMSecsSinceEpoch();
 }
 
-QVector<quint32>& AppController::timingEvalIdsForSource(const QString& source) {
+QVector<AppController::AnalysisStateKey>& AppController::timingEvalIdsForSource(const QString& source) {
     return source == QStringLiteral("replay") ? m_replayTimingEvalIds : m_liveTimingEvalIds;
 }
 
@@ -2574,8 +2824,13 @@ qint64& AppController::timingEvalCacheWallMsForSource(const QString& source) {
 }
 
 void AppController::processTimingAnalysisSlice() {
+    CanMonitorPerf::ScopedProbe probe("app.timing_analysis_slice", m_liveTimingEvalIds.size(), 3000);
     if (analysisPaused()) return;
     if (m_replayRebuildActive && replayAnalysisActive()) return;
+    if (liveAnalysisSnapshotReady()) {
+        if (m_timingRowsDirty) refreshTimingRowsFromAnalysisSnapshot();
+        return;
+    }
 
     const QString sourceKey = activeAnalysisSourceKey();
     const qint64 nowMs = analysisNowMsForSource(sourceKey);
@@ -2588,7 +2843,7 @@ void AppController::processTimingAnalysisSlice() {
 
     const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
     const bool cacheStale = cacheWallMs < 0 || (nowWallMs - cacheWallMs) >= 2500;
-    if (ids.isEmpty() || cacheStale || states.size() > ids.size() || (m_modelEnabled && m_rules.size() > ids.size())) {
+    if (ids.isEmpty() || cacheStale || states.size() > ids.size()) {
         rebuildTimingEvalIdCache(sourceKey);
     }
     if (ids.isEmpty()) return;
@@ -2607,16 +2862,17 @@ void AppController::processTimingAnalysisSlice() {
     budget.start();
     int visited = 0;
     while (visited < ids.size()) {
-        const quint32 id = ids.at(cursor);
+        const AnalysisStateKey key = ids.at(cursor);
         cursor = (cursor + 1) % ids.size();
         ++visited;
 
-        auto it = states.find(id);
+        auto it = states.find(key);
         if (it == states.end()) {
             if (visited >= maxVisits || budget.elapsed() >= sliceBudgetMs) break;
             continue;
         }
         IdState& state = it.value();
+        const quint32 id = state.lastFrame.canId;
         if (!state.seen || !shouldTrackTimingForId(id)) {
             if (visited >= maxVisits || budget.elapsed() >= sliceBudgetMs) break;
             continue;
@@ -2844,7 +3100,7 @@ bool AppController::analyzeTimingState(quint32 id, IdState& state, const QString
     state.timingDerivedDirty = semanticChanged;
 
     if (semanticChanged) {
-        const bool selectedValueMatch = m_hasSelectedValueId && m_selectedValueCanId == id;
+        const bool selectedValueMatch = m_hasSelectedValueId && state.seen && m_selectedValueKey == analysisStateKeyForFrame(state.lastFrame);
         if (selectedValueMatch) m_valueDetailsDirty = true;
         if (valueScopeActive() || selectedValueMatch) {
             const bool valueAlarmActive = !state.activeValueAlarmKey.isEmpty();
@@ -2860,7 +3116,7 @@ bool AppController::analyzeTimingState(quint32 id, IdState& state, const QString
 bool AppController::syncValueAlarmState(quint32 id, IdState& state, const QString& source, bool allowReplayMarkers) {
     const qint64 nowMs = qint64(state.lastBoardSeenUs / 1000ULL);
     const EvalResult eval = evaluateId(id, &state, nowMs);
-    const bool selectedValueMatch = (m_hasSelectedValueId && m_selectedValueCanId == id);
+    const bool selectedValueMatch = (m_hasSelectedValueId && state.seen && m_selectedValueKey == analysisStateKeyForFrame(state.lastFrame));
     const bool needPreviewCache = selectedValueMatch;
     const bool alarmCapable = hasAlarmCapableSignals(id);
 
@@ -2929,9 +3185,10 @@ void AppController::advanceReplayHistoryToUs(quint64 frameUs) {
     for (auto it = m_replayStates.begin(); it != m_replayStates.end(); ++it) {
         IdState& state = it.value();
         if (!state.seen) continue;
-        if (!shouldTrackTimingForId(it.key())) continue;
+        const quint32 id = state.lastFrame.canId;
+        if (!shouldTrackTimingForId(id)) continue;
         if (state.nextTimingEvalMs > nowMs) continue;
-        touched = analyzeTimingState(it.key(), state, QStringLiteral("replay"), nowMs) || touched;
+        touched = analyzeTimingState(id, state, QStringLiteral("replay"), nowMs) || touched;
     }
     if (touched) m_timingRowsDirty = true;
 }
@@ -2948,7 +3205,7 @@ void AppController::syncReplayValueAlarm(quint32 id, IdState& state) {
         state.lastValueFingerprint = fingerprint;
         state.cachedValueAlarmInfo.clear();
         state.cachedValueAlarmFingerprint = 0;
-        const bool selectedValueMatch = m_hasSelectedValueId && m_selectedValueCanId == id;
+        const bool selectedValueMatch = m_hasSelectedValueId && state.seen && m_selectedValueKey == analysisStateKeyForFrame(state.lastFrame);
         const bool valueScopeVisible = valueScopeActive() || selectedValueMatch;
         const bool valueSemanticChanged =
             state.lastValueRenderedSeverity != eval.severity ||
@@ -3183,7 +3440,10 @@ QString AppController::viewStateSummaryFor(const AnalysisViewState& state) const
     if (filters.isEmpty()) filters << QStringLiteral("분석 필터 없음");
 
     QString selectionText = QStringLiteral("선택 ID 없음");
-    if (state.hasSelectedValueId) selectionText = QStringLiteral("상세 선택 %1").arg(idText(state.selectedValueCanId));
+    if (state.hasSelectedValueId) {
+        selectionText = QStringLiteral("상세 선택 %1").arg(
+            state.selectedValueKey != 0 ? analysisStateKeyText(state.selectedValueKey) : idText(state.selectedValueCanId));
+    }
     return QStringLiteral("%1 · %2").arg(joinNonEmpty(filters), selectionText);
 }
 
@@ -3213,16 +3473,17 @@ QJsonObject AppController::viewStateToJson(const AnalysisViewState& state) {
     out.insert(QStringLiteral("alarm_text"), state.alarmFilterText);
     out.insert(QStringLiteral("has_selected_value_id"), state.hasSelectedValueId);
     out.insert(QStringLiteral("selected_value_id"), state.hasSelectedValueId ? idText(state.selectedValueCanId) : QString());
+    out.insert(QStringLiteral("selected_value_key"), state.hasSelectedValueId && state.selectedValueKey != 0 ? analysisStateKeyText(state.selectedValueKey) : QString());
     return out;
 }
 
-int AppController::cumulativeTimingCountFor(const QHash<quint32, IdState>& states) const {
+int AppController::cumulativeTimingCountFor(const AnalysisStateMap& states) const {
     int total = 0;
     for (auto it = states.cbegin(); it != states.cend(); ++it) total += std::max(0, it.value().timingEventCount);
     return total;
 }
 
-int AppController::cumulativeValueAlarmCountFor(const QHash<quint32, IdState>& states) const {
+int AppController::cumulativeValueAlarmCountFor(const AnalysisStateMap& states) const {
     int total = 0;
     for (auto it = states.cbegin(); it != states.cend(); ++it) total += std::max(0, it.value().valueAlarmEventCount);
     return total;
@@ -4043,6 +4304,7 @@ QString AppController::typedEvidenceSummary() const {
         if (count > 0) typeParts << QStringLiteral("%1 %2").arg(typedRecordTypeName(key)).arg(count);
     };
     appendType(TypedRecordType::CanRxRaw);
+    appendType(TypedRecordType::CanRxSegment);
     appendType(TypedRecordType::CanTxRaw);
     appendType(TypedRecordType::AdcSample);
     appendType(TypedRecordType::ControlAck);
@@ -5027,15 +5289,15 @@ void AppController::setReplayAnalysisHeld(bool held) {
     emit derivedSummaryChanged();
 }
 
-QHash<quint32, AppController::IdState>& AppController::stateMapForSource(const QString& source) {
+AppController::AnalysisStateMap& AppController::stateMapForSource(const QString& source) {
     return source == QStringLiteral("replay") ? m_replayStates : m_liveStates;
 }
 
-const QHash<quint32, AppController::IdState>& AppController::activeStateMap() const {
+const AppController::AnalysisStateMap& AppController::activeStateMap() const {
     return replayAnalysisActive() ? m_replayStates : m_liveStates;
 }
 
-QHash<quint32, AppController::IdState>& AppController::activeStateMap() {
+AppController::AnalysisStateMap& AppController::activeStateMap() {
     return replayAnalysisActive() ? m_replayStates : m_liveStates;
 }
 
@@ -5053,6 +5315,278 @@ QVector<CanMonitorAnalysis::AlarmGroup>& AppController::activeAlarmGroups() {
 
 QString AppController::activeAnalysisSourceKey() const {
     return replayAnalysisActive() ? QStringLiteral("replay") : QStringLiteral("live");
+}
+
+CanMonitorAnalysis::AnalysisRuntime& AppController::analysisRuntimeForSource(const QString& source) {
+    return source == QStringLiteral("replay") ? m_replayAnalysisRuntime : m_liveAnalysisRuntime;
+}
+
+const CanMonitorAnalysis::AnalysisRuntime& AppController::activeAnalysisRuntime() const {
+    return replayAnalysisActive() ? m_replayAnalysisRuntime : m_liveAnalysisRuntime;
+}
+
+void AppController::syncAnalysisRuntimeConfig() {
+    CanMonitorAnalysis::AnalysisRuntime::Config config;
+    config.modelEnabled = m_modelEnabled;
+    config.maxStateKeys = 8192;
+    config.maxRowsPerSnapshot = 1600;
+    config.rules = m_rules;
+    config.signalMessages = m_signalMessages;
+    m_liveAnalysisRuntime.setConfig(config);
+    m_replayAnalysisRuntime.setConfig(config);
+    if (m_worker) {
+        QPointer<SerialWorker> worker = m_worker;
+        QMetaObject::invokeMethod(m_worker, [worker, config]() {
+            if (worker) worker->setAnalysisConfig(config);
+        }, Qt::QueuedConnection);
+    }
+}
+
+void AppController::resetAnalysisRuntimes() {
+    m_liveAnalysisRuntime.reset();
+    m_replayAnalysisRuntime.reset();
+    m_liveAnalysisSnapshot = {};
+    m_replayAnalysisSnapshot = {};
+    m_liveAnalysisRuntimeTimingRows.clear();
+    m_liveAnalysisRuntimeValueRows.clear();
+    m_liveAnalysisRuntimeAlarmRows.clear();
+    m_liveAnalysisRuntimeSnapshotReady = false;
+    m_analysisRuntimeSummary = QStringLiteral("truth analysis runtime reset");
+    m_analysisRuntimeLevel = QStringLiteral("OK");
+    m_analysisRuntimeDiagnostics.clear();
+    m_lastAnalysisRuntimeSnapshotWallMs = -1;
+    syncAnalysisRuntimeConfig();
+    emit analysisRuntimeChanged();
+}
+
+bool AppController::liveAnalysisSnapshotReady() const {
+    return m_liveAnalysisRuntimeSnapshotReady && !replayAnalysisActive();
+}
+
+void AppController::acceptLiveAnalysisRuntimeSnapshot(const QString& level,
+                                                      const QString& summary,
+                                                      const QVariantList& diagnostics,
+                                                      const QVariantList& timingRows,
+                                                      const QVariantList& valueRows,
+                                                      const QVariantList& alarmRows) {
+    m_liveAnalysisRuntimeSnapshotReady = true;
+    m_analysisRuntimeLevel = level.isEmpty() ? QStringLiteral("OK") : level;
+    m_analysisRuntimeSummary = summary.isEmpty() ? QStringLiteral("live truth analysis active") : summary;
+    m_analysisRuntimeDiagnostics = diagnostics;
+    m_liveAnalysisRuntimeTimingRows = rowsFromVariantList(timingRows);
+    m_liveAnalysisRuntimeValueRows = rowsFromVariantList(valueRows);
+    m_liveAnalysisRuntimeAlarmRows = rowsFromVariantList(alarmRows);
+    m_lastAnalysisRuntimeSnapshotWallMs = QDateTime::currentMSecsSinceEpoch();
+
+    if (!replayAnalysisActive()) {
+        refreshTimingRowsFromAnalysisSnapshot();
+        refreshValueRowsFromAnalysisSnapshot();
+        refreshAlarmRowsFromAnalysisSnapshot();
+        requestDerivedSummaryRefresh(false);
+    }
+    emit analysisRuntimeChanged();
+}
+
+void AppController::refreshAnalysisRuntimeSnapshot(bool immediate) {
+    const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
+    if (!immediate && m_lastAnalysisRuntimeSnapshotWallMs > 0 && nowWallMs - m_lastAnalysisRuntimeSnapshotWallMs < 200) return;
+
+    const QString source = activeAnalysisSourceKey();
+    if (source == QStringLiteral("live") && m_liveAnalysisRuntimeSnapshotReady) {
+        m_lastAnalysisRuntimeSnapshotWallMs = nowWallMs;
+        emit analysisRuntimeChanged();
+        return;
+    }
+
+    auto& runtime = analysisRuntimeForSource(source);
+    auto snapshot = runtime.makeSnapshot(analysisNowMsForSource(source), source);
+    if (source == QStringLiteral("replay")) {
+        m_replayAnalysisSnapshot = snapshot;
+    } else {
+        m_liveAnalysisSnapshot = snapshot;
+        m_liveAnalysisRuntimeTimingRows = snapshot.timingRows;
+        m_liveAnalysisRuntimeValueRows = snapshot.valueRows;
+        m_liveAnalysisRuntimeAlarmRows = snapshot.alarmRows;
+        m_liveAnalysisRuntimeSnapshotReady = true;
+    }
+    m_analysisRuntimeLevel = snapshot.summary.value(QStringLiteral("level")).toString();
+    if (m_analysisRuntimeLevel.isEmpty()) m_analysisRuntimeLevel = QStringLiteral("OK");
+    m_analysisRuntimeSummary = snapshot.summary.value(QStringLiteral("text")).toString();
+    m_analysisRuntimeDiagnostics = snapshot.diagnostics;
+    m_lastAnalysisRuntimeSnapshotWallMs = nowWallMs;
+    emit analysisRuntimeChanged();
+}
+
+void AppController::refreshTimingRowsFromAnalysisSnapshot() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_timing_snapshot", m_liveAnalysisRuntimeTimingRows.size(), 5000);
+    if (m_timingViewHeld) return;
+
+    struct TimingRowWrap {
+        QVariantMap row;
+        int rank = 0;
+        quint64 sortKey = 0;
+        QString name;
+        QString source;
+        QString expectedText;
+        QString reason;
+        double gapMs = -1.0;
+        double ageMs = -1.0;
+    };
+
+    std::vector<TimingRowWrap> timingWrapped;
+    timingWrapped.reserve(size_t(m_liveAnalysisRuntimeTimingRows.size()));
+    for (const QVariantMap& row : m_liveAnalysisRuntimeTimingRows) {
+        const bool timingMatch =
+            containsFilterText(row.value(QStringLiteral("idText")).toString(), m_timingFilterId) &&
+            containsFilterText(row.value(QStringLiteral("severity")).toString(), m_timingFilterSeverity) &&
+            containsFilterText(row.value(QStringLiteral("name")).toString(), m_timingFilterName) &&
+            containsFilterText(row.value(QStringLiteral("expectedMsText")).toString(), m_timingFilterExpected) &&
+            containsFilterText(row.value(QStringLiteral("lastGapMsText")).toString(), m_timingFilterGap) &&
+            containsFilterText(row.value(QStringLiteral("ageMsText")).toString(), m_timingFilterAge) &&
+            containsFilterText(row.value(QStringLiteral("source")).toString(), m_timingFilterSource) &&
+            containsFilterText(row.value(QStringLiteral("reason")).toString(), m_timingFilterReason);
+        if (!timingMatch) continue;
+        timingWrapped.push_back({row,
+                                 row.value(QStringLiteral("sortRank")).toInt(),
+                                 row.value(QStringLiteral("sortId")).toULongLong(),
+                                 row.value(QStringLiteral("name")).toString(),
+                                 row.value(QStringLiteral("source")).toString(),
+                                 row.value(QStringLiteral("expectedMsText")).toString(),
+                                 row.value(QStringLiteral("reason")).toString(),
+                                 row.value(QStringLiteral("sortGapMs")).toDouble(),
+                                 row.value(QStringLiteral("sortAgeMs")).toDouble()});
+    }
+
+    std::sort(timingWrapped.begin(), timingWrapped.end(), [this](const TimingRowWrap& a, const TimingRowWrap& b) {
+        int cmp = 0;
+        if (m_timingSortMode == QStringLiteral("severity")) cmp = compareInt64(a.rank, b.rank);
+        else if (m_timingSortMode == QStringLiteral("name")) cmp = compareQString(a.name, b.name);
+        else if (m_timingSortMode == QStringLiteral("expected")) cmp = compareQString(a.expectedText, b.expectedText);
+        else if (m_timingSortMode == QStringLiteral("gap")) cmp = compareOptionalDouble(a.gapMs, b.gapMs);
+        else if (m_timingSortMode == QStringLiteral("age")) cmp = compareOptionalDouble(a.ageMs, b.ageMs);
+        else if (m_timingSortMode == QStringLiteral("source")) cmp = compareQString(a.source, b.source);
+        else if (m_timingSortMode == QStringLiteral("reason")) cmp = compareQString(a.reason, b.reason);
+        else cmp = compareUInt64(a.sortKey, b.sortKey);
+        if (cmp == 0) cmp = compareUInt64(a.sortKey, b.sortKey);
+        return lessFromCompare(cmp, m_timingSortDescending);
+    });
+
+    QVector<QVariantMap> rows;
+    rows.reserve(int(timingWrapped.size()));
+    for (const TimingRowWrap& wrap : timingWrapped) rows.push_back(wrap.row);
+    rows = stabilizeRows(rows, m_timingModel, m_timingReorderRequested);
+    m_timingModel.setRowsRelaxed(rows, true);
+    m_timingRowsDirty = false;
+    m_timingReorderRequested = false;
+    m_lastTimingProjectionWallMs = QDateTime::currentMSecsSinceEpoch();
+}
+
+void AppController::refreshValueRowsFromAnalysisSnapshot() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_value_snapshot", m_liveAnalysisRuntimeValueRows.size(), 5000);
+    if (m_valueViewHeld) return;
+
+    struct ValueRowWrap {
+        QVariantMap row;
+        int rank = 0;
+        quint64 sortKey = 0;
+        QString name;
+        QString source;
+        QString raw;
+        QString summary;
+        double gapMs = -1.0;
+        double ageMs = -1.0;
+    };
+
+    std::vector<ValueRowWrap> valueWrapped;
+    valueWrapped.reserve(size_t(m_liveAnalysisRuntimeValueRows.size()));
+    for (const QVariantMap& row : m_liveAnalysisRuntimeValueRows) {
+        const QString effectiveSeverity = row.value(QStringLiteral("severity")).toString();
+        const bool valueMatch =
+            containsFilterText(row.value(QStringLiteral("idText")).toString(), m_valueFilterId) &&
+            containsFilterText(effectiveSeverity, m_valueFilterSeverity) &&
+            containsFilterText(row.value(QStringLiteral("name")).toString(), m_valueFilterName) &&
+            containsFilterText(row.value(QStringLiteral("source")).toString(), m_valueFilterSource) &&
+            containsFilterText(row.value(QStringLiteral("dataHex")).toString(), m_valueFilterRaw) &&
+            containsFilterText(row.value(QStringLiteral("gapText")).toString(), m_valueFilterGap) &&
+            (containsFilterText(row.value(QStringLiteral("summaryText")).toString(), m_valueFilterReason) ||
+             containsFilterText(row.value(QStringLiteral("reason")).toString(), m_valueFilterReason));
+        if (!valueMatch) continue;
+        valueWrapped.push_back({row,
+                                row.value(QStringLiteral("sortRank")).toInt(),
+                                row.value(QStringLiteral("sortId")).toULongLong(),
+                                row.value(QStringLiteral("name")).toString(),
+                                row.value(QStringLiteral("source")).toString(),
+                                row.value(QStringLiteral("dataHex")).toString(),
+                                row.value(QStringLiteral("summaryText")).toString(),
+                                row.value(QStringLiteral("sortGapMs")).toDouble(),
+                                row.value(QStringLiteral("sortAgeMs")).toDouble()});
+    }
+
+    std::sort(valueWrapped.begin(), valueWrapped.end(), [this](const ValueRowWrap& a, const ValueRowWrap& b) {
+        int cmp = 0;
+        if (m_valueSortMode == QStringLiteral("severity")) cmp = compareInt64(a.rank, b.rank);
+        else if (m_valueSortMode == QStringLiteral("name")) cmp = compareQString(a.name, b.name);
+        else if (m_valueSortMode == QStringLiteral("raw")) cmp = compareQString(a.raw, b.raw);
+        else if (m_valueSortMode == QStringLiteral("gap")) cmp = compareOptionalDouble(a.gapMs, b.gapMs);
+        else if (m_valueSortMode == QStringLiteral("age")) cmp = compareOptionalDouble(a.ageMs, b.ageMs);
+        else if (m_valueSortMode == QStringLiteral("source")) cmp = compareQString(a.source, b.source);
+        else if (m_valueSortMode == QStringLiteral("summary")) cmp = compareQString(a.summary, b.summary);
+        else cmp = compareUInt64(a.sortKey, b.sortKey);
+        if (cmp == 0) cmp = compareUInt64(a.sortKey, b.sortKey);
+        return lessFromCompare(cmp, m_valueSortDescending);
+    });
+
+    QVector<QVariantMap> rows;
+    rows.reserve(int(valueWrapped.size()));
+    for (const ValueRowWrap& wrap : valueWrapped) rows.push_back(wrap.row);
+    rows = stabilizeRows(rows, m_valueModel, m_valueReorderRequested);
+    m_valueModel.setRowsRelaxed(rows, true);
+    m_valueRowsDirty = false;
+    m_valueReorderRequested = false;
+    m_lastValueProjectionWallMs = QDateTime::currentMSecsSinceEpoch();
+}
+
+void AppController::refreshAlarmRowsFromAnalysisSnapshot() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_alarm_snapshot", m_liveAnalysisRuntimeAlarmRows.size(), 5000);
+    if (m_alarmViewHeld) return;
+
+    QVector<QVariantMap> rows;
+    rows.reserve(m_liveAnalysisRuntimeAlarmRows.size());
+    for (const QVariantMap& row : m_liveAnalysisRuntimeAlarmRows) {
+        const bool alarmMatch =
+            containsFilterText(row.value(QStringLiteral("timeText")).toString(), m_alarmFilterTime) &&
+            containsFilterText(row.value(QStringLiteral("idText")).toString(), m_alarmFilterId) &&
+            containsFilterText(row.value(QStringLiteral("severity")).toString(), m_alarmFilterSeverity) &&
+            containsFilterText(row.value(QStringLiteral("name")).toString(), m_alarmFilterName) &&
+            containsFilterText(row.value(QStringLiteral("source")).toString(), m_alarmFilterSource) &&
+            containsFilterText(row.value(QStringLiteral("message")).toString(), m_alarmFilterMessage) &&
+            (m_alarmFilterText.isEmpty() ||
+             containsFilterText(row.value(QStringLiteral("name")).toString(), m_alarmFilterText) ||
+             containsFilterText(row.value(QStringLiteral("message")).toString(), m_alarmFilterText) ||
+             containsFilterText(row.value(QStringLiteral("source")).toString(), m_alarmFilterText) ||
+             containsFilterText(row.value(QStringLiteral("timeText")).toString(), m_alarmFilterText) ||
+             containsFilterText(row.value(QStringLiteral("metricText")).toString(), m_alarmFilterText) ||
+             containsFilterText(row.value(QStringLiteral("categoryLabel")).toString(), m_alarmFilterText));
+        if (alarmMatch) rows.push_back(row);
+    }
+
+    std::sort(rows.begin(), rows.end(), [this](const QVariantMap& a, const QVariantMap& b) {
+        int cmp = 0;
+        if (m_alarmSortMode == QStringLiteral("severity")) cmp = compareInt64(a.value(QStringLiteral("sortRank")).toInt(), b.value(QStringLiteral("sortRank")).toInt());
+        else if (m_alarmSortMode == QStringLiteral("id")) cmp = compareQString(a.value(QStringLiteral("idText")).toString(), b.value(QStringLiteral("idText")).toString());
+        else if (m_alarmSortMode == QStringLiteral("name")) cmp = compareQString(a.value(QStringLiteral("name")).toString(), b.value(QStringLiteral("name")).toString());
+        else if (m_alarmSortMode == QStringLiteral("source")) cmp = compareQString(a.value(QStringLiteral("source")).toString(), b.value(QStringLiteral("source")).toString());
+        else if (m_alarmSortMode == QStringLiteral("message")) cmp = compareQString(a.value(QStringLiteral("message")).toString(), b.value(QStringLiteral("message")).toString());
+        else cmp = compareQString(a.value(QStringLiteral("key")).toString(), b.value(QStringLiteral("key")).toString());
+        if (cmp == 0) cmp = compareQString(a.value(QStringLiteral("key")).toString(), b.value(QStringLiteral("key")).toString());
+        return lessFromCompare(cmp, m_alarmSortDescending);
+    });
+
+    rows = stabilizeRows(rows, m_alarmModel, m_alarmReorderRequested);
+    m_alarmModel.setRowsRelaxed(rows, true);
+    m_alarmRowsDirty = false;
+    m_alarmReorderRequested = false;
+    m_lastAlarmProjectionWallMs = QDateTime::currentMSecsSinceEpoch();
 }
 
 AppController::AnalysisViewState& AppController::viewStateForSource(const QString& source) {
@@ -5095,9 +5629,12 @@ bool AppController::applyViewState(const AnalysisViewState& state) {
     assignText(m_alarmFilterText, state.alarmFilterText);
 
     bool selectionChanged = false;
-    if (m_hasSelectedValueId != state.hasSelectedValueId || m_selectedValueCanId != state.selectedValueCanId) {
+    if (m_hasSelectedValueId != state.hasSelectedValueId ||
+        m_selectedValueCanId != state.selectedValueCanId ||
+        m_selectedValueKey != state.selectedValueKey) {
         m_hasSelectedValueId = state.hasSelectedValueId;
         m_selectedValueCanId = state.selectedValueCanId;
+        m_selectedValueKey = state.selectedValueKey;
         selectionChanged = true;
         m_lastValueDetailSignature.clear();
         m_lastValueDetailProjectionWallMs = -1;
@@ -5113,6 +5650,7 @@ void AppController::syncActiveViewSelection() {
     AnalysisViewState& state = viewStateForSource(activeAnalysisSourceKey());
     state.hasSelectedValueId = m_hasSelectedValueId;
     state.selectedValueCanId = m_selectedValueCanId;
+    state.selectedValueKey = m_selectedValueKey;
 }
 
 void AppController::markAllAnalysisDirty(bool reorder) {
@@ -5285,7 +5823,8 @@ void AppController::updateTransportDiagnostics() {
     m_transportSession.updateCaptureStorage(m_logRecordingActive, m_logRecordedBytes, m_logRecordedFrameCount);
     m_transportSession.updateBoardHealth(m_lastStats.droppedTotal,
                                          m_lastStats.fifoOverflowTotal,
-                                         m_lastLiveStatsWallMs > 0 ? nowWallMs - m_lastLiveStatsWallMs : -1);
+                                         m_lastLiveStatsWallMs > 0 ? nowWallMs - m_lastLiveStatsWallMs : -1,
+                                         m_lastTypedHealthUplinkCounters);
     m_transportSession.updateLiveRuntime(nowWallMs,
                                          m_lastLiveFrameWallMs,
                                          m_lastLiveStatsWallMs,
@@ -5300,6 +5839,11 @@ void AppController::updateTransportDiagnostics() {
                                          m_liveProjectionMaxBacklog,
                                          m_liveProjectionFlushBudgetHits,
                                          m_liveProjectionLastFlushMs);
+    m_transportSession.updateRawLedger(m_rawFrameTable.totalRows(),
+                                       quint64(std::max(0, m_rawFrameTable.count())),
+                                       m_rawFrameTable.segmentBytes(),
+                                       m_rawFrameTable.droppedDisplayRows(),
+                                       m_rawFrameTable.latestSeq());
     if (m_connected && (m_lastLiveRuntimeLogWallMs <= 0 || (nowWallMs - m_lastLiveRuntimeLogWallMs) >= 5000)) {
         m_lastLiveRuntimeLogWallMs = nowWallMs;
         qCInfo(logTransport).noquote()
@@ -5366,8 +5910,11 @@ void AppController::restoreSessionState() {
             state.alarmFilterMessage = stored.alarmFilterMessage;
             state.alarmFilterText = stored.alarmFilterText;
             quint32 selectedCanId = 0;
-            state.hasSelectedValueId = parseCanIdText(stored.selectedValueId, &selectedCanId);
+            AnalysisStateKey selectedKey = 0;
+            state.hasSelectedValueId = parseAnalysisStateKeyText(stored.selectedValueId, &selectedKey) &&
+                                       parseCanIdText(stored.selectedValueId, &selectedCanId);
             state.selectedValueCanId = state.hasSelectedValueId ? selectedCanId : 0;
+            state.selectedValueKey = state.hasSelectedValueId ? selectedKey : 0;
         };
 
         applyStoredViewState(snapshot.liveViewState, m_liveViewState);
@@ -5435,8 +5982,11 @@ void AppController::restoreSessionState() {
         state.alarmFilterText = m_session.value(prefix + QStringLiteral("/alarmText")).toString();
         const QString selectedId = m_session.value(prefix + QStringLiteral("/selectedValueId")).toString();
         quint32 selectedCanId = 0;
-        state.hasSelectedValueId = parseCanIdText(selectedId, &selectedCanId);
+        AnalysisStateKey selectedKey = 0;
+        state.hasSelectedValueId = parseAnalysisStateKeyText(selectedId, &selectedKey) &&
+                                   parseCanIdText(selectedId, &selectedCanId);
         state.selectedValueCanId = state.hasSelectedValueId ? selectedCanId : 0;
+        state.selectedValueKey = state.hasSelectedValueId ? selectedKey : 0;
     };
 
     loadViewState(QStringLiteral("filter/live"), m_liveViewState);
@@ -5523,7 +6073,9 @@ void AppController::saveSessionState() const {
             stored.alarmFilterSource = state.alarmFilterSource;
             stored.alarmFilterMessage = state.alarmFilterMessage;
             stored.alarmFilterText = state.alarmFilterText;
-            stored.selectedValueId = state.hasSelectedValueId ? idText(state.selectedValueCanId) : QString();
+            stored.selectedValueId = state.hasSelectedValueId
+                ? (state.selectedValueKey != 0 ? analysisStateKeyText(state.selectedValueKey) : idText(state.selectedValueCanId))
+                : QString();
             return stored;
         };
 
@@ -5587,7 +6139,10 @@ void AppController::saveSessionState() const {
         m_session.setValue(prefix + QStringLiteral("/alarmSource"), state.alarmFilterSource);
         m_session.setValue(prefix + QStringLiteral("/alarmMessage"), state.alarmFilterMessage);
         m_session.setValue(prefix + QStringLiteral("/alarmText"), state.alarmFilterText);
-        m_session.setValue(prefix + QStringLiteral("/selectedValueId"), state.hasSelectedValueId ? idText(state.selectedValueCanId) : QString());
+        m_session.setValue(prefix + QStringLiteral("/selectedValueId"),
+                           state.hasSelectedValueId
+                               ? (state.selectedValueKey != 0 ? analysisStateKeyText(state.selectedValueKey) : idText(state.selectedValueCanId))
+                               : QString());
     };
 
     saveViewState(QStringLiteral("filter/live"), m_liveViewState);
@@ -5674,6 +6229,7 @@ void AppController::applyActiveViewStateFromSource() {
     m_alarmFilterText = state.alarmFilterText;
     m_hasSelectedValueId = state.hasSelectedValueId;
     m_selectedValueCanId = state.hasSelectedValueId ? state.selectedValueCanId : 0;
+    m_selectedValueKey = state.hasSelectedValueId ? state.selectedValueKey : 0;
 }
 
 void AppController::resetAnalysisContext() {
@@ -5910,7 +6466,8 @@ QString AppController::displayNameForId(quint32 id) const {
 }
 
 QString AppController::selectedValueId() const {
-    return m_hasSelectedValueId ? idText(m_selectedValueCanId) : QString();
+    if (!m_hasSelectedValueId) return QString();
+    return m_selectedValueKey != 0 ? analysisStateKeyText(m_selectedValueKey) : idText(m_selectedValueCanId);
 }
 
 void AppController::setRulesPath(const QString& path) {
@@ -5985,7 +6542,7 @@ void AppController::clearModel() {
     clearGraphHistory();
     clearGraphOverviewState();
     m_alarmModel.clear();
-    auto resetStateMap = [](QHash<quint32, IdState>& states) {
+    auto resetStateMap = [](AnalysisStateMap& states) {
         for (auto it = states.begin(); it != states.end(); ++it) {
             it.value().cachedTimingRow.clear();
             it.value().cachedPreviewInfo.clear();
@@ -6020,6 +6577,7 @@ void AppController::clearModel() {
         }
     }
     markAllAnalysisDirty(true);
+    syncAnalysisRuntimeConfig();
     emit rulesChanged();
     emit signalDbChanged();
     setStatus(QStringLiteral("모델 해제"));
@@ -6441,13 +6999,17 @@ void AppController::resetGraphDetailZoomLock() {
 }
 
 void AppController::appendGraphSamples(const FrameRecord& fr, const QString& source) {
+    CanMonitorPerf::ScopedProbe probe("graph.append_samples", m_graphSelectedKeys.size(), 2000);
     if (source == QStringLiteral("live") && !m_graphPageActive) return;
     if (m_graphSelectedKeys.isEmpty()) return;
     const auto keys = m_graphKeysById.values(fr.canId);
     if (keys.isEmpty()) return;
 
     auto* history = source == QStringLiteral("replay") ? &m_replayGraphHistory : &m_liveGraphHistory;
-    const bool compactLiveGraph = source == QStringLiteral("live") && projectionBackpressureActive();
+    // Graph history is part of the truth-visible analysis surface. Under load,
+    // reduce only rendered points via peak-preserving buckets; do not coalesce
+    // selected signal input samples before min/max/latest are calculated.
+    const bool compactLiveGraph = false;
     bool changed = false;
     const quint64 retentionUs = quint64(graphHistoryRetentionMs(m_graphWindowMs)) * 1000ULL;
     QSet<QString> updatedHistoryKeys;
@@ -6604,6 +7166,7 @@ void AppController::requestGraphRefresh(bool immediate) {
 }
 
 void AppController::flushGraphRefresh() {
+    CanMonitorPerf::ScopedProbe probe("graph.flush_refresh", m_graphSelectedKeys.size(), 6000);
     m_lastGraphRefreshWallMs = QDateTime::currentMSecsSinceEpoch();
     QVariantList seriesOut;
     QString rangeSummary = QStringLiteral("-");
@@ -7536,6 +8099,761 @@ void AppController::disconnectPort() {
     }
 }
 
+void AppController::toggleDebugGateway(const QString& portName) {
+    if (debugGatewayActive()) {
+        stopDebugGateway();
+    } else {
+        startDebugGateway(portName);
+    }
+}
+
+void AppController::startDebugGateway(const QString& portName) {
+    const QString trimmed = portName.trimmed();
+    if (trimmed.isEmpty()) {
+        setStatus(QStringLiteral("디버그 게이트웨이용 COM 포트를 선택하세요"));
+        return;
+    }
+    if (m_logRecordingActive || m_logStopping || m_logSaving || m_logPendingSave) {
+        setStatus(QStringLiteral("로그 저장/기록을 끝낸 뒤 디버그 게이트웨이를 켜세요"));
+        return;
+    }
+    if (debugGatewayActive()) {
+        setStatus(m_debugGatewayStatus);
+        return;
+    }
+    if (m_connected) {
+        setStatus(QStringLiteral("기존 연결 해제 후 디버그 게이트웨이 시작"));
+        disconnectPort();
+        QTimer::singleShot(350, this, [this, trimmed]() {
+            if (!m_connected) startDebugGatewayNow(trimmed);
+        });
+        return;
+    }
+    startDebugGatewayNow(trimmed);
+}
+
+void AppController::startDebugGatewayNow(const QString& portName) {
+    if (debugGatewayActive()) return;
+
+    const QString projectRoot = RuntimePaths::projectRoot();
+    QString scriptPath = QDir(projectRoot).filePath(QStringLiteral("scripts/vsm_debug_gateway.py"));
+    if (!QFileInfo::exists(scriptPath)) {
+        scriptPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vsm_debug_gateway.py"));
+    }
+    if (!QFileInfo::exists(scriptPath)) {
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 스크립트 없음");
+        emit debugGatewayChanged();
+        setStatus(QStringLiteral("디버그 게이트웨이 스크립트를 찾지 못했습니다"));
+        return;
+    }
+
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    const QString outDir = QDir(projectRoot).filePath(QStringLiteral("artifacts/vsm_debug_gateway/app_%1").arg(stamp));
+    if (!QDir().mkpath(outDir)) {
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 출력 폴더 생성 실패");
+        emit debugGatewayChanged();
+        setStatus(m_debugGatewayStatus);
+        return;
+    }
+
+    const QString endpoint = QStringLiteral("tcp://127.0.0.1:%1").arg(m_debugGatewayPort);
+    const QString stopFile = QDir(outDir).filePath(QStringLiteral("gateway.stop"));
+    auto* process = new QProcess(this);
+    process->setWorkingDirectory(projectRoot);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process, endpoint]() {
+        const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
+        if (output.contains(QStringLiteral("READY"))) {
+            m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 준비 · %1").arg(endpoint);
+            emit debugGatewayChanged();
+            if (!m_connected) connectPort(endpoint);
+        }
+    });
+    connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
+        const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+        if (error.isEmpty()) return;
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 오류: %1").arg(error.left(180));
+        emit debugGatewayChanged();
+        setStatus(m_debugGatewayStatus);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 실행 오류: %1").arg(int(error));
+        emit debugGatewayChanged();
+        setStatus(m_debugGatewayStatus);
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        finishDebugGatewayProcess(exitCode, exitStatus, process);
+    });
+
+    const QStringList args{
+        QStringLiteral("-3"),
+        scriptPath,
+        QStringLiteral("--port"), portName,
+        QStringLiteral("--listen-port"), QString::number(m_debugGatewayPort),
+        QStringLiteral("--out-dir"), outDir,
+        QStringLiteral("--stop-file"), stopFile,
+    };
+
+    m_debugGatewayProcess = process;
+    m_debugGatewayEndpoint = endpoint;
+    m_debugGatewayStopFile = stopFile;
+    m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 시작 중 · %1 -> %2").arg(portName, endpoint);
+    emit debugGatewayChanged();
+    setStatus(m_debugGatewayStatus);
+
+    process->start(QStringLiteral("py"), args);
+    if (!process->waitForStarted(1500)) {
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 시작 실패: py -3");
+        emit debugGatewayChanged();
+        setStatus(m_debugGatewayStatus);
+        m_debugGatewayProcess = nullptr;
+        m_debugGatewayEndpoint.clear();
+        m_debugGatewayStopFile.clear();
+        process->deleteLater();
+    }
+}
+
+void AppController::stopDebugGateway() {
+    QProcess* process = m_debugGatewayProcess;
+    if (!process || process->state() == QProcess::NotRunning) {
+        m_debugGatewayProcess = nullptr;
+        m_debugGatewayEndpoint.clear();
+        m_debugGatewayStopFile.clear();
+        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 꺼짐");
+        emit debugGatewayChanged();
+        return;
+    }
+
+    if (m_connected && !m_debugGatewayEndpoint.isEmpty()) {
+        disconnectPort();
+    }
+
+    if (!m_debugGatewayStopFile.isEmpty()) {
+        QFile stopFile(m_debugGatewayStopFile);
+        if (stopFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            stopFile.write("stop\n");
+            stopFile.close();
+        }
+    }
+
+    m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 종료 요청 중");
+    emit debugGatewayChanged();
+    setStatus(m_debugGatewayStatus);
+
+    QTimer::singleShot(2500, this, [this, process]() {
+        if (m_debugGatewayProcess != process || process->state() == QProcess::NotRunning) return;
+        process->terminate();
+        QTimer::singleShot(1000, this, [this, process]() {
+            if (m_debugGatewayProcess != process || process->state() == QProcess::NotRunning) return;
+            process->kill();
+        });
+    });
+}
+
+void AppController::finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process) {
+    if (m_debugGatewayProcess != process) {
+        process->deleteLater();
+        return;
+    }
+    const bool normal = exitStatus == QProcess::NormalExit && exitCode == 0;
+    m_debugGatewayProcess = nullptr;
+    m_debugGatewayEndpoint.clear();
+    m_debugGatewayStopFile.clear();
+    m_debugGatewayStatus = normal
+        ? QStringLiteral("디버그 게이트웨이 종료됨")
+        : QStringLiteral("디버그 게이트웨이 비정상 종료: exit=%1").arg(exitCode);
+    emit debugGatewayChanged();
+    setStatus(m_debugGatewayStatus);
+    process->deleteLater();
+}
+
+QVariantList AppController::verificationScenarioCatalog() const {
+    auto row = [](const QString& key, const QString& title, const QString& note, bool needsPort) {
+        QVariantMap map;
+        map.insert(QStringLiteral("key"), key);
+        map.insert(QStringLiteral("title"), title);
+        map.insert(QStringLiteral("note"), note);
+        map.insert(QStringLiteral("needsPort"), needsPort);
+        map.insert(QStringLiteral("route"), key.startsWith(QStringLiteral("attached_"))
+                   ? QStringLiteral("현재 실행 중인 VSM에 외부 Python 송신기를 붙임")
+                   : QStringLiteral("외부 Python 실행기가 별도 VSM/user-route를 실행"));
+        map.insert(QStringLiteral("python"), QStringLiteral("py -3 scripts/vsm_verify.py run --scenario %1").arg(key.startsWith(QStringLiteral("attached_")) ? QStringLiteral("<attached sender>") : key));
+        map.insert(QStringLiteral("artifactRoot"), QStringLiteral("artifacts/vsm_verify"));
+        map.insert(QStringLiteral("safety"), key.startsWith(QStringLiteral("attached_")) || key.contains(QStringLiteral("load")) || key.contains(QStringLiteral("truth"))
+                   ? QStringLiteral("차량 실차 연결 중 실행 금지: PCAN/Kvaser 송신 부하를 발생시킴")
+                   : QStringLiteral("포트/장치 접근 여부를 시나리오별로 확인"));
+        if (key.contains(QStringLiteral("full"))) {
+            map.insert(QStringLiteral("load"), key.contains(QStringLiteral("60s")) ? QStringLiteral("full fixture, 384 ID slots, PCAN 2000fps 60s") : QStringLiteral("full fixture, 384 ID slots, 1000fps per selected source 30s"));
+            map.insert(QStringLiteral("model"), QStringLiteral("tests/fixtures/full_load_truth_stress_model.json"));
+            map.insert(QStringLiteral("stress"), QStringLiteral("0x510-0x5AF: timing + range + reserved + flag + graph peak, noise IDs mixed"));
+            map.insert(QStringLiteral("acceptance"), QStringLiteral("sender manifest, capture/ledger parity, AnalysisRuntime rows, graph min/max/latest, performance snapshot"));
+        } else if (key.contains(QStringLiteral("truth"))) {
+            map.insert(QStringLiteral("load"), QStringLiteral("smoke fixture, 64 ID slots, 1000fps per selected source 30s"));
+            map.insert(QStringLiteral("model"), QStringLiteral("tests/fixtures/analysis_truth_stress_model.json"));
+            map.insert(QStringLiteral("stress"), QStringLiteral("0x510 timing, 0x520 range, 0x521 reserved, 0x530 graph peak + noise"));
+            map.insert(QStringLiteral("acceptance"), QStringLiteral("fixture rows and graph values match app snapshot"));
+        } else {
+            map.insert(QStringLiteral("load"), QStringLiteral("scenario-specific"));
+            map.insert(QStringLiteral("model"), QStringLiteral("-"));
+            map.insert(QStringLiteral("stress"), note);
+            map.insert(QStringLiteral("acceptance"), QStringLiteral("scenario result.json PASS"));
+        }
+        return map;
+    };
+    return QVariantList{
+        row(QStringLiteral("attached_pcan_mcp_load_30s"),
+            QStringLiteral("현재 앱 MCP/PCAN 30s"),
+            QStringLiteral("새 VSM 창 없이 현재 COM7/로그/성능 경로에서 MCP에 물린 PCAN만 1000fps 송신 검증"),
+            false),
+        row(QStringLiteral("attached_pcan_mcp_truth_30s"),
+            QStringLiteral("현재 앱 MCP Truth 30s"),
+            QStringLiteral("MCP/PCAN 단일 버스에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
+            false),
+        row(QStringLiteral("attached_full_pcan_mcp_30s"),
+            QStringLiteral("현재 앱 MCP Full 30s"),
+            QStringLiteral("MCP/PCAN 단일 버스에서 160개 모델 ID와 noise를 섞어 주기/값/경보/그래프 풀부하 검증"),
+            false),
+        row(QStringLiteral("attached_full_pcan_mcp_60s"),
+            QStringLiteral("현재 앱 MCP Full 60s"),
+            QStringLiteral("MCP/PCAN 단일 버스 2000fps 60초 풀부하 endurance 검증"),
+            false),
+        row(QStringLiteral("attached_load_30s"),
+            QStringLiteral("현재 앱 부하 30s"),
+            QStringLiteral("새 VSM 창을 띄우지 않고 현재 연결/로그/성능 계측 경로에서 PCAN+Kvaser 1000fps 송신 검증"),
+            false),
+        row(QStringLiteral("attached_analysis_truth_30s"),
+            QStringLiteral("현재 앱 Truth 30s"),
+            QStringLiteral("현재 앱에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷을 함께 검증"),
+            false),
+        row(QStringLiteral("attached_full_load_30s"),
+            QStringLiteral("현재 앱 Full Dual 30s"),
+            QStringLiteral("현재 앱에서 PCAN+Kvaser 1000+1000fps 풀부하 truth 검증"),
+            false),
+        row(QStringLiteral("user_route_30s"),
+            QStringLiteral("독립 HIL 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하는 CI/독립형 user-route 검증"),
+            true),
+        row(QStringLiteral("analysis_truth_30s"),
+            QStringLiteral("독립 Truth HIL 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하는 fixture + noise user-route 검증"),
+            true),
+        row(QStringLiteral("full_analysis_truth_30s"),
+            QStringLiteral("독립 Full Truth HIL 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하는 풀부하 주기/값/경보/그래프 user-route 검증"),
+            true),
+        row(QStringLiteral("control_smoke"),
+            QStringLiteral("Control smoke"),
+            QStringLiteral("제어 명령/ACK/CAN_TX_RAW 분리 경로 smoke"),
+            true),
+        row(QStringLiteral("debug_gateway"),
+            QStringLiteral("Debug gateway"),
+            QStringLiteral("앱 외부 raw serial 보존 gateway 실행"),
+            true),
+        row(QStringLiteral("latest_capture_report"),
+            QStringLiteral("Latest capture report"),
+            QStringLiteral("최근 project-local typed capture 분석"),
+            false),
+    };
+}
+
+void AppController::setDebugProfilerEnabled(bool enabled) {
+    if (m_debugProfilerEnabled == enabled) return;
+    m_debugProfilerEnabled = enabled;
+    CanMonitorPerf::PerformanceProbeRuntime::setEnabled(enabled);
+    if (enabled) {
+        CanMonitorPerf::PerformanceProbeRuntime::reset();
+        m_performanceTimer.start();
+        setStatus(QStringLiteral("성능 계측 켜짐 · debug mode"));
+    } else {
+        m_performanceTimer.stop();
+        setStatus(QStringLiteral("성능 계측 꺼짐"));
+    }
+    refreshPerformanceDiagnostics(true);
+}
+
+void AppController::toggleDebugProfiler() {
+    setDebugProfilerEnabled(!m_debugProfilerEnabled);
+}
+
+void AppController::resetPerformanceMetrics() {
+    CanMonitorPerf::PerformanceProbeRuntime::reset();
+    refreshPerformanceDiagnostics(true);
+    setStatus(m_debugProfilerEnabled ? QStringLiteral("성능 계측 초기화") : QStringLiteral("성능 계측은 꺼져 있음"));
+}
+
+void AppController::refreshPerformanceDiagnostics(bool force) {
+    Q_UNUSED(force);
+    m_performanceSummary = CanMonitorPerf::PerformanceProbeRuntime::summary();
+    m_performanceDiagnostics = CanMonitorPerf::PerformanceProbeRuntime::rows(80);
+    emit performanceDiagnosticsChanged();
+}
+
+void AppController::runVerificationScenario(const QString& scenarioKey, const QString& portName) {
+    const QString scenario = scenarioKey.trimmed();
+    if (scenario.isEmpty()) {
+        setStatus(QStringLiteral("검증 시나리오를 선택하세요"));
+        return;
+    }
+    if (verificationRunnerActive()) {
+        setStatus(QStringLiteral("검증 실행기가 이미 동작 중"));
+        return;
+    }
+    if (scenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
+        scenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+        scenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
+        scenario == QStringLiteral("attached_full_pcan_mcp_60s") ||
+        scenario == QStringLiteral("attached_load_30s") ||
+        scenario == QStringLiteral("attached_analysis_truth_30s") ||
+        scenario == QStringLiteral("attached_full_load_30s")) {
+        runAttachedVerificationScenario(scenario);
+        return;
+    }
+
+    const QString projectRoot = RuntimePaths::projectRoot();
+    const QString workDir = QFileInfo::exists(projectRoot) ? projectRoot : QCoreApplication::applicationDirPath();
+    QString scriptPath = QDir(projectRoot).filePath(QStringLiteral("scripts/vsm_verify.py"));
+    if (!QFileInfo::exists(scriptPath)) {
+        scriptPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vsm_verify.py"));
+    }
+    if (!QFileInfo::exists(scriptPath)) {
+        m_verificationRunnerStatus = QStringLiteral("검증 실행기 스크립트 없음");
+        m_verificationRunnerArtifactPath.clear();
+        emit verificationRunnerChanged();
+        setStatus(QStringLiteral("vsm_verify.py를 찾지 못했습니다"));
+        return;
+    }
+
+    auto* process = new QProcess(this);
+    process->setWorkingDirectory(workDir);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
+        const QStringList lines = output.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            if (line.startsWith(QStringLiteral("ARTIFACT_DIR="))) {
+                m_verificationRunnerArtifactPath = line.mid(QStringLiteral("ARTIFACT_DIR=").size()).trimmed();
+            } else if (line.startsWith(QStringLiteral("RESULT="))) {
+                m_verificationRunnerStatus = QStringLiteral("검증 결과 · %1").arg(line.mid(QStringLiteral("RESULT=").size()).trimmed());
+            } else {
+                m_verificationRunnerStatus = line.left(180);
+            }
+        }
+        emit verificationRunnerChanged();
+    });
+    connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
+        const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+        if (error.isEmpty()) return;
+        m_verificationRunnerStatus = QStringLiteral("검증 오류: %1").arg(error.left(180));
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        m_verificationRunnerStatus = QStringLiteral("검증 실행 오류: %1").arg(int(error));
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        finishVerificationRunnerProcess(exitCode, exitStatus, process);
+    });
+
+    const QString outRoot = QDir(workDir).filePath(QStringLiteral("artifacts/vsm_verify"));
+    QStringList args{
+        QStringLiteral("-3"),
+        scriptPath,
+        QStringLiteral("run"),
+        QStringLiteral("--scenario"), scenario,
+        QStringLiteral("--app-exe"), QCoreApplication::applicationFilePath(),
+        QStringLiteral("--out-root"), outRoot,
+    };
+    if (!portName.trimmed().isEmpty()) {
+        args << QStringLiteral("--port") << portName.trimmed();
+    }
+
+    m_verificationProcess = process;
+    m_verificationRunnerArtifactPath.clear();
+    m_verificationRunnerStatus = QStringLiteral("검증 실행 중 · %1").arg(scenario);
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+
+    process->start(QStringLiteral("py"), args);
+    if (!process->waitForStarted(1500)) {
+        m_verificationRunnerStatus = QStringLiteral("검증 실행 실패: py -3");
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        m_verificationProcess = nullptr;
+        process->deleteLater();
+    }
+}
+
+void AppController::runAttachedVerificationScenario(const QString& scenarioKey) {
+    if (!m_connected) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · 먼저 COM을 연결하세요");
+        m_verificationRunnerArtifactPath.clear();
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        return;
+    }
+    if (m_logRecordingActive || m_logStopping || m_logSaving || m_logPendingSave) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · 진행/대기 중인 로그를 먼저 정리하세요");
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        return;
+    }
+
+    const QString projectRoot = RuntimePaths::projectRoot();
+    const QString workDir = QFileInfo::exists(projectRoot) ? projectRoot : QCoreApplication::applicationDirPath();
+    QString scriptPath = QDir(projectRoot).filePath(QStringLiteral("scripts/vsm_verify.py"));
+    if (!QFileInfo::exists(scriptPath)) {
+        scriptPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("vsm_verify.py"));
+    }
+    if (!QFileInfo::exists(scriptPath)) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · vsm_verify.py 없음");
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        return;
+    }
+
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    const QString runId = QStringLiteral("%1_%2").arg(scenarioKey, stamp);
+    const QString outRoot = QDir(workDir).filePath(QStringLiteral("artifacts/vsm_verify"));
+    const QString runDir = QDir(outRoot).filePath(runId);
+    QDir().mkpath(runDir);
+
+    m_verificationAttachedMode = true;
+    m_verificationAttachedSenderOk = false;
+    m_verificationAttachedSenderExitCode = -1;
+    m_verificationAttachedFinalizeAttempts = 0;
+    m_verificationAttachedScenario = scenarioKey;
+    m_verificationAttachedLogName = runId;
+    m_verificationAttachedSnapshotPath = QDir(runDir).filePath(QStringLiteral("app_snapshot.json"));
+    m_verificationPreviousLogTargetName = m_logTargetName;
+    m_verificationPreviousLogTargetDirectory = logTargetDirectory();
+    m_verificationRunnerArtifactPath = runDir;
+
+    setDebugProfilerEnabled(true);
+    resetPerformanceMetrics();
+
+    const bool fullScenario = scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
+                              scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s") ||
+                              scenarioKey == QStringLiteral("attached_full_load_30s");
+    const bool analysisScenario = fullScenario ||
+                                  scenarioKey == QStringLiteral("attached_analysis_truth_30s") ||
+                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s");
+    const bool pcanOnlyScenario = scenarioKey == QStringLiteral("attached_pcan_mcp_load_30s") ||
+                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+                                  scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
+                                  scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s");
+
+    if (analysisScenario) {
+        const QString fixturePath = QDir(workDir).filePath(fullScenario
+            ? QStringLiteral("tests/fixtures/full_load_truth_stress_model.json")
+            : QStringLiteral("tests/fixtures/analysis_truth_stress_model.json"));
+        if (QFileInfo::exists(fixturePath)) {
+            setRulesPath(fixturePath);
+        }
+        setGraphSelectedKeys(fullScenario
+            ? QStringList{QStringLiteral("0X5A0|0"), QStringLiteral("0X5A1|0"), QStringLiteral("0X5A2|0"), QStringLiteral("0X5A3|0"),
+                          QStringLiteral("0X5A4|0"), QStringLiteral("0X5A5|0"), QStringLiteral("0X5A6|0"), QStringLiteral("0X5A7|0"),
+                          QStringLiteral("0X5A8|0"), QStringLiteral("0X5A9|0"), QStringLiteral("0X5AA|0"), QStringLiteral("0X5AB|0"),
+                          QStringLiteral("0X5AC|0"), QStringLiteral("0X5AD|0"), QStringLiteral("0X5AE|0"), QStringLiteral("0X5AF|0")}
+            : QStringList{QStringLiteral("0X530|0")});
+        setGraphWindowMs(60000);
+    }
+    for (const QString& panel : {QStringLiteral("live"), QStringLiteral("timing"), QStringLiteral("value"), QStringLiteral("alarm"), QStringLiteral("graph")}) {
+        setPanelActive(panel, true);
+    }
+
+    setLogTargetName(runId);
+    startLog();
+    setLogTargetName(m_verificationPreviousLogTargetName);
+    setLogTargetDirectory(m_verificationPreviousLogTargetDirectory);
+
+    auto* process = new QProcess(this);
+    process->setWorkingDirectory(workDir);
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
+        const QStringList lines = output.split(QRegularExpression(QStringLiteral("[\\r\\n]+")), Qt::SkipEmptyParts);
+        for (const QString& line : lines) {
+            if (line.startsWith(QStringLiteral("ARTIFACT_DIR="))) {
+                // The in-app run keeps its own outer artifact path. The sender
+                // artifact remains under it and is also recorded in stdout.log.
+            } else if (line.startsWith(QStringLiteral("RESULT="))) {
+                m_verificationRunnerStatus = QStringLiteral("송신기 · %1").arg(line.mid(QStringLiteral("RESULT=").size()).trimmed());
+            } else {
+                m_verificationRunnerStatus = line.left(180);
+            }
+        }
+        emit verificationRunnerChanged();
+    });
+    connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
+        const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
+        if (error.isEmpty()) return;
+        QFile file(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("stderr.log")));
+        if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            file.write(error.toUtf8());
+            file.write("\n");
+        }
+        m_verificationRunnerStatus = QStringLiteral("송신기 오류: %1").arg(error.left(180));
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실행 오류: %1").arg(int(error));
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        finishVerificationRunnerProcess(exitCode, exitStatus, process);
+    });
+
+    QString senderScenario;
+    if (scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s")) {
+        senderScenario = QStringLiteral("full_pcan_mcp_load_60s");
+    } else if (fullScenario && pcanOnlyScenario) {
+        senderScenario = QStringLiteral("full_pcan_mcp_load_30s");
+    } else if (fullScenario) {
+        senderScenario = QStringLiteral("full_can_load_30s");
+    } else if (analysisScenario && pcanOnlyScenario) {
+        senderScenario = QStringLiteral("analysis_pcan_mcp_load_30s");
+    } else if (analysisScenario) {
+        senderScenario = QStringLiteral("analysis_can_load_30s");
+    } else if (pcanOnlyScenario) {
+        senderScenario = QStringLiteral("pcan_mcp_load_30s");
+    } else {
+        senderScenario = QStringLiteral("can_load_30s");
+    }
+    const QStringList args{
+        QStringLiteral("-3"),
+        scriptPath,
+        QStringLiteral("run"),
+        QStringLiteral("--scenario"), senderScenario,
+        QStringLiteral("--out-root"), m_verificationRunnerArtifactPath,
+    };
+
+    m_verificationProcess = process;
+    m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 준비 · 로그 시작 대기");
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+
+    QTimer::singleShot(1200, this, [this, process, args]() {
+        startAttachedVerificationProcess(process, args);
+    });
+}
+
+void AppController::startAttachedVerificationProcess(QProcess* process, const QStringList& args) {
+    if (m_verificationProcess != process || !m_verificationAttachedMode) return;
+    if (!m_logRecordingActive) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · 로그가 시작되지 않음");
+        m_verificationProcess = nullptr;
+        m_verificationAttachedMode = false;
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        process->deleteLater();
+        return;
+    }
+    exportAnalysisSnapshot(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("app_snapshot_before_load.json")));
+    QFile file(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("command.txt")));
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(QStringLiteral("py %1\n").arg(args.join(QChar(' '))).toUtf8());
+    }
+    const bool pcanOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
+                                  m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+                                  m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
+                                  m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s");
+    m_verificationRunnerStatus = pcanOnlyScenario
+        ? QStringLiteral("현재 앱 검증 중 · MCP/PCAN 송신 시작")
+        : QStringLiteral("현재 앱 검증 중 · PCAN/Kvaser 송신 시작");
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+    process->start(QStringLiteral("py"), args);
+    if (!process->waitForStarted(1500)) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · py -3 실행 불가");
+        m_verificationProcess = nullptr;
+        m_verificationAttachedMode = false;
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        process->deleteLater();
+    }
+}
+
+void AppController::stopVerificationRunner() {
+    QProcess* process = m_verificationProcess;
+    if (!process || process->state() == QProcess::NotRunning) {
+        m_verificationProcess = nullptr;
+        if (m_verificationRunnerStatus.isEmpty()) m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
+        emit verificationRunnerChanged();
+        return;
+    }
+    m_verificationRunnerStatus = QStringLiteral("검증 실행기 종료 요청 중");
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+    process->terminate();
+    QTimer::singleShot(1500, this, [this, process]() {
+        if (m_verificationProcess != process || process->state() == QProcess::NotRunning) return;
+        process->kill();
+    });
+}
+
+void AppController::finishVerificationRunnerProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process) {
+    if (m_verificationProcess != process) {
+        process->deleteLater();
+        return;
+    }
+    if (m_verificationAttachedMode) {
+        const bool normal = exitStatus == QProcess::NormalExit && exitCode == 0;
+        m_verificationAttachedSenderOk = normal;
+        m_verificationAttachedSenderExitCode = exitCode;
+        m_verificationProcess = nullptr;
+        QFile stdoutFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("stdout_tail.log")));
+        if (stdoutFile.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+            stdoutFile.write(process->readAllStandardOutput());
+        }
+        m_verificationRunnerStatus = normal
+            ? QStringLiteral("송신 완료 · 현재 앱 로그 종료 중")
+            : QStringLiteral("송신 실패 · exit=%1 · 현재 앱 로그 종료 중").arg(exitCode);
+        emit verificationRunnerChanged();
+        setStatus(m_verificationRunnerStatus);
+        exportAnalysisSnapshot(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("app_snapshot_after_load.json")));
+        if (m_logRecordingActive) stopLog();
+        QTimer::singleShot(800, this, [this]() { finalizeAttachedVerificationReport(); });
+        process->deleteLater();
+        return;
+    }
+    const bool normal = exitStatus == QProcess::NormalExit && exitCode == 0;
+    m_verificationProcess = nullptr;
+    m_verificationRunnerStatus = normal
+        ? QStringLiteral("검증 완료 · PASS")
+        : QStringLiteral("검증 종료 · exit=%1").arg(exitCode);
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+    process->deleteLater();
+}
+
+void AppController::finalizeAttachedVerificationReport() {
+    if (!m_verificationAttachedMode) return;
+    if ((m_logRecordingActive || m_logStopping || m_logSaving) && m_verificationAttachedFinalizeAttempts++ < 60) {
+        m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 후처리 · 로그 finalize 대기 %1").arg(m_verificationAttachedFinalizeAttempts);
+        emit verificationRunnerChanged();
+        QTimer::singleShot(500, this, [this]() { finalizeAttachedVerificationReport(); });
+        return;
+    }
+
+    exportAnalysisSnapshot(m_verificationAttachedSnapshotPath);
+
+    const QString workDir = QFileInfo::exists(RuntimePaths::projectRoot())
+        ? RuntimePaths::projectRoot()
+        : QCoreApplication::applicationDirPath();
+    const QString reportScript = QFileInfo::exists(QDir(workDir).filePath(QStringLiteral("scripts/field_latest_capture_report.py")))
+        ? QDir(workDir).filePath(QStringLiteral("scripts/field_latest_capture_report.py"))
+        : QDir(workDir).filePath(QStringLiteral("field_latest_capture_report.py"));
+    int reportExit = -1;
+    if (QFileInfo::exists(reportScript)) {
+        QProcess report;
+        report.setWorkingDirectory(workDir);
+        report.start(QStringLiteral("py"), QStringList{
+            QStringLiteral("-3"),
+            reportScript,
+            QStringLiteral("--root"),
+            defaultLogDirectory(),
+        });
+        if (report.waitForFinished(30000)) {
+            reportExit = report.exitCode();
+            QFile stdoutFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("latest_capture_report.txt")));
+            if (stdoutFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                stdoutFile.write(report.readAllStandardOutput());
+            }
+            QFile stderrFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("latest_capture_report_stderr.txt")));
+            if (stderrFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                stderrFile.write(report.readAllStandardError());
+            }
+        }
+    }
+
+    const bool fullScenario = m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
+                              m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s") ||
+                              m_verificationAttachedScenario == QStringLiteral("attached_full_load_30s");
+    const bool truthValidationRequired = fullScenario ||
+                                         m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+                                         m_verificationAttachedScenario == QStringLiteral("attached_analysis_truth_30s");
+    int truthValidationExit = truthValidationRequired ? -1 : 0;
+    QString truthValidationResultPath;
+    const QString validationScript = QFileInfo::exists(QDir(workDir).filePath(QStringLiteral("scripts/validate_attached_truth_run.py")))
+        ? QDir(workDir).filePath(QStringLiteral("scripts/validate_attached_truth_run.py"))
+        : QDir(workDir).filePath(QStringLiteral("validate_attached_truth_run.py"));
+    if (truthValidationRequired && QFileInfo::exists(validationScript) && !m_logPath.isEmpty()) {
+        truthValidationResultPath = QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("truth_validation_result.json"));
+        QProcess validator;
+        validator.setWorkingDirectory(workDir);
+        validator.start(QStringLiteral("py"), QStringList{
+            QStringLiteral("-3"),
+            validationScript,
+            QStringLiteral("--run-dir"), m_verificationRunnerArtifactPath,
+            QStringLiteral("--capture-dir"), m_logPath,
+            QStringLiteral("--snapshot"), m_verificationAttachedSnapshotPath,
+            QStringLiteral("--profile"), fullScenario ? QStringLiteral("full") : QStringLiteral("smoke"),
+            QStringLiteral("--out"), truthValidationResultPath,
+        });
+        if (validator.waitForFinished(120000)) {
+            truthValidationExit = validator.exitCode();
+            QFile stdoutFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("truth_validation_stdout.txt")));
+            if (stdoutFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                stdoutFile.write(validator.readAllStandardOutput());
+            }
+            QFile stderrFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("truth_validation_stderr.txt")));
+            if (stderrFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                stderrFile.write(validator.readAllStandardError());
+            }
+        }
+    }
+
+    const bool logFinalized = !m_logRecordingActive && !m_logStopping && !m_logSaving && !m_logPath.isEmpty();
+    const quint64 canRxFrames = m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw));
+    const bool logHasCanRxFrames = canRxFrames > 0;
+    const bool truthValidationOk = !truthValidationRequired || truthValidationExit == 0;
+    const bool pass = m_verificationAttachedSenderOk && logFinalized && logHasCanRxFrames && truthValidationOk;
+    QJsonObject result;
+    result.insert(QStringLiteral("pass"), pass);
+    result.insert(QStringLiteral("scenario"), m_verificationAttachedScenario);
+    result.insert(QStringLiteral("sender_ok"), m_verificationAttachedSenderOk);
+    result.insert(QStringLiteral("sender_exit_code"), m_verificationAttachedSenderExitCode);
+    result.insert(QStringLiteral("connected"), m_connected);
+    result.insert(QStringLiteral("log_path"), m_logPath);
+    result.insert(QStringLiteral("can_rx_frames"), QString::number(canRxFrames));
+    result.insert(QStringLiteral("log_typed_records"), QString::number(m_logRecordedFrameCount));
+    result.insert(QStringLiteral("log_records"), QString::number(m_logRecordedFrameCount));
+    result.insert(QStringLiteral("log_bytes"), QString::number(m_logRecordedBytes));
+    result.insert(QStringLiteral("log_finalized"), logFinalized);
+    result.insert(QStringLiteral("snapshot"), m_verificationAttachedSnapshotPath);
+    result.insert(QStringLiteral("capture_report_exit_code"), reportExit);
+    result.insert(QStringLiteral("truth_validation_required"), truthValidationRequired);
+    result.insert(QStringLiteral("truth_validation_exit_code"), truthValidationExit);
+    result.insert(QStringLiteral("truth_validation_result"), truthValidationResultPath);
+    result.insert(QStringLiteral("performance_summary"), m_performanceSummary);
+    QFile resultFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("attached_result.json")));
+    if (resultFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        resultFile.write(QJsonDocument(result).toJson(QJsonDocument::Indented));
+    }
+
+    m_verificationRunnerStatus = pass
+        ? QStringLiteral("현재 앱 검증 완료 · PASS · CAN_RX %1 frame · typed rec %2")
+              .arg(canRxFrames)
+              .arg(m_logRecordedFrameCount)
+        : QStringLiteral("현재 앱 검증 완료 · FAIL · sender=%1 log=%2 CAN_RX=%3 typed=%4 truth=%5")
+              .arg(m_verificationAttachedSenderOk ? QStringLiteral("ok") : QStringLiteral("fail"))
+              .arg(logFinalized ? QStringLiteral("ok") : QStringLiteral("fail"))
+              .arg(canRxFrames)
+              .arg(m_logRecordedFrameCount)
+              .arg(truthValidationOk ? QStringLiteral("ok") : QStringLiteral("fail"));
+    m_verificationAttachedMode = false;
+    emit verificationRunnerChanged();
+    setStatus(m_verificationRunnerStatus);
+}
+
 void AppController::startLog() {
     if (!m_connected) {
         setStatus(QStringLiteral("포트 연결 후 로그를 시작하세요"));
@@ -7629,6 +8947,8 @@ void AppController::resetTypedEvidenceState() {
     m_lastTypedHealthMonoUs = 0;
     m_lastTypedHealthCanRxTotal = 0;
     m_lastTypedHealthSerialTxTotal = 0;
+    m_lastTypedHealthHasUplinkCounters = false;
+    m_lastTypedHealthUplinkCounters = {};
     m_typedRxHealthParityAnchored = false;
     m_typedRxHealthAnchorBoardTotal = 0;
     m_typedRxHealthAnchorStreamCount = 0;
@@ -7829,21 +9149,47 @@ void AppController::loadReplay(const QString& filePath) {
         loadReplayTimeMeta(streamPath);
 
         std::vector<FrameRecord> canRxFrames;
-        canRxFrames.reserve(size_t(reader.summary().typeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw))));
+        canRxFrames.reserve(size_t(reader.summary().typeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw))) +
+                            size_t(reader.summary().typeCounts.value(static_cast<quint8>(TypedRecordType::CanRxSegment))) * 8);
         for (const TypedReplayReader::RecordEntry& entry : reader.records()) {
-            const auto can = decodeTypedCanRaw(entry.record);
-            if (!can || can->txAudit) continue;
+            if (entry.record.isType(TypedRecordType::CanRxRaw)) {
+                const auto can = decodeTypedCanRaw(entry.record);
+                if (!can || can->txAudit) continue;
 
-            FrameRecord frame;
-            frame.tExtUs = can->monoUs;
-            frame.canId = can->canId;
-            frame.ext = can->extended;
-            frame.rtr = can->rtr;
-            frame.dlc = std::min<quint8>(can->dlc, 8);
-            std::memcpy(frame.data, can->data, sizeof(frame.data));
-            frame.bus = can->bus;
-            frame.seq = quint8(entry.record.header.seq & 0xFF);
-            canRxFrames.push_back(frame);
+                FrameRecord frame;
+                frame.tExtUs = can->monoUs;
+                frame.canId = can->canId;
+                frame.ext = can->extended;
+                frame.rtr = can->rtr;
+                frame.dlc = std::min<quint8>(can->dlc, 8);
+                std::memcpy(frame.data, can->data, sizeof(frame.data));
+                frame.bus = can->bus;
+                frame.seq = quint8(entry.record.header.seq & 0xFF);
+                canRxFrames.push_back(frame);
+                continue;
+            }
+
+            if (entry.record.isType(TypedRecordType::CanRxSegment)) {
+                const auto header = decodeTypedCanRxSegmentHeader(entry.record);
+                if (!header) continue;
+                for (qsizetype index = 0; index < header->frameCount; ++index) {
+                    const auto segmentEntry = decodeTypedCanRxSegmentEntry(entry.record, index);
+                    if (!segmentEntry) continue;
+
+                    FrameRecord frame;
+                    frame.tExtUs = segmentEntry->monoUs;
+                    frame.canId = segmentEntry->canId;
+                    frame.ext = segmentEntry->extended;
+                    frame.rtr = segmentEntry->rtr;
+                    frame.dlc = std::min<quint8>(segmentEntry->dlc, 8);
+                    std::memcpy(frame.data, segmentEntry->data, sizeof(frame.data));
+                    frame.bus = segmentEntry->bus;
+                    frame.seq = quint8(entry.record.header.seq & 0xFF);
+                    frame.hasCaptureSeq = true;
+                    frame.captureSeq = segmentEntry->captureSeq;
+                    canRxFrames.push_back(frame);
+                }
+            }
         }
 
         setReplayTypedDiagnosticsFromReader(reader, int(canRxFrames.size()));
@@ -7993,6 +9339,11 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
         for (int i = 0; i < model->rowCount(); ++i) arr.append(QJsonObject::fromVariantMap(model->get(i)));
         return arr;
     };
+    auto variantRowsToArray = [](const QVector<QVariantMap>& rows) {
+        QJsonArray arr;
+        for (const QVariantMap& row : rows) arr.append(QJsonObject::fromVariantMap(row));
+        return arr;
+    };
     auto detailModelToArray = [](DetailListModel* model) {
         QJsonArray arr;
         for (int i = 0; i < model->count(); ++i) {
@@ -8027,6 +9378,25 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
         }
         return arr;
     };
+    auto analysisStatusObject = [](const CanMonitorAnalysis::AnalysisRuntime::Status& status) {
+        QJsonObject obj;
+        obj.insert(QStringLiteral("accepted_can_rx_frames"), QString::number(status.acceptedCanRxFrames));
+        obj.insert(QStringLiteral("decoded_can_rx_frames"), QString::number(status.decodedCanRxFrames));
+        obj.insert(QStringLiteral("truth_loss"), QString::number(status.truthLoss));
+        obj.insert(QStringLiteral("analysis_overrun"), QString::number(status.analysisOverrun));
+        obj.insert(QStringLiteral("capture_seq_gap_events"), QString::number(status.captureSeqGapEvents));
+        obj.insert(QStringLiteral("capture_seq_reorder_events"), QString::number(status.captureSeqReorderEvents));
+        obj.insert(QStringLiteral("transport_contaminated_intervals"), QString::number(status.transportContaminatedIntervals));
+        obj.insert(QStringLiteral("snapshot_count"), QString::number(status.snapshotCount));
+        obj.insert(QStringLiteral("state_key_count"), status.stateKeyCount);
+        obj.insert(QStringLiteral("max_state_key_count"), status.maxStateKeyCount);
+        obj.insert(QStringLiteral("timing_rows"), status.timingRows);
+        obj.insert(QStringLiteral("value_rows"), status.valueRows);
+        obj.insert(QStringLiteral("alarm_rows"), status.alarmRows);
+        obj.insert(QStringLiteral("max_state_keys"), status.maxStateKeys);
+        obj.insert(QStringLiteral("max_rows_per_snapshot"), status.maxRowsPerSnapshot);
+        return obj;
+    };
     auto variantArrayToMarkdown = [](const QJsonArray& arr, const QString& title, int limit = 40) {
         QStringList lines;
         lines << QStringLiteral("## %1").arg(title);
@@ -8051,6 +9421,12 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
         if (arr.size() > count) lines << QStringLiteral("- ... %1개 추가 항목 생략").arg(arr.size() - count);
         return lines.join('\n');
     };
+
+    refreshAnalysisRuntimeSnapshot(true);
+    refreshTimingRows();
+    refreshValueRows();
+    refreshAlarmRows();
+    requestGraphRefresh(true);
 
     QJsonObject root;
     root.insert(QStringLiteral("saved_at"), QDateTime::currentDateTime().toString(Qt::ISODate));
@@ -8106,7 +9482,43 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     liveStats.insert(QStringLiteral("projection_sampled_control_evidence"), QString::number(m_liveProjectionSampledControlEvidenceRecords));
     liveStats.insert(QStringLiteral("projection_max_backlog"), m_liveProjectionMaxBacklog);
     liveStats.insert(QStringLiteral("projection_flush_budget_hits"), QString::number(m_liveProjectionFlushBudgetHits));
+    liveStats.insert(QStringLiteral("raw_ledger_rows"), QString::number(m_rawFrameTable.totalRows()));
+    liveStats.insert(QStringLiteral("raw_ledger_visible_rows"), m_rawFrameTable.count());
+    liveStats.insert(QStringLiteral("raw_ledger_segment_bytes"), QString::number(m_rawFrameTable.segmentBytes()));
+    liveStats.insert(QStringLiteral("raw_ledger_latest_seq"), QString::number(m_rawFrameTable.latestSeq()));
     root.insert(QStringLiteral("live_stats"), liveStats);
+    root.insert(QStringLiteral("performance_snapshot"), CanMonitorPerf::PerformanceProbeRuntime::snapshot(80));
+
+    QJsonObject analysisRuntime;
+    analysisRuntime.insert(QStringLiteral("active_source"), activeAnalysisSourceKey());
+    analysisRuntime.insert(QStringLiteral("level"), analysisRuntimeLevel());
+    analysisRuntime.insert(QStringLiteral("summary"), analysisRuntimeSummary());
+    analysisRuntime.insert(QStringLiteral("diagnostics"), QJsonArray::fromVariantList(analysisRuntimeDiagnostics()));
+    analysisRuntime.insert(QStringLiteral("live_snapshot_ready"), m_liveAnalysisRuntimeSnapshotReady);
+    analysisRuntime.insert(QStringLiteral("live_cached_timing_rows"), m_liveAnalysisRuntimeTimingRows.size());
+    analysisRuntime.insert(QStringLiteral("live_cached_value_rows"), m_liveAnalysisRuntimeValueRows.size());
+    analysisRuntime.insert(QStringLiteral("live_cached_alarm_rows"), m_liveAnalysisRuntimeAlarmRows.size());
+    analysisRuntime.insert(QStringLiteral("live_timing_rows"), variantRowsToArray(m_liveAnalysisRuntimeTimingRows));
+    analysisRuntime.insert(QStringLiteral("live_value_rows"), variantRowsToArray(m_liveAnalysisRuntimeValueRows));
+    analysisRuntime.insert(QStringLiteral("live_alarm_rows"), variantRowsToArray(m_liveAnalysisRuntimeAlarmRows));
+    analysisRuntime.insert(QStringLiteral("live_runtime_status"), analysisStatusObject(m_liveAnalysisRuntime.status()));
+    analysisRuntime.insert(QStringLiteral("replay_runtime_status"), analysisStatusObject(m_replayAnalysisRuntime.status()));
+    root.insert(QStringLiteral("analysis_runtime"), analysisRuntime);
+
+    QJsonObject graph;
+    graph.insert(QStringLiteral("selected_keys"), QJsonArray::fromStringList(m_graphSelectedKeys));
+    graph.insert(QStringLiteral("window_ms"), m_graphWindowMs);
+    graph.insert(QStringLiteral("source_summary"), graphSourceSummary());
+    graph.insert(QStringLiteral("range_summary"), graphRangeSummary());
+    graph.insert(QStringLiteral("detail_zoom"), graphDetailZoom());
+    graph.insert(QStringLiteral("detail_zoom_summary"), graphDetailZoomSummary());
+    graph.insert(QStringLiteral("series"), QJsonArray::fromVariantList(graphSeries()));
+    graph.insert(QStringLiteral("overview_series"), QJsonArray::fromVariantList(graphOverviewSeries()));
+    graph.insert(QStringLiteral("overview_building"), graphOverviewBuilding());
+    graph.insert(QStringLiteral("overview_progress"), graphOverviewBuildProgress());
+    graph.insert(QStringLiteral("overview_text"), graphOverviewBuildText());
+    graph.insert(QStringLiteral("catalog"), QJsonArray::fromVariantList(graphCatalog()));
+    root.insert(QStringLiteral("graph"), graph);
 
     QJsonObject context;
     context.insert(QStringLiteral("connected"), connected());
@@ -8137,6 +9549,8 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     counts.insert(QStringLiteral("live_observed_ids"), liveObservedIdCount());
     counts.insert(QStringLiteral("replay_observed_ids"), replayObservedIdCount());
     counts.insert(QStringLiteral("live_frame_rows"), m_liveFrames.count());
+    counts.insert(QStringLiteral("raw_ledger_rows"), QString::number(m_rawFrameTable.totalRows()));
+    counts.insert(QStringLiteral("raw_ledger_visible_rows"), m_rawFrameTable.count());
     counts.insert(QStringLiteral("replay_frame_rows"), m_replayFrames.count());
     counts.insert(QStringLiteral("recent_frame_rows"), m_recentFrames.count());
     counts.insert(QStringLiteral("replay_timing_markers"), replayTimingMarkerCount());
@@ -8166,8 +9580,10 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
 
     QJsonObject filters;
     filters.insert(QStringLiteral("live_frame_id_filter"), m_liveFrameView.idFilter());
+    filters.insert(QStringLiteral("raw_frame_id_filter"), m_rawFrameTable.idFilter());
     filters.insert(QStringLiteral("replay_frame_id_filter"), m_replayFrameView.idFilter());
     filters.insert(QStringLiteral("live_frame_bus_filter"), m_liveFrameView.busFilter());
+    filters.insert(QStringLiteral("raw_frame_bus_filter"), m_rawFrameTable.busFilter());
     filters.insert(QStringLiteral("replay_frame_bus_filter"), m_replayFrameView.busFilter());
     filters.insert(QStringLiteral("live_view"), viewStateToJson(m_liveViewState));
     filters.insert(QStringLiteral("replay_view"), viewStateToJson(m_replayViewState));
@@ -8341,6 +9757,7 @@ void AppController::clearFrames() {
     setReplayAnalysisHeld(false);
     m_recentFrames.clear();
     m_liveFrames.clear();
+    m_rawFrameTable.clear();
     m_replayFrames.clear();
     clearGraphHistory();
     requestGraphRefresh(true);
@@ -8376,11 +9793,15 @@ void AppController::clearFrames() {
     m_alarmModel.clear();
     m_hasSelectedValueId = false;
     m_selectedValueCanId = 0;
+    m_selectedValueKey = 0;
     m_liveViewState.hasSelectedValueId = false;
     m_liveViewState.selectedValueCanId = 0;
+    m_liveViewState.selectedValueKey = 0;
     m_replayViewState.hasSelectedValueId = false;
     m_replayViewState.selectedValueCanId = 0;
+    m_replayViewState.selectedValueKey = 0;
     emit selectedValueIdChanged();
+    resetAnalysisRuntimes();
     clearDerivedRows();
     m_timingRowsDirty = false;
     m_valueRowsDirty = false;
@@ -8440,9 +9861,19 @@ void AppController::toggleLiveUiPaused() {
 
 void AppController::selectValueId(const QString& idTextValue) {
     quint32 parsed = 0;
-    if (!parseCanIdText(idTextValue, &parsed)) return;
-    if (m_hasSelectedValueId && m_selectedValueCanId == parsed) return;
+    AnalysisStateKey parsedKey = 0;
+    if (!parseAnalysisStateKeyText(idTextValue, &parsedKey) || !parseCanIdText(idTextValue, &parsed)) return;
+    if (analysisStateKeyIsRuleOnly(parsedKey)) {
+        const auto& states = activeStateMap();
+        for (auto it = states.cbegin(); it != states.cend(); ++it) {
+            if (!it.value().seen || it.value().lastFrame.canId != parsed) continue;
+            parsedKey = it.key();
+            break;
+        }
+    }
+    if (m_hasSelectedValueId && m_selectedValueCanId == parsed && m_selectedValueKey == parsedKey) return;
     m_selectedValueCanId = parsed;
+    m_selectedValueKey = parsedKey;
     m_hasSelectedValueId = true;
     m_lastValueDetailSignature.clear();
     m_lastValueDetailProjectionWallMs = -1;
@@ -8882,7 +10313,7 @@ bool AppController::loadModelFile(const QString& path) {
     m_fifoAlarmActive = false;
     m_errPassiveAlarmActive = false;
     m_busOffAlarmActive = false;
-    auto resetStateMap = [](QHash<quint32, IdState>& states) {
+    auto resetStateMap = [](AnalysisStateMap& states) {
         for (auto it = states.begin(); it != states.end(); ++it) {
             it.value().cachedTimingRow.clear();
             it.value().cachedPreviewInfo.clear();
@@ -8919,6 +10350,7 @@ bool AppController::loadModelFile(const QString& path) {
         }
     }
     markAllAnalysisDirty(true);
+    syncAnalysisRuntimeConfig();
 
     const QString normalized = path.startsWith(QStringLiteral(":")) ? path : RuntimePaths::normalizeLocalPath(path);
     m_rulesUsingBundled = normalized.startsWith(QStringLiteral(":"));
@@ -8965,8 +10397,12 @@ bool AppController::loadSignalDbFile(const QString& path) {
 }
 
 void AppController::ingestFrame(const FrameRecord& fr, const QString& source) {
-    QHash<quint32, IdState>& states = stateMapForSource(source);
-    IdState& st = states[fr.canId];
+    if (source == QStringLiteral("replay")) {
+        m_replayAnalysisRuntime.ingestFrame(fr, source);
+    }
+    AnalysisStateMap& states = stateMapForSource(source);
+    const AnalysisStateKey stateKey = analysisStateKeyForFrame(fr);
+    IdState& st = states[stateKey];
     const qint64 nowMs = qint64(fr.tExtUs / 1000ULL);
     if (fr.hasObservedGap) {
         st.lastGapMs = double(fr.observedGapUs) / 1000.0;
@@ -8986,8 +10422,9 @@ void AppController::ingestFrame(const FrameRecord& fr, const QString& source) {
     st.timingDerivedDirty = true;
     st.valueDerivedDirty = true;
     if (timingScopeActive()) m_timingRowsDirty = true;
-    if (valueScopeActive() || (m_hasSelectedValueId && m_selectedValueCanId == fr.canId)) m_valueRowsDirty = true;
-    if (m_hasSelectedValueId && m_selectedValueCanId == fr.canId) m_valueDetailsDirty = true;
+    const bool selectedValueMatch = m_hasSelectedValueId && m_selectedValueKey == stateKey;
+    if (valueScopeActive() || selectedValueMatch) m_valueRowsDirty = true;
+    if (selectedValueMatch) m_valueDetailsDirty = true;
 
     if (source == QStringLiteral("live") && !projectionBackpressureActive()) {
         syncValueAlarmState(fr.canId, st, source, false);
@@ -9064,12 +10501,17 @@ void AppController::refreshDerivedModels() {
 }
 
 void AppController::refreshTimingRows() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_timing_rows", m_timingModel.count(), 6000);
+    if (liveAnalysisSnapshotReady()) {
+        refreshTimingRowsFromAnalysisSnapshot();
+        return;
+    }
     if (m_timingViewHeld) return;
 
     struct TimingRowWrap {
         QVariantMap row;
         int rank = 0;
-        quint32 id = 0;
+        quint64 sortKey = 0;
         QString name;
         QString source;
         QString expectedText;
@@ -9080,16 +10522,23 @@ void AppController::refreshTimingRows() {
 
     const qint64 nowMs = analysisNowMsForSource(activeAnalysisSourceKey());
     QVector<CanMonitorAnalysis::AlarmGroup>& alarmGroups = activeAlarmGroups();
-    QSet<quint32> ids;
-    for (auto it = m_rules.cbegin(); it != m_rules.cend(); ++it) ids.insert(it.key());
+    QSet<AnalysisStateKey> keys;
+    QSet<quint32> observedCanIds;
     auto& states = activeStateMap();
-    for (auto it = states.cbegin(); it != states.cend(); ++it) ids.insert(it.key());
+    for (auto it = states.cbegin(); it != states.cend(); ++it) {
+        keys.insert(it.key());
+        if (it.value().seen) observedCanIds.insert(it.value().lastFrame.canId);
+    }
+    for (auto it = m_rules.cbegin(); it != m_rules.cend(); ++it) {
+        if (!observedCanIds.contains(it.key())) keys.insert(ruleOnlyAnalysisStateKey(it.key()));
+    }
 
     std::vector<TimingRowWrap> timingWrapped;
-    timingWrapped.reserve(size_t(ids.size()));
+    timingWrapped.reserve(size_t(keys.size()));
 
-    for (quint32 id : ids) {
-        IdState* state = states.contains(id) ? &states[id] : nullptr;
+    for (AnalysisStateKey key : keys) {
+        IdState* state = states.contains(key) ? &states[key] : nullptr;
+        const quint32 id = state && state->seen ? state->lastFrame.canId : canIdFromAnalysisStateKey(key);
         const bool canCache = state && state->seen;
         const bool needRebuild = !canCache || state->timingDerivedDirty || state->cachedTimingRow.isEmpty();
 
@@ -9106,8 +10555,8 @@ void AppController::refreshTimingRows() {
                 }
             }
 
-            row.insert(QStringLiteral("key"), idText(id));
-            row.insert(QStringLiteral("idText"), idText(id));
+            row.insert(QStringLiteral("key"), analysisStateKeyText(key));
+            row.insert(QStringLiteral("idText"), analysisStateDisplayIdText(key, canCache ? &state->lastFrame : nullptr));
             row.insert(QStringLiteral("name"), eval.name);
             row.insert(QStringLiteral("severity"), eval.severity);
             row.insert(QStringLiteral("severityColor"), severityColor(eval.severity));
@@ -9123,7 +10572,7 @@ void AppController::refreshTimingRows() {
             row.insert(QStringLiteral("sortRank"), eval.severityRank);
             row.insert(QStringLiteral("sortGapMs"), eval.gapMs);
             row.insert(QStringLiteral("sortAgeMs"), eval.ageMs);
-            row.insert(QStringLiteral("sortId"), uint(id));
+            row.insert(QStringLiteral("sortId"), qulonglong(key));
 
             if (canCache) {
                 state->cachedTimingRow = row;
@@ -9149,7 +10598,7 @@ void AppController::refreshTimingRows() {
         if (timingMatch) {
             timingWrapped.push_back({row,
                                      row.value(QStringLiteral("sortRank")).toInt(),
-                                     row.value(QStringLiteral("sortId")).toUInt(),
+                                     key,
                                      row.value(QStringLiteral("name")).toString(),
                                      row.value(QStringLiteral("source")).toString(),
                                      row.value(QStringLiteral("expectedMsText")).toString(),
@@ -9168,8 +10617,8 @@ void AppController::refreshTimingRows() {
         else if (m_timingSortMode == QStringLiteral("age")) cmp = compareOptionalDouble(a.ageMs, b.ageMs);
         else if (m_timingSortMode == QStringLiteral("source")) cmp = compareQString(a.source, b.source);
         else if (m_timingSortMode == QStringLiteral("reason")) cmp = compareQString(a.reason, b.reason);
-        else cmp = compareUInt32(a.id, b.id);
-        if (cmp == 0) cmp = compareUInt32(a.id, b.id);
+        else cmp = compareUInt64(a.sortKey, b.sortKey);
+        if (cmp == 0) cmp = compareUInt64(a.sortKey, b.sortKey);
         return lessFromCompare(cmp, m_timingSortDescending);
     });
 
@@ -9189,12 +10638,17 @@ void AppController::refreshTimingRows() {
 }
 
 void AppController::refreshValueRows() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_value_rows", m_valueModel.count(), 7000);
+    if (liveAnalysisSnapshotReady()) {
+        refreshValueRowsFromAnalysisSnapshot();
+        return;
+    }
     if (m_valueViewHeld) return;
 
     struct ValueRowWrap {
         QVariantMap row;
         int rank = 0;
-        quint32 id = 0;
+        quint64 sortKey = 0;
         QString name;
         QString source;
         QString raw;
@@ -9210,8 +10664,9 @@ void AppController::refreshValueRows() {
 
     for (auto it = states.begin(); it != states.end(); ++it) {
         if (!it.value().seen) continue;
-        const quint32 id = it.key();
+        const AnalysisStateKey key = it.key();
         IdState& state = it.value();
+        const quint32 id = state.lastFrame.canId;
         const bool needRebuild = state.valueDerivedDirty || state.cachedValueRow.isEmpty();
 
         QVariantMap row;
@@ -9234,8 +10689,8 @@ void AppController::refreshValueRows() {
             const bool valueAlarmActive = alarmInfo.value(QStringLiteral("active")).toBool();
             const QString effectiveSeverity = valueAlarmActive ? valueSeverity : eval.severity;
 
-            row.insert(QStringLiteral("key"), idText(id));
-            row.insert(QStringLiteral("idText"), idText(id));
+            row.insert(QStringLiteral("key"), analysisStateKeyText(key));
+            row.insert(QStringLiteral("idText"), analysisStateDisplayIdText(key, &state.lastFrame));
             row.insert(QStringLiteral("name"), eval.name);
             row.insert(QStringLiteral("severity"), effectiveSeverity);
             row.insert(QStringLiteral("severityColor"), severityColor(effectiveSeverity));
@@ -9253,7 +10708,7 @@ void AppController::refreshValueRows() {
             row.insert(QStringLiteral("sortRank"), severityRank(effectiveSeverity));
             row.insert(QStringLiteral("sortGapMs"), eval.gapMs);
             row.insert(QStringLiteral("sortAgeMs"), eval.ageMs);
-            row.insert(QStringLiteral("sortId"), uint(id));
+            row.insert(QStringLiteral("sortId"), qulonglong(key));
 
             state.cachedPreviewInfo = previewInfo;
             state.cachedPreviewFingerprint = currentFingerprint;
@@ -9279,7 +10734,7 @@ void AppController::refreshValueRows() {
         if (valueMatch) {
             valueWrapped.push_back({row,
                                     row.value(QStringLiteral("sortRank")).toInt(),
-                                    row.value(QStringLiteral("sortId")).toUInt(),
+                                    key,
                                     row.value(QStringLiteral("name")).toString(),
                                     row.value(QStringLiteral("source")).toString(),
                                     row.value(QStringLiteral("dataHex")).toString(),
@@ -9298,15 +10753,17 @@ void AppController::refreshValueRows() {
         else if (m_valueSortMode == QStringLiteral("age")) cmp = compareOptionalDouble(a.ageMs, b.ageMs);
         else if (m_valueSortMode == QStringLiteral("source")) cmp = compareQString(a.source, b.source);
         else if (m_valueSortMode == QStringLiteral("reason")) cmp = compareQString(a.summary, b.summary);
-        else cmp = compareUInt32(a.id, b.id);
-        if (cmp == 0) cmp = compareUInt32(a.id, b.id);
+        else cmp = compareUInt64(a.sortKey, b.sortKey);
+        if (cmp == 0) cmp = compareUInt64(a.sortKey, b.sortKey);
         return lessFromCompare(cmp, m_valueSortDescending);
     });
 
-    if (!m_hasSelectedValueId || !states.contains(m_selectedValueCanId) || !states[m_selectedValueCanId].seen) {
+    if (!m_hasSelectedValueId || !states.contains(m_selectedValueKey) || !states[m_selectedValueKey].seen) {
         if (!valueWrapped.empty()) {
-            const quint32 nextId = valueWrapped.front().id;
-            if (!m_hasSelectedValueId || m_selectedValueCanId != nextId) {
+            const AnalysisStateKey nextKey = valueWrapped.front().sortKey;
+            const quint32 nextId = canIdFromAnalysisStateKey(nextKey);
+            if (!m_hasSelectedValueId || m_selectedValueKey != nextKey) {
+                m_selectedValueKey = nextKey;
                 m_selectedValueCanId = nextId;
                 m_hasSelectedValueId = true;
                 syncActiveViewSelection();
@@ -9319,6 +10776,7 @@ void AppController::refreshValueRows() {
         } else if (m_hasSelectedValueId) {
             m_hasSelectedValueId = false;
             m_selectedValueCanId = 0;
+            m_selectedValueKey = 0;
             syncActiveViewSelection();
             emit selectedValueIdChanged();
             m_lastValueDetailSignature.clear();
@@ -9344,6 +10802,7 @@ void AppController::refreshValueRows() {
 }
 
 void AppController::invalidateValueDetailSignalCache() {
+    m_cachedValueDetailKey = 0;
     m_cachedValueDetailCanId = 0;
     m_cachedValueDetailSource.clear();
     m_cachedValueDetailFingerprint = 0;
@@ -9359,6 +10818,7 @@ void AppController::maybeRefreshValueDetails(bool immediate) {
 }
 
 void AppController::refreshValueDetails() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_value_details", m_valueDetailModel.count(), 5000);
     if (!m_valuePanelActive) {
         m_valueDetailsDirty = true;
         return;
@@ -9367,17 +10827,18 @@ void AppController::refreshValueDetails() {
     QString renderedDetailSignature;
 
     auto& states = activeStateMap();
-    if (m_hasSelectedValueId && states.contains(m_selectedValueCanId) && states[m_selectedValueCanId].seen) {
-        const IdState& state = states[m_selectedValueCanId];
-        const EvalResult eval = evaluateId(m_selectedValueCanId, &state, analysisNowMsForSource(activeAnalysisSourceKey()));
-        const auto ruleIt = m_rules.constFind(m_selectedValueCanId);
+    if (m_hasSelectedValueId && states.contains(m_selectedValueKey) && states[m_selectedValueKey].seen) {
+        const IdState& state = states[m_selectedValueKey];
+        const quint32 selectedCanId = state.lastFrame.canId;
+        const EvalResult eval = evaluateId(selectedCanId, &state, analysisNowMsForSource(activeAnalysisSourceKey()));
+        const auto ruleIt = m_rules.constFind(selectedCanId);
         const RuleSpec* rule = (ruleIt != m_rules.cend()) ? &ruleIt.value() : nullptr;
         const quint64 fingerprint = framePayloadFingerprint(state.lastFrame);
         QVariantMap alarmInfo = (state.cachedValueAlarmFingerprint == fingerprint) ? state.cachedValueAlarmInfo : QVariantMap();
-        if (hasAlarmCapableSignals(m_selectedValueCanId) && alarmInfo.isEmpty()) {
-            alarmInfo = CanMonitorAnalysis::SignalDecoder::makeValueAlarm(m_selectedValueCanId, state.lastFrame, m_signalMessages, m_modelEnabled).toVariantMap();
+        if (hasAlarmCapableSignals(selectedCanId) && alarmInfo.isEmpty()) {
+            alarmInfo = CanMonitorAnalysis::SignalDecoder::makeValueAlarm(selectedCanId, state.lastFrame, m_signalMessages, m_modelEnabled).toVariantMap();
         }
-        renderedDetailSignature = valueDetailSignatureForState(m_selectedValueCanId, state.lastSource, fingerprint, eval, alarmInfo);
+        renderedDetailSignature = valueDetailSignatureForState(selectedCanId, analysisStateKeyText(m_selectedValueKey) + state.lastSource, fingerprint, eval, alarmInfo);
         if (m_valueDetailModel.rowCount() > 0 && m_lastValueDetailSignature == renderedDetailSignature) {
             m_valueDetailsDirty = false;
             m_lastValueDetailProjectionWallMs = QDateTime::currentMSecsSinceEpoch();
@@ -9386,11 +10847,11 @@ void AppController::refreshValueDetails() {
 
         QVariantMap previewInfo = (state.cachedPreviewFingerprint == fingerprint) ? state.cachedPreviewInfo : QVariantMap();
         if (previewInfo.isEmpty()) {
-            const auto preview = CanMonitorAnalysis::SignalDecoder::makePreview(m_selectedValueCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
+            const auto preview = CanMonitorAnalysis::SignalDecoder::makePreview(selectedCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
             previewInfo = QVariantMap{{QStringLiteral("plain"), preview.plain}, {QStringLiteral("rich"), preview.rich}};
         }
         const QString shortPreview = previewInfo.value(QStringLiteral("plain")).toString();
-        const QString verbosePreview = CanMonitorAnalysis::SignalDecoder::makeVerbosePreview(m_selectedValueCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
+        const QString verbosePreview = CanMonitorAnalysis::SignalDecoder::makeVerbosePreview(selectedCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
         rows.push_back(makeModelDetailRow(QStringLiteral("해석 전체"),
                                           verbosePreview.isEmpty() ? shortPreview : verbosePreview,
                                           m_modelEnabled
@@ -9400,7 +10861,7 @@ void AppController::refreshValueDetails() {
                                               : QStringLiteral("모델 해제 상태라 RAW 위주입니다")));
         rows.push_back(makeModelDetailRow(QStringLiteral("현재 판정 / RAW"),
                                           QStringLiteral("%1 · %2 · %3").arg(eval.severity, eval.reason, hexBytes(state.lastFrame.data, state.lastFrame.dlc)),
-                                          QStringLiteral("선택 ID %1 · %2 / BUS %3 / DLC %4").arg(idText(m_selectedValueCanId), state.lastSource).arg(state.lastFrame.bus).arg(state.lastFrame.dlc)));
+                                          QStringLiteral("선택 ID %1 · %2 / BUS %3 / DLC %4").arg(idText(selectedCanId), state.lastSource).arg(state.lastFrame.bus).arg(state.lastFrame.dlc)));
 
         if (alarmInfo.value(QStringLiteral("active")).toBool()) {
             rows.push_back(makeModelDetailRow(QStringLiteral("값 경보 근거"),
@@ -9418,7 +10879,8 @@ void AppController::refreshValueDetails() {
 
         QVector<DetailRow> signalRows;
         const bool canReuseSignalRows =
-            (m_cachedValueDetailCanId == m_selectedValueCanId) &&
+            (m_cachedValueDetailKey == m_selectedValueKey) &&
+            (m_cachedValueDetailCanId == selectedCanId) &&
             (m_cachedValueDetailSource == state.lastSource) &&
             (m_cachedValueDetailFingerprint == fingerprint) &&
             (m_cachedValueDetailModelEnabled == m_modelEnabled) &&
@@ -9426,8 +10888,9 @@ void AppController::refreshValueDetails() {
         if (canReuseSignalRows) {
             signalRows = m_cachedValueDetailSignalRows;
         } else {
-            signalRows = CanMonitorAnalysis::SignalDecoder::makeDetailRows(m_selectedValueCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
-            m_cachedValueDetailCanId = m_selectedValueCanId;
+            signalRows = CanMonitorAnalysis::SignalDecoder::makeDetailRows(selectedCanId, state.lastFrame, m_signalMessages, m_modelEnabled);
+            m_cachedValueDetailKey = m_selectedValueKey;
+            m_cachedValueDetailCanId = selectedCanId;
             m_cachedValueDetailSource = state.lastSource;
             m_cachedValueDetailFingerprint = fingerprint;
             m_cachedValueDetailModelEnabled = m_modelEnabled;
@@ -9452,6 +10915,11 @@ void AppController::refreshValueDetails() {
 }
 
 void AppController::refreshAlarmRows() {
+    CanMonitorPerf::ScopedProbe probe("model.refresh_alarm_rows", m_alarmModel.count(), 7000);
+    if (liveAnalysisSnapshotReady()) {
+        refreshAlarmRowsFromAnalysisSnapshot();
+        return;
+    }
     if (m_alarmViewHeld) return;
 
     auto& sourceAlarmGroups = activeAlarmGroups();

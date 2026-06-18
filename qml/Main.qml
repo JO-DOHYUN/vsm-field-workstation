@@ -320,6 +320,16 @@ ApplicationWindow {
                     Components.SafeButton { text: "포트 새로고침"; uiScale: root.uiScale; maxButtonWidth: Math.round(112 * root.uiScale); onClicked: appController.refreshPorts() }
                     Components.SafeButton { text: "연결"; uiScale: root.uiScale; maxButtonWidth: Math.round(64 * root.uiScale); onClicked: appController.connectPort(portCombo.currentText) }
                     Components.SafeButton { text: "해제"; uiScale: root.uiScale; maxButtonWidth: Math.round(64 * root.uiScale); onClicked: appController.disconnectPort() }
+                    Components.SafeButton {
+                        text: appController.debugGatewayActive ? "GW 끄기" : "GW 켜기"
+                        uiScale: root.uiScale
+                        checkable: true
+                        checked: appController.debugGatewayActive
+                        enabled: !appController.logRecordingActive && !appController.logStopping && !appController.logSaving && !appController.logPendingSave
+                        maxButtonWidth: Math.round(82 * root.uiScale)
+                        tipText: appController.debugGatewayStatus
+                        onClicked: appController.toggleDebugGateway(portCombo.currentText)
+                    }
                     Components.StatusBadge {
                         text: appController.transportModeText
                         kind: appController.transportMode === "typed" ? "ok" : "info"

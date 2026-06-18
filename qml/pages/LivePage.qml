@@ -38,20 +38,20 @@ Item {
     }
 
     function testLiveFrameCountText() {
-        return appController.liveFrameView.count + " / " + appController.liveFrames.count
+        return appController.rawFrameTable.count + " / " + appController.rawFrameTable.totalRows
     }
 
     function testLiveFilterText() {
-        return appController.liveFrameView.idFilter
+        return appController.rawFrameTable.idFilter
     }
 
     function testLiveBusFilter() {
-        return appController.liveFrameView.busFilter
+        return appController.rawFrameTable.busFilter
     }
 
     function testSetLiveBusFilter(bus) {
-        appController.liveFrameView.busFilter = bus
-        return appController.liveFrameView.busFilter
+        appController.rawFrameTable.busFilter = bus
+        return appController.rawFrameTable.busFilter
     }
 
     function testLiveLogTargetPreview() {
@@ -80,10 +80,10 @@ Item {
     }
 
     Connections {
-        target: appController.liveFrameView
+        target: appController.rawFrameTable
         function onCountChanged() {
             if (autoFollow && liveList.count > 0)
-                liveList.positionViewAtBeginning()
+                liveList.positionViewAtEnd()
         }
     }
 
@@ -110,7 +110,7 @@ Item {
                         color: appController.liveUiPaused ? "#b45309" : "#15803d"
                         Layout.preferredWidth: Math.round(90 * uiScale)
                     }
-                    Components.SafeText { text: "표시: " + appController.liveFrameView.count + " / 원본: " + appController.liveFrames.count; color: "#5b6673"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(12 * uiScale); Layout.preferredWidth: Math.round(160 * uiScale); horizontalAlignment: Text.AlignRight }
+                    Components.SafeText { text: "Raw: " + appController.rawFrameTable.count + " / truth " + appController.rawFrameTable.totalRows; color: "#5b6673"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(12 * uiScale); Layout.preferredWidth: Math.round(190 * uiScale); horizontalAlignment: Text.AlignRight }
                 }
 
                 Components.FlowToolbar {
@@ -145,31 +145,31 @@ Item {
                         uiScale: liveRoot.uiScale
                         maxButtonWidth: Math.round(64 * uiScale)
                         checkable: true
-                        checked: appController.liveFrameView.busFilter < 0
-                        onClicked: appController.liveFrameView.busFilter = -1
+                        checked: appController.rawFrameTable.busFilter < 0
+                        onClicked: appController.rawFrameTable.busFilter = -1
                     }
                     Components.SafeButton {
                         text: "버스 0"
                         uiScale: liveRoot.uiScale
                         maxButtonWidth: Math.round(74 * uiScale)
                         checkable: true
-                        checked: appController.liveFrameView.busFilter === 0
-                        onClicked: appController.liveFrameView.busFilter = 0
+                        checked: appController.rawFrameTable.busFilter === 0
+                        onClicked: appController.rawFrameTable.busFilter = 0
                     }
                     Components.SafeButton {
                         text: "버스 1"
                         uiScale: liveRoot.uiScale
                         maxButtonWidth: Math.round(74 * uiScale)
                         checkable: true
-                        checked: appController.liveFrameView.busFilter === 1
-                        onClicked: appController.liveFrameView.busFilter = 1
+                        checked: appController.rawFrameTable.busFilter === 1
+                        onClicked: appController.rawFrameTable.busFilter = 1
                     }
                     TextField {
                         width: Math.round(190 * uiScale)
                         placeholderText: "ID 필터 (예: 0x117,118)"
-                        text: appController.liveFrameView.idFilter
+                        text: appController.rawFrameTable.idFilter
                         selectByMouse: true
-                        onTextEdited: appController.liveFrameView.idFilter = text
+                        onTextEdited: appController.rawFrameTable.idFilter = text
                     }
                     Components.SafeCheckBox {
                         text: "자동 따라가기"
@@ -177,6 +177,16 @@ Item {
                         maxControlWidth: Math.round(118 * uiScale)
                         checked: autoFollow
                         onToggled: autoFollow = checked
+                    }
+                    Components.SafeButton {
+                        text: "최신으로"
+                        uiScale: liveRoot.uiScale
+                        maxButtonWidth: Math.round(84 * uiScale)
+                        enabled: liveList.count > 0
+                        onClicked: {
+                            autoFollow = true
+                            liveList.positionViewAtEnd()
+                        }
                     }
                 }
 
@@ -319,10 +329,11 @@ Item {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Components.SafeText { text: "최근 라이브 프레임"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11.0 * uiScale); font.bold: true; color: "#243447"; Layout.preferredWidth: Math.round(120 * uiScale) }
+                    Components.SafeText { text: "Raw Tail · 실제 순서"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11.0 * uiScale); font.bold: true; color: "#243447"; Layout.preferredWidth: Math.round(150 * uiScale) }
+                    Components.SafeText { text: appController.rawFrameTable.summary; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.fillWidth: true }
                     Item { Layout.fillWidth: true }
                     Components.SafeText {
-                        text: appController.liveUiPaused ? "스크롤/검토용 정지 상태" : (appController.liveFrameView.idFilter === "" && appController.liveFrameView.busFilter < 0 ? "실시간 수신 중" : "실시간 수신 중 · 필터 적용")
+                        text: appController.liveUiPaused ? "화면 정지" : (appController.rawFrameTable.idFilter === "" && appController.rawFrameTable.busFilter < 0 ? "truth tail" : "truth tail · 필터")
                         color: appController.liveUiPaused ? "#b45309" : "#15803d"
                         uiScale: liveRoot.uiScale
                         basePixelSize: Math.round(10.6 * uiScale)
@@ -340,7 +351,7 @@ Item {
                     reuseItems: true
                     cacheBuffer: 220
                     boundsBehavior: Flickable.StopAtBounds
-                    model: appController.liveFrameView
+                    model: appController.rawFrameTable
                     onMovementStarted: autoFollow = false
                     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AlwaysOn; active: true }
                     WheelHandler {
@@ -356,7 +367,7 @@ Item {
                         visible: liveList.count === 0
                         z: 10
                         title: "수신 프레임 없음"
-                        message: appController.connected ? "포트는 열렸지만 아직 표시 조건에 맞는 CAN 프레임이 없습니다. 버스/ID 필터를 확인하세요." : "포트를 연결하면 bus0/bus1 수신 프레임이 여기에 표시됩니다."
+                        message: appController.connected ? "포트는 열렸지만 아직 표시 조건에 맞는 CAN 프레임이 없습니다. 버스/ID 필터를 확인하세요." : "포트를 연결하면 truth ledger 기반 raw 프레임이 여기에 표시됩니다."
                         badgeText: appController.connected ? "연결됨" : "미연결"
                         kind: appController.connected ? "warn" : "info"
                         uiScale: liveRoot.uiScale
@@ -365,6 +376,7 @@ Item {
                     delegate: Rectangle {
                         required property int index
                         required property string idText
+                        required property string ledgerSeq
                         required property int bus
                         required property int dlc
                         required property string dataHex
@@ -381,12 +393,13 @@ Item {
                             anchors.margins: 6
                             spacing: 8
                             Rectangle {
-                                Layout.preferredWidth: 70
+                                Layout.preferredWidth: 72
                                 Layout.preferredHeight: Math.round(20 * uiScale)
                                 radius: 6
                                 color: "#e8f0ff"
                                 Components.SafeText { anchors.fill: parent; anchors.margins: 3; text: idText; color: "#1e40af"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.bold: true; horizontalAlignment: Text.AlignHCenter }
                             }
+                            Components.SafeText { text: "#" + ledgerSeq; color: "#64748b"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.2 * uiScale); Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight }
                             Components.SafeText { text: "버스 " + bus; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 54 }
                             Components.SafeText { text: "DLC " + dlc; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 48 }
                             Components.SafeText { text: dataHex; color: "#0f172a"; Layout.fillWidth: true; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.family: "Consolas" }

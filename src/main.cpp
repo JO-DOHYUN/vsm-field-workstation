@@ -12,6 +12,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QHostAddress>
+#include <QJsonArray>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTimer>
@@ -60,7 +61,13 @@ QJsonObject controllerStatus(const AppController& controller) {
     out.insert(QStringLiteral("log_records"), QString::number(controller.logRecordedFrameCount()));
     out.insert(QStringLiteral("transport_level"), controller.transportDiagnosticsLevel());
     out.insert(QStringLiteral("transport_summary"), controller.transportDiagnosticsSummary());
+    out.insert(QStringLiteral("analysis_runtime_level"), controller.analysisRuntimeLevel());
+    out.insert(QStringLiteral("analysis_runtime_summary"), controller.analysisRuntimeSummary());
     out.insert(QStringLiteral("live_stats_summary"), controller.liveStatsSummary());
+    out.insert(QStringLiteral("graph_source_summary"), controller.graphSourceSummary());
+    out.insert(QStringLiteral("graph_range_summary"), controller.graphRangeSummary());
+    out.insert(QStringLiteral("graph_series_count"), controller.graphSeries().size());
+    out.insert(QStringLiteral("graph_overview_series_count"), controller.graphOverviewSeries().size());
     out.insert(QStringLiteral("control_armed"), controller.controlArmed());
     out.insert(QStringLiteral("control_ready"), controller.controlReady());
     out.insert(QStringLiteral("control_verdict"), controller.controlActionVerdict());
@@ -70,6 +77,10 @@ QJsonObject controllerStatus(const AppController& controller) {
     out.insert(QStringLiteral("control_last_write"), controller.controlLastWriteSummary());
     out.insert(QStringLiteral("control_last_ack"), controller.controlLastAckSummary());
     out.insert(QStringLiteral("control_last_audit"), controller.controlLastAuditSummary());
+    out.insert(QStringLiteral("verification_active"), controller.verificationRunnerActive());
+    out.insert(QStringLiteral("verification_status"), controller.verificationRunnerStatus());
+    out.insert(QStringLiteral("verification_artifact"), controller.verificationRunnerArtifactPath());
+    out.insert(QStringLiteral("performance_summary"), controller.performanceSummary());
     return out;
 }
 
@@ -133,6 +144,64 @@ std::unique_ptr<QTcpServer> installHilControlServer(AppController* controller, i
                         const QString key = request.value(QStringLiteral("key")).toString();
                         if (!key.isEmpty()) controller->setPanelActive(key, true);
                         response.insert(QStringLiteral("accepted"), QStringLiteral("panel"));
+                    } else if (command == QStringLiteral("set_model")) {
+                        const QString path = request.value(QStringLiteral("path")).toString();
+                        const bool bundled = request.value(QStringLiteral("bundled")).toBool(false);
+                        if (bundled) {
+                            controller->useBundledModel();
+                            response.insert(QStringLiteral("accepted"), QStringLiteral("set_model:bundled"));
+                        } else if (!path.isEmpty()) {
+                            controller->setRulesPath(path);
+                            response.insert(QStringLiteral("accepted"), QStringLiteral("set_model:path"));
+                        } else {
+                            response.insert(QStringLiteral("ok"), false);
+                            response.insert(QStringLiteral("error"), QStringLiteral("set_model requires path or bundled=true"));
+                        }
+                    } else if (command == QStringLiteral("load_replay")) {
+                        const QString path = request.value(QStringLiteral("path")).toString();
+                        if (path.isEmpty()) {
+                            response.insert(QStringLiteral("ok"), false);
+                            response.insert(QStringLiteral("error"), QStringLiteral("load_replay path is required"));
+                        } else {
+                            controller->loadReplay(path);
+                            response.insert(QStringLiteral("accepted"), QStringLiteral("load_replay"));
+                        }
+                    } else if (command == QStringLiteral("replay_play")) {
+                        controller->playReplay(request.value(QStringLiteral("speed")).toDouble(controller->replaySpeed()));
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("replay_play"));
+                    } else if (command == QStringLiteral("replay_pause")) {
+                        controller->pauseReplay();
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("replay_pause"));
+                    } else if (command == QStringLiteral("replay_step")) {
+                        controller->stepReplay(request.value(QStringLiteral("delta")).toInt(1));
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("replay_step"));
+                    } else if (command == QStringLiteral("set_graph_window")) {
+                        controller->setGraphWindowMs(request.value(QStringLiteral("ms")).toInt(controller->graphWindowMs()));
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("set_graph_window"));
+                    } else if (command == QStringLiteral("set_graph_selection")) {
+                        QStringList keys;
+                        const QJsonValue keysValue = request.value(QStringLiteral("keys"));
+                        if (keysValue.isArray()) {
+                            const QJsonArray arr = keysValue.toArray();
+                            for (const QJsonValue& value : arr) {
+                                const QString key = value.toString().trimmed();
+                                if (!key.isEmpty()) keys << key;
+                            }
+                        } else {
+                            const QString key = keysValue.toString().trimmed();
+                            if (!key.isEmpty()) keys << key;
+                        }
+                        controller->setGraphSelectedKeys(keys);
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("set_graph_selection"));
+                    } else if (command == QStringLiteral("set_filters")) {
+                        if (request.contains(QStringLiteral("timing_id"))) controller->setTimingFilterId(request.value(QStringLiteral("timing_id")).toString());
+                        if (request.contains(QStringLiteral("timing_severity"))) controller->setTimingFilterSeverity(request.value(QStringLiteral("timing_severity")).toString());
+                        if (request.contains(QStringLiteral("value_id"))) controller->setValueFilterId(request.value(QStringLiteral("value_id")).toString());
+                        if (request.contains(QStringLiteral("value_severity"))) controller->setValueFilterSeverity(request.value(QStringLiteral("value_severity")).toString());
+                        if (request.contains(QStringLiteral("alarm_id"))) controller->setAlarmFilterId(request.value(QStringLiteral("alarm_id")).toString());
+                        if (request.contains(QStringLiteral("alarm_severity"))) controller->setAlarmFilterSeverity(request.value(QStringLiteral("alarm_severity")).toString());
+                        if (request.contains(QStringLiteral("alarm_text"))) controller->setAlarmFilterText(request.value(QStringLiteral("alarm_text")).toString());
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("set_filters"));
                     } else if (command == QStringLiteral("snapshot")) {
                         const QString path = request.value(QStringLiteral("path")).toString();
                         if (path.isEmpty()) {
@@ -142,6 +211,17 @@ std::unique_ptr<QTcpServer> installHilControlServer(AppController* controller, i
                             controller->exportAnalysisSnapshot(path);
                             response.insert(QStringLiteral("accepted"), QStringLiteral("snapshot"));
                         }
+                    } else if (command == QStringLiteral("set_debug_profiler")) {
+                        controller->setDebugProfilerEnabled(request.value(QStringLiteral("enabled")).toBool(true));
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("set_debug_profiler"));
+                    } else if (command == QStringLiteral("run_verification")) {
+                        const QString scenario = request.value(QStringLiteral("scenario")).toString(QStringLiteral("attached_load_30s"));
+                        const QString portName = request.value(QStringLiteral("port")).toString();
+                        controller->runVerificationScenario(scenario, portName);
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("run_verification"));
+                    } else if (command == QStringLiteral("stop_verification")) {
+                        controller->stopVerificationRunner();
+                        response.insert(QStringLiteral("accepted"), QStringLiteral("stop_verification"));
                     } else if (command == QStringLiteral("control_arm")) {
                         controller->setControlArmed(request.value(QStringLiteral("armed")).toBool(true));
                         response.insert(QStringLiteral("accepted"), QStringLiteral("control_arm"));

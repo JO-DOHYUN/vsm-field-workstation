@@ -20,11 +20,12 @@
 
 ## Current Verified State
 - Current workspace Release configure/build passed with Qt 6.10.2 + MSVC2022 when run through `VsDevCmd.bat`.
-- Current workspace `ctest --test-dir out/build/x64-Release --output-on-failure` passed: 22/22 after the latest model-pack control policy/profile slice and live bus0/bus1 high-load path optimization.
-- Current workspace Release exe startup smoke passed after project-local `replay_data` path migration, Storage/Replay/Evidence/Control/Transport runtime boundary split, ControlPage operator evidence workflow hardening, typed replay/logging diagnostics completion, Live/Replay/Control/Graph QML state-probe hardening, ControlRuntime operator state split, TransportSession live diagnostics, model-pack backed control policy/profile gating, and live typed parser/UI queue optimization.
-- Latest portable Field RC generated and portable startup smoke passed: `out/build/x64-Release/portable_field_rc_20260604`; manifest package id `field-rc-20260604-workspace-direct-edit`.
+- Current workspace `ctest --test-dir out/build/x64-Release --output-on-failure` passed: 28/28 after the analysis truth stress verification slice, model-pack control policy/profile slice, live bus0/bus1 high-load path optimization, and debug/profiler/verification formalization slice.
+- Current workspace Release exe startup smoke passed after project-local `replay_data` path migration, Storage/Replay/Evidence/Control/Transport runtime boundary split, ControlPage operator evidence workflow hardening, typed replay/logging diagnostics completion, Live/Replay/Control/Graph QML state-probe hardening, ControlRuntime operator state split, TransportSession live diagnostics, model-pack backed control policy/profile gating, live typed parser/UI queue optimization, analysis truth stress verification, and debug/profiler/verification formalization.
+- Latest portable Field RC generated and portable startup smoke passed: `out/build/x64-Release/portable_field_rc_20260604`; manifest package id `field-rc-20260604-workspace-direct-edit`. Debug/verification deploy check also passed at `out/build/x64-Release/portable_debug_verify_check`.
 - CSM PlatformIO build passed for `portenta_h7_m7_mid_mcp2515_j4_dual_csm`.
 - GitHub Actions `platform-ci` passed on commit `b17e1c4`: `csm-firmware`, `vsm-qt`, portable deploy smoke.
+- High-load live truth/UI boundary 1차 구현 is in place: display projection remains bounded, truth snapshot flush no longer hard-cuts frames, and live/replay analysis state keys are `bus + canId + ext + rtr` so performance work reduces display volume without changing timing/value/alarm/DLC/control evidence. See `docs/architecture/VSM_TRUTH_FIRST_LOAD_ARCHITECTURE_KO.md`.
 - Typed foundation exists: parser, records, storage, typed replay reader, typed replay projection into legacy analysis frames.
 - Replay now accepts both legacy `.bin` and typed capture sessions (`typed_capture_*.typed/capture.stream`), including typed session state, timeline, meta/index/events, type counts, seq gaps, partial/corrupt capture diagnostics, CAN RX projection checks, operator verdict, and DLC preservation verdict.
 - Control foundation exists: heartbeat/session, 0x503 and 0x510/0x512/0x511/0x513 command burst, slew limiter, host TX queue, evidence separation, operator ready/block summary, ControlRuntime checklist/verdict roles, model-pack `control_policy`/bus role rules/limits, and ControlPage state probes that keep ACK separate from actual `CAN_TX_RAW` success.
@@ -40,9 +41,12 @@
 - Do not add temporary `AppController` responsibilities that already belong to Storage/Replay/Transport/Control runtimes without an explicit boundary plan in the same slice.
 
 ## Immediate Next Work
-- Program RC status: Windows VSM portable RC is current at `portable_field_rc_20260604`; code/function closure is complete except field-only validation.
-- Documentation status: `START_HERE_KO`, completion plan, architecture note, release checklist, Android feasibility, and field runbook are aligned to the current 22/22 verified state.
-- Field-only follow-up: fresh HIL/vehicle bus0/bus1 stability, graph real-data manual smoke, and control-policy validation/result archive remain outside automatic program completion.
+- Program RC status: prior Windows VSM portable RC exists at `portable_field_rc_20260604`; current workspace now has truth-first live analysis boundary plus analysis truth stress verification, verified by Release build, full 27/27 ctest, and exe startup smoke. Fresh HIL/vehicle run is still required before field-final claim.
+- Documentation status: `START_HERE_KO`, completion plan, architecture note, release checklist, Android feasibility, field runbook, and analysis truth stress HIL runbook are aligned to the current 27/27 verified state.
+- Immediate architecture state: `LiveTruthRuntime` owns worker-side truth snapshot/coalescing diagnostics, `TransportSession` exposes separate `live_truth` and `live_projection` rows, debug gateway mode is implemented through `scripts/vsm_debug_gateway.py`, and typed capture storage writes are buffered while preserving `capture.stream`/`capture.index` format.
+- Debug/verification state: `PerformanceProbeRuntime` provides debug-only module timing/backlog counters, Settings exposes a debug/profiler/verify panel, and `scripts/vsm_verify.py` is the official project-local launcher catalog for user-route HIL, analysis-truth HIL, control smoke, debug gateway, and latest-capture reporting.
+- Latest HIL status: 2026-06-15 analysis truth stress HIL passed at PCAN/Kvaser `1000fps + 1000fps` for 30s after fixing live graph truth history and snapshot export. Artifacts: `artifacts/vsm_analysis_truth_hil/vsm_analysis_truth_20260615_221209`; capture: `replay_data/logs/vsm_analysis_truth_20260615_221209.typed`.
+- Field-only follow-up: fresh vehicle bus0/bus1 stability, graph real-data manual smoke, control-policy validation/result archive, and CSM firmware FIFO/drain improvement for `1500fps + 1500fps` remain outside automatic VSM completion unless explicitly taken as the next hardware/firmware slice.
 
 ## Read Next
 - New account entry: [[START_HERE_KO]]
@@ -51,6 +55,7 @@
 - Completion plan: [[docs/COMPLETION_TO_RELEASE_PLAN_KO]]
 - Production plan: [[docs/PLAN]]
 - VSM architecture: [[docs/architecture/VSM_WORKSTATION_ARCHITECTURE_KO]]
+- Truth-first load architecture: [[docs/architecture/VSM_TRUTH_FIRST_LOAD_ARCHITECTURE_KO]]
 - VMS runtime split: [[docs/architecture/VMS_ARCHITECTURE_KO]]
 - Typed protocol: [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]
 - Control evidence contract: [[docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO]]

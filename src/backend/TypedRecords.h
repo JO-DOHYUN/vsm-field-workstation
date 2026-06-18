@@ -14,10 +14,13 @@ inline constexpr qsizetype kTypedTransportHeaderSize = 7;
 inline constexpr qsizetype kTypedTransportFrameOverhead = 2 + kTypedTransportHeaderSize + 2;
 inline constexpr quint16 kTypedTransportMaxPayloadLength = 4096;
 inline constexpr qsizetype kTypedCanRawPayloadSize = 30;
+inline constexpr qsizetype kTypedCanRxSegmentHeaderSize = 32;
+inline constexpr qsizetype kTypedCanRxSegmentEntrySize = 30;
 inline constexpr qsizetype kTypedAdcSamplePayloadSize = 44;
 inline constexpr qsizetype kTypedControlAckPayloadSize = 28;
 inline constexpr qsizetype kTypedBoardEventPayloadSize = 16;
 inline constexpr qsizetype kTypedBoardHealthPayloadSize = 52;
+inline constexpr qsizetype kTypedBoardHealthExtendedPayloadSize = 192;
 inline constexpr qsizetype kTypedCapabilityPayloadSize = 36;
 inline constexpr qsizetype kTypedCapabilityV2PayloadSize = 80;
 inline constexpr qsizetype kTypedCapabilityV3PayloadSize = 112;
@@ -39,7 +42,8 @@ enum class TypedRecordType : quint8 {
     Capability = 9,
     HostCanTxRequest = 10,
     HostHeartbeat = 11,
-    HostControlSession = 12
+    HostControlSession = 12,
+    CanRxSegment = 16
 };
 
 struct TypedFrameHeader {
@@ -74,6 +78,28 @@ struct TypedCanRawRecord {
     quint8 data[8] = {0};
     quint32 total = 0;
     quint32 droppedOrFailed = 0;
+};
+
+struct TypedCanRxSegmentHeader {
+    quint64 segmentSeq = 0;
+    quint64 firstCaptureSeq = 0;
+    quint16 frameCount = 0;
+    quint8 entrySize = 0;
+    quint8 flags = 0;
+    quint32 droppedBeforeSegment = 0;
+    quint32 fifoBeforeSegment = 0;
+};
+
+struct TypedCanRxSegmentEntry {
+    quint64 captureSeq = 0;
+    quint64 monoUs = 0;
+    quint32 canIdFlags = 0;
+    quint32 canId = 0;
+    bool extended = false;
+    bool rtr = false;
+    quint8 dlc = 0;
+    quint8 bus = 0;
+    quint8 data[8] = {0};
 };
 
 struct TypedAdcSampleRecord {
@@ -125,6 +151,15 @@ struct TypedBoardHealthRecord {
     quint8 encoderTimerOk = 0;
     quint8 flags = 0;
     quint32 faultFlags = 0;
+    bool hasExtendedTransportCounters = false;
+    quint32 serialEnqueueFailTotal = 0;
+    quint32 serialRingClearTotal = 0;
+    quint32 serialRingClearedBytesTotal = 0;
+    quint32 serialBackpressureTotal = 0;
+    quint32 serialTxHighWaterBytes = 0;
+    quint32 sharedCanQueueHighWater = 0;
+    quint32 mcpDrainBudgetHitTotal = 0;
+    quint32 canSegmentEnqueueFailTotal = 0;
 };
 
 struct TypedCapabilityBusDescriptor {
@@ -187,6 +222,10 @@ QString typedRecordTypeName(quint8 recordType);
 quint64 typedRecordMonoUs(const TypedRecord& record);
 
 std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record);
+std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record);
+std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record, qsizetype frameIndex);
+QVector<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntries(const TypedRecord& record);
+quint64 typedCanRxFrameCount(const TypedRecord& record);
 std::optional<TypedAdcSampleRecord> decodeTypedAdcSample(const TypedRecord& record);
 std::optional<TypedControlAckRecord> decodeTypedControlAck(const TypedRecord& record);
 std::optional<TypedBoardEventRecord> decodeTypedBoardEvent(const TypedRecord& record);

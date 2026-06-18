@@ -47,6 +47,20 @@ target_link_libraries(test_ui_state_store PRIVATE
 )
 add_test(NAME ui_state_store COMMAND test_ui_state_store)
 
+add_executable(test_performance_probe_runtime
+    test_performance_probe_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/perf/PerformanceProbeRuntime.cpp
+)
+target_include_directories(test_performance_probe_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_performance_probe_runtime PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME performance_probe_runtime COMMAND test_performance_probe_runtime)
+
 add_executable(test_file_persistence
     test_file_persistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -135,6 +149,9 @@ add_executable(test_transport_runtime_foundation
     ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ControlCommandEncoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlSlewLimiter.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlCycleRuntime.cpp
@@ -144,6 +161,7 @@ add_executable(test_transport_runtime_foundation
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -158,6 +176,7 @@ target_include_directories(test_transport_runtime_foundation PRIVATE
 target_link_libraries(test_transport_runtime_foundation PRIVATE
     Qt6::Core
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME transport_runtime_foundation COMMAND test_transport_runtime_foundation)
@@ -241,6 +260,9 @@ add_executable(test_serial_worker_typed_ingest
     ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ControlCommandEncoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlSlewLimiter.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlCycleRuntime.cpp
@@ -250,6 +272,7 @@ add_executable(test_serial_worker_typed_ingest
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedReplayReader.cpp
@@ -262,6 +285,7 @@ target_include_directories(test_serial_worker_typed_ingest PRIVATE
 target_link_libraries(test_serial_worker_typed_ingest PRIVATE
     Qt6::Core
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME serial_worker_typed_ingest COMMAND test_serial_worker_typed_ingest)
@@ -274,6 +298,9 @@ add_executable(test_recorder_flow
     ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ControlCommandEncoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlSlewLimiter.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/control/ControlCycleRuntime.cpp
@@ -283,6 +310,7 @@ add_executable(test_recorder_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
@@ -304,6 +332,7 @@ target_compile_definitions(test_recorder_flow PRIVATE
 target_link_libraries(test_recorder_flow PRIVATE
     Qt6::Core
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME recorder_flow COMMAND test_recorder_flow)
@@ -340,6 +369,56 @@ target_link_libraries(test_analysis_semantics PRIVATE
 )
 add_test(NAME analysis_semantics COMMAND test_analysis_semantics)
 
+add_executable(test_analysis_runtime_foundation
+    test_analysis_runtime_foundation.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+)
+target_include_directories(test_analysis_runtime_foundation PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_analysis_runtime_foundation PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME analysis_runtime_foundation COMMAND test_analysis_runtime_foundation)
+
+add_executable(test_analysis_runtime_truth_stress
+    test_analysis_runtime_truth_stress.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
+)
+target_include_directories(test_analysis_runtime_truth_stress PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_analysis_runtime_truth_stress PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME analysis_runtime_truth_stress COMMAND test_analysis_runtime_truth_stress fixtureTruthCoversTimingValueAlarmAndBusKeys)
+add_test(NAME typed_segment_analysis_parity COMMAND test_analysis_runtime_truth_stress typedSegmentAnalysisParity)
+
+add_executable(test_raw_ledger_runtime
+    test_raw_ledger_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
+)
+target_include_directories(test_raw_ledger_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_raw_ledger_runtime PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME raw_ledger_runtime COMMAND test_raw_ledger_runtime)
+
 add_executable(test_app_controller_replay_flow
     test_app_controller_replay_flow.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/BuildMetadata.cpp
@@ -350,12 +429,14 @@ add_executable(test_app_controller_replay_flow
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/LevelState.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/AlarmManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameListModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameFilterProxyModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/DetailListModel.cpp
@@ -366,6 +447,8 @@ add_executable(test_app_controller_replay_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -403,9 +486,11 @@ target_link_libraries(test_app_controller_replay_flow PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME app_controller_replay_flow COMMAND test_app_controller_replay_flow)
+add_test(NAME graph_truth_bucket_peak COMMAND test_app_controller_replay_flow graphTruthBucketPeakPreservesMinMax)
 
 add_executable(test_app_controller_log_flow
     test_app_controller_log_flow.cpp
@@ -417,12 +502,14 @@ add_executable(test_app_controller_log_flow
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/LevelState.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/AlarmManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameListModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameFilterProxyModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/DetailListModel.cpp
@@ -433,6 +520,8 @@ add_executable(test_app_controller_log_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -470,6 +559,7 @@ target_link_libraries(test_app_controller_log_flow PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME app_controller_log_flow COMMAND test_app_controller_log_flow)
@@ -484,12 +574,14 @@ add_executable(test_app_controller_analysis_source_flow
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/LevelState.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/AlarmManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameListModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameFilterProxyModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/DetailListModel.cpp
@@ -500,6 +592,8 @@ add_executable(test_app_controller_analysis_source_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -537,6 +631,7 @@ target_link_libraries(test_app_controller_analysis_source_flow PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME app_controller_analysis_source_flow COMMAND test_app_controller_analysis_source_flow)
@@ -551,12 +646,14 @@ add_executable(test_app_controller_export_snapshot
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/LevelState.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/AlarmManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameListModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameFilterProxyModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/DetailListModel.cpp
@@ -567,6 +664,8 @@ add_executable(test_app_controller_export_snapshot
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -604,6 +703,7 @@ target_link_libraries(test_app_controller_export_snapshot PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME app_controller_export_snapshot COMMAND test_app_controller_export_snapshot)
@@ -618,12 +718,14 @@ add_executable(test_qml_shell_smoke
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/LevelState.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/AlarmManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/PacketParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/Recorder.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameListModel.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RawFrameTableModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/SessionManager.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FrameFilterProxyModel.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/DetailListModel.cpp
@@ -634,6 +736,8 @@ add_executable(test_qml_shell_smoke
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -675,15 +779,34 @@ target_link_libraries(test_qml_shell_smoke PRIVATE
     Qt6::Quick
     Qt6::Qml
     Qt6::SerialPort
+    Qt6::Network
     Qt6::Test
 )
 add_test(NAME qml_shell_smoke COMMAND test_qml_shell_smoke)
+
+foreach(_can_monitor_perf_target IN ITEMS
+    test_transport_runtime_foundation
+    test_serial_worker_typed_ingest
+    test_recorder_flow
+    test_app_controller_replay_flow
+    test_app_controller_log_flow
+    test_app_controller_analysis_source_flow
+    test_app_controller_export_snapshot
+    test_qml_shell_smoke
+)
+    if (TARGET ${_can_monitor_perf_target})
+        target_sources(${_can_monitor_perf_target} PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/backend/perf/PerformanceProbeRuntime.cpp
+        )
+    endif()
+endforeach()
 
 if (WIN32)
     set(_can_monitor_test_env "PATH=${QT_BIN_DIR};$ENV{PATH}")
     set_tests_properties(packet_parser PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(model_pack_validator PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(ui_state_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(performance_probe_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(evidence_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
@@ -698,7 +821,12 @@ if (WIN32)
     set_tests_properties(recorder_flow PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(replay_engine PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(analysis_semantics PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(analysis_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(analysis_runtime_truth_stress PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(typed_segment_analysis_parity PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(raw_ledger_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(app_controller_replay_flow PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(graph_truth_bucket_peak PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(app_controller_log_flow PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(app_controller_analysis_source_flow PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(app_controller_export_snapshot PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

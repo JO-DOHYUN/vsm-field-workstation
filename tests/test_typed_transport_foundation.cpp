@@ -53,6 +53,32 @@ QByteArray makeCanPayload(quint64 monoUs = 2222, quint8 bus = 0, quint32 total =
     return payload;
 }
 
+QByteArray makeCanRxSegmentPayload() {
+    QByteArray payload;
+    payload.reserve(kTypedCanRxSegmentHeaderSize + 2 * kTypedCanRxSegmentEntrySize);
+    appendU64(payload, 7);
+    appendU64(payload, 100);
+    appendU16(payload, 2);
+    payload.append(char(kTypedCanRxSegmentEntrySize));
+    payload.append(char(0));
+    appendU32(payload, 0);
+    appendU32(payload, 0);
+    appendU32(payload, 0);
+
+    auto appendEntry = [&payload](quint64 captureSeq, quint64 monoUs, quint8 bus, quint32 id, QByteArray data) {
+        appendU64(payload, captureSeq);
+        appendU64(payload, monoUs);
+        appendU32(payload, id);
+        payload.append(char(data.size()));
+        payload.append(char(bus));
+        payload.append(data.left(8));
+        payload.append(QByteArray(8 - data.left(8).size(), char(0)));
+    };
+    appendEntry(100, 10'000, 0, 0x620, QByteArray::fromHex("5000000000000000"));
+    appendEntry(101, 10'500, 1, 0x720, QByteArray::fromHex("4B01000000000000"));
+    return payload;
+}
+
 QByteArray makeAdcPayload() {
     QByteArray payload;
     payload.reserve(kTypedAdcSamplePayloadSize);
@@ -188,6 +214,34 @@ private slots:
         QCOMPARE(parser.bufferedBytes(), qsizetype(0));
     }
 
+    void parsesCanRxSegmentRecords() {
+        const QByteArray frame = makeTypedFrame(TypedRecordType::CanRxSegment, 55, makeCanRxSegmentPayload());
+        TypedTransportParser parser;
+        parser.append(frame);
+
+        const auto record = parser.takeOne();
+        QVERIFY(record.has_value());
+        QCOMPARE(record->header.recordType, static_cast<quint8>(TypedRecordType::CanRxSegment));
+        const auto header = decodeTypedCanRxSegmentHeader(*record);
+        QVERIFY(header.has_value());
+        QCOMPARE(header->segmentSeq, quint64(7));
+        QCOMPARE(header->firstCaptureSeq, quint64(100));
+        QCOMPARE(header->frameCount, quint16(2));
+        QCOMPARE(typedCanRxFrameCount(*record), quint64(2));
+
+        const auto first = decodeTypedCanRxSegmentEntry(*record, 0);
+        const auto second = decodeTypedCanRxSegmentEntry(*record, 1);
+        QVERIFY(first.has_value());
+        QVERIFY(second.has_value());
+        QCOMPARE(first->captureSeq, quint64(100));
+        QCOMPARE(first->canId, quint32(0x620));
+        QCOMPARE(first->bus, quint8(0));
+        QCOMPARE(second->captureSeq, quint64(101));
+        QCOMPARE(second->canId, quint32(0x720));
+        QCOMPARE(second->bus, quint8(1));
+        QCOMPARE(QByteArray(reinterpret_cast<const char*>(second->data), 8), QByteArray::fromHex("4B01000000000000"));
+    }
+
     void resynchronizesAfterGarbageAndBadCrc() {
         QByteArray bad = makeTypedFrame(TypedRecordType::CanRxRaw, 2, makeCanPayload());
         bad[18] = char(quint8(bad[18]) ^ 0x55);
@@ -256,6 +310,7 @@ private slots:
         QVERIFY(QFileInfo::exists(paths.indexFinal));
         QVERIFY(QFileInfo::exists(paths.metaFinal));
         QVERIFY(QFileInfo::exists(paths.eventsFinal));
+        QVERIFY(QFileInfo::exists(paths.diagnosticsFinal));
         QVERIFY(!QFileInfo::exists(paths.streamPart));
         QVERIFY(!QFileInfo::exists(paths.indexPart));
 
@@ -273,9 +328,49 @@ private slots:
         QVERIFY(metaDoc.isObject());
         QCOMPARE(metaDoc.object().value(QStringLiteral("format")).toString(), QStringLiteral("typed-evidence-stream-v1"));
         QCOMPARE(metaDoc.object().value(QStringLiteral("board_profile")).toString(), QStringLiteral("portenta-typed-v1"));
+        QCOMPARE(metaDoc.object().value(QStringLiteral("diagnostics_file")).toString(), QStringLiteral("capture.diagnostics.json"));
+        const QJsonDocument diagnosticsDoc = QJsonDocument::fromJson(readFileBytes(paths.diagnosticsFinal));
+        QVERIFY(diagnosticsDoc.isObject());
+        QCOMPARE(diagnosticsDoc.object().value(QStringLiteral("format")).toString(), QStringLiteral("typed-capture-diagnostics-v1"));
         QVERIFY(readFileBytes(paths.eventsFinal).contains("test_note"));
         QCOMPARE(storage.recordCount(), quint64(2));
         QCOMPARE(storage.bytesWritten(), quint64(stream.size()));
+    }
+
+    void decodesExtendedBoardHealthTransportCounters() {
+        QByteArray payload(kTypedBoardHealthExtendedPayloadSize, char(0));
+        auto putU32 = [&payload](qsizetype offset, quint32 value) {
+            payload[offset + 0] = char(value & 0xFF);
+            payload[offset + 1] = char((value >> 8) & 0xFF);
+            payload[offset + 2] = char((value >> 16) & 0xFF);
+            payload[offset + 3] = char((value >> 24) & 0xFF);
+        };
+        putU32(8, 1234);
+        putU32(12, 2);
+        putU32(16, 3);
+        putU32(160, 4);
+        putU32(164, 5);
+        putU32(168, 36'772'683u);
+        putU32(172, 6);
+        putU32(176, 32768);
+        putU32(180, 32);
+        putU32(184, 7);
+        putU32(188, 8);
+
+        TypedRecord record;
+        record.header.recordType = static_cast<quint8>(TypedRecordType::BoardHealth);
+        record.header.payloadLength = quint16(payload.size());
+        record.payload = payload;
+
+        const auto health = decodeTypedBoardHealth(record);
+        QVERIFY(health.has_value());
+        QVERIFY(health->hasExtendedTransportCounters);
+        QCOMPARE(health->canRxTotal, quint32(1234));
+        QCOMPARE(health->serialEnqueueFailTotal, quint32(4));
+        QCOMPARE(health->serialRingClearTotal, quint32(5));
+        QCOMPARE(health->serialRingClearedBytesTotal, quint32(36'772'683u));
+        QCOMPARE(health->serialBackpressureTotal, quint32(6));
+        QCOMPARE(health->canSegmentEnqueueFailTotal, quint32(8));
     }
 };
 

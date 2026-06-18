@@ -125,6 +125,7 @@ private slots:
         QCOMPARE(sessionReader.summary().metaPresent, true);
         QCOMPARE(sessionReader.summary().indexPresent, true);
         QCOMPARE(sessionReader.summary().eventsPresent, true);
+        QCOMPARE(sessionReader.summary().diagnosticsPresent, true);
         QCOMPARE(sessionReader.summary().indexEntryCount, quint64(2));
         QCOMPARE(sessionReader.summary().indexMismatchCount, quint64(0));
         QCOMPARE(sessionReader.summary().indexFirstOffset, quint64(0));
@@ -132,6 +133,8 @@ private slots:
         QCOMPARE(sessionReader.summary().indexLastMonoUs, quint64(123476));
         QCOMPARE(sessionReader.summary().durationUs, quint64(20));
         QCOMPARE(sessionReader.summary().captureState, QStringLiteral("FINALIZED"));
+        QCOMPARE(sessionReader.summary().diagnosticsFormat, QStringLiteral("typed-capture-diagnostics-v1"));
+        QVERIFY(sessionReader.summary().diagnosticSummary.contains(QStringLiteral("diagnostics ok")));
     }
 
     void reportsCrcFaultAndResynchronizesToNextValidFrame() {
@@ -224,6 +227,7 @@ private slots:
         QCOMPARE(reader.summary().metaPresent, true);
         QCOMPARE(reader.summary().indexPresent, true);
         QCOMPARE(reader.summary().eventsPresent, true);
+        QCOMPARE(reader.summary().diagnosticsPresent, false);
         QCOMPARE(reader.summary().indexEntryCount, quint64(1));
         QCOMPARE(reader.summary().indexPart, true);
         QVERIFY(reader.summary().indexMismatchCount > 0);

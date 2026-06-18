@@ -1,39 +1,65 @@
 # VSM High-Load User-Route HIL
 
-이 runbook은 direct COM reader가 아니라 실제 VSM 앱 경로를 검증한다.
+## Goal
 
-## 목적
+This runbook verifies the actual VSM user route, not a direct COM reader.
 
-- VSM exe 실행, COM 연결, VSM 로그 시작/중지, 최종 `capture.stream` 생성까지 한 번에 확인한다.
-- PCAN/Kvaser 송출 sequence 비교는 VSM이 만든 최종 capture만 대상으로 한다.
-- projection sampling/drop은 UI 진단으로만 판단하고, capture truth와 섞지 않는다.
+PASS requires VSM exe startup, VSM control-channel connect/start/stop logging, final VSM
+`capture.stream` parse, and optional PCAN/Kvaser sequence comparison.
 
-## 준비
+## Required Setup
 
 - VSM Release exe: `out/build/x64-Release/can_monitor_qml_reboot.exe`
-- CSM: `COM7` typed evidence stream
-- Python: `py -3` 사용. `python`은 WindowsApps stub일 수 있으므로 쓰지 않는다.
-- API load gate에는 PCANBasic.dll, Kvaser canlib32.dll, 각 장치 bus-on 상태가 필요하다.
+- CSM typed evidence stream: default `COM7`
+- Python: use `py -3`
+- Optional high-load senders:
+  - PCANBasic.dll available
+  - Kvaser canlib32.dll available
+  - PCAN/Kvaser channels bus-on capable
 
-## 실행
+## Normal VSM Route
 
-외부 송출 앱만 켜고 VSM route 30초:
+CSM only, 30 seconds:
 
 ```powershell
 py -3 scripts\hil_vsm_user_route_stress.py --no-api-load --duration 30 --port COM7
 ```
 
-PCAN/Kvaser API `1500fps + 1500fps`, 64 IDs, 30초:
+PCAN/Kvaser `1500fps + 1500fps`, 64 IDs, 30 seconds:
 
 ```powershell
 py -3 scripts\hil_vsm_user_route_stress.py --duration 30 --port COM7 --pcan-rate 1500 --kvaser-rate 1500 --id-count 64
 ```
 
-60초와 5분은 `--duration 60`, `--duration 300`으로 올린다.
+Escalate with `--duration 60` and `--duration 300` only after the 30 second run passes.
 
-## 산출물
+## Debug Gateway VSM Route
 
-기본 위치:
+Use this mode when VSM crash/hang evidence is needed.
+
+CSM only:
+
+```powershell
+py -3 scripts\hil_vsm_user_route_stress.py --debug-gateway --no-api-load --duration 30 --port COM7
+```
+
+High load:
+
+```powershell
+py -3 scripts\hil_vsm_user_route_stress.py --debug-gateway --duration 30 --port COM7 --pcan-rate 1500 --kvaser-rate 1500 --id-count 64
+```
+
+Gateway mode means:
+
+```text
+CSM COM7 -> vsm_debug_gateway.py -> tcp://127.0.0.1:<gateway-port> -> VSM
+```
+
+The gateway records raw serial bytes before forwarding them to VSM.
+
+## Artifacts
+
+Run directory:
 
 - `artifacts/vsm_user_route_hil/<run>/result.json`
 - `artifacts/vsm_user_route_hil/<run>/summary.md`
@@ -44,21 +70,36 @@ py -3 scripts\hil_vsm_user_route_stress.py --duration 30 --port COM7 --pcan-rate
 - `artifacts/vsm_user_route_hil/<run>/sent_sequences.json`
 - `artifacts/vsm_user_route_hil/<run>/session.meta.json`
 
-VSM capture는 `replay_data/logs/<run>.typed/` 아래에 생겨야 한다.
+Debug gateway adds:
 
-## PASS 기준
+- `artifacts/vsm_user_route_hil/<run>/gateway/gateway_capture.stream`
+- `artifacts/vsm_user_route_hil/<run>/gateway/gateway_capture.index.jsonl`
+- `artifacts/vsm_user_route_hil/<run>/gateway/gateway.meta.json`
+- `artifacts/vsm_user_route_hil/<run>/gateway/events.jsonl`
+- `artifacts/vsm_user_route_hil/<run>/gateway_capture_report.json`
 
-- 새 typed capture directory가 생성됨.
-- `capture.stream`, `capture.index`, `session.meta.json`이 있고 `.part`가 남지 않음.
-- VSM process가 살아 있고 stop logging이 수락됨.
-- typed CRC/length/seq/resync fault가 0.
-- CSM `can_drop`, FIFO overflow delta가 0.
-- API load 사용 시 PCAN/Kvaser sent sequence와 VSM final capture unique sequence가 정확히 일치.
-- process private memory가 bounded: end-start 600MB 이하, 후반 slope 2MB/min 이하.
+VSM capture directory is created under:
 
-## FAIL 기준
+```text
+replay_data/logs/<run>.typed/
+```
 
-- direct COM reader 결과만 있고 VSM capture가 없으면 FAIL.
-- 이전 capture를 고르면 FAIL.
-- VSM UI/control channel이 stop logging에 응답하지 않으면 FAIL.
-- projection drop/sampling이 capture drop처럼 표시되면 FAIL.
+## PASS Criteria
+
+- A new VSM typed capture directory is created for this run.
+- `capture.stream`, `capture.index`, and `session.meta.json` exist.
+- No `.part` file remains after stop logging.
+- VSM process stays responsive enough to accept snapshot and stop logging.
+- Final VSM capture has typed CRC/length/seq/resync faults equal to zero.
+- CSM `can_drop` and FIFO overflow deltas are zero when board health is present.
+- With API load, PCAN/Kvaser sent sequences match VSM final capture unique sequences.
+- Process private memory stays bounded.
+- In debug gateway mode, gateway artifacts exist and show nonzero `serial_rx_bytes` and `tcp_tx_bytes`.
+
+## FAIL Criteria
+
+- Direct COM reader passes but VSM final capture is missing or corrupt.
+- The script selects a stale capture instead of a new capture.
+- VSM cannot stop/finalize logging.
+- Projection drop/sampling is reported as parser/storage/CSM CAN loss.
+- Gateway captures raw data but VSM final capture has parser/storage failures.

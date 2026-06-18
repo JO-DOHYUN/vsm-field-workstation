@@ -9,6 +9,11 @@
 #include <QJsonDocument>
 
 namespace {
+constexpr qsizetype kTypedStreamBufferFlushBytes = 256 * 1024;
+constexpr qsizetype kTypedIndexBufferFlushBytes = 64 * 1024;
+}
+
+namespace {
 
 void writeU16Le(char* out, quint16 value) {
     out[0] = char(value & 0xFF);
@@ -146,6 +151,8 @@ StorageRuntime::Paths StorageRuntime::makePaths(const QString& sessionDir) {
     paths.metaFinal = dir.filePath(QStringLiteral("session.meta.json"));
     paths.eventsPart = dir.filePath(QStringLiteral("events.jsonl.part"));
     paths.eventsFinal = dir.filePath(QStringLiteral("events.jsonl"));
+    paths.diagnosticsPart = dir.filePath(QStringLiteral("capture.diagnostics.json.part"));
+    paths.diagnosticsFinal = dir.filePath(QStringLiteral("capture.diagnostics.json"));
     return paths;
 }
 
@@ -192,6 +199,7 @@ bool StorageRuntime::startTypedSession(const QString& sessionDir, const QJsonObj
     meta.insert(QStringLiteral("stream_file"), QStringLiteral("capture.stream"));
     meta.insert(QStringLiteral("index_file"), QStringLiteral("capture.index"));
     meta.insert(QStringLiteral("events_file"), QStringLiteral("events.jsonl"));
+    meta.insert(QStringLiteral("diagnostics_file"), QStringLiteral("capture.diagnostics.json"));
 
     QString metaError;
     if (!FilePersistence::writeJsonAtomically(m_paths.metaPart, QJsonDocument(meta), &metaError)) {
@@ -203,6 +211,9 @@ bool StorageRuntime::startTypedSession(const QString& sessionDir, const QJsonObj
     m_active = true;
     m_recordCount = 0;
     m_bytesWritten = 0;
+    m_streamLogicalOffset = 0;
+    m_streamBuffer.clear();
+    m_indexBuffer.clear();
     return true;
 }
 
@@ -216,12 +227,9 @@ bool StorageRuntime::appendTypedRecord(const TypedRecord& record, QString* error
         return false;
     }
 
-    const quint64 offset = quint64(m_stream.pos());
-    const qint64 written = m_stream.write(record.frameBytes);
-    if (written != record.frameBytes.size()) {
-        setError(errorOut, m_stream.errorString().isEmpty() ? QStringLiteral("Failed to write typed stream bytes.") : m_stream.errorString());
-        return false;
-    }
+    const quint64 offset = m_streamLogicalOffset;
+    m_streamBuffer.append(record.frameBytes);
+    m_streamLogicalOffset += quint64(record.frameBytes.size());
 
     char indexEntry[24] = {};
     writeU64Le(indexEntry + 0, offset);
@@ -232,14 +240,14 @@ bool StorageRuntime::appendTypedRecord(const TypedRecord& record, QString* error
     writeU16Le(indexEntry + 20, record.header.payloadLength);
     writeU16Le(indexEntry + 22, 0);
 
-    const qint64 indexWritten = m_index.write(indexEntry, qint64(sizeof(indexEntry)));
-    if (indexWritten != qint64(sizeof(indexEntry))) {
-        setError(errorOut, m_index.errorString().isEmpty() ? QStringLiteral("Failed to write typed index entry.") : m_index.errorString());
-        return false;
-    }
+    m_indexBuffer.append(indexEntry, qsizetype(sizeof(indexEntry)));
 
     ++m_recordCount;
-    m_bytesWritten += quint64(written);
+    m_bytesWritten += quint64(record.frameBytes.size());
+    if (m_streamBuffer.size() >= kTypedStreamBufferFlushBytes ||
+        m_indexBuffer.size() >= kTypedIndexBufferFlushBytes) {
+        return flushTypedBuffers(errorOut);
+    }
     return true;
 }
 
@@ -273,19 +281,61 @@ bool StorageRuntime::replacePartFile(const QString& partPath, const QString& fin
     return true;
 }
 
-bool StorageRuntime::finalizeTypedSession(QString* errorOut) {
+bool StorageRuntime::finalizeTypedSession(QString* errorOut, const QJsonObject& diagnostics) {
     if (!m_active) return true;
 
+    if (!flushTypedBuffers(errorOut)) return false;
     m_stream.flush();
     m_index.flush();
     m_events.flush();
+
+    QJsonObject diagnosticsRoot = diagnostics;
+    if (!diagnosticsRoot.contains(QStringLiteral("format"))) {
+        diagnosticsRoot.insert(QStringLiteral("format"), QStringLiteral("typed-capture-diagnostics-v1"));
+    }
+    if (!diagnosticsRoot.contains(QStringLiteral("created_local"))) {
+        diagnosticsRoot.insert(QStringLiteral("created_local"), QDateTime::currentDateTime().toString(Qt::ISODateWithMs));
+    }
+    diagnosticsRoot.insert(QStringLiteral("storage_record_count"), QString::number(m_recordCount));
+    diagnosticsRoot.insert(QStringLiteral("storage_bytes_written"), QString::number(m_bytesWritten));
+    QString diagnosticsError;
+    if (!FilePersistence::writeJsonAtomically(m_paths.diagnosticsPart, QJsonDocument(diagnosticsRoot), &diagnosticsError)) {
+        setError(errorOut, diagnosticsError);
+        return false;
+    }
+
     closeFiles();
 
     if (!replacePartFile(m_paths.streamPart, m_paths.streamFinal, errorOut)) return false;
     if (!replacePartFile(m_paths.indexPart, m_paths.indexFinal, errorOut)) return false;
     if (!replacePartFile(m_paths.metaPart, m_paths.metaFinal, errorOut)) return false;
     if (!replacePartFile(m_paths.eventsPart, m_paths.eventsFinal, errorOut)) return false;
+    if (!replacePartFile(m_paths.diagnosticsPart, m_paths.diagnosticsFinal, errorOut)) return false;
     m_active = false;
+    return true;
+}
+
+bool StorageRuntime::flushTypedBuffers(QString* errorOut) {
+    if (!m_active || !m_stream.isOpen() || !m_index.isOpen()) {
+        setError(errorOut, QStringLiteral("Typed storage session is not active."));
+        return false;
+    }
+    if (!m_streamBuffer.isEmpty()) {
+        const qint64 written = m_stream.write(m_streamBuffer);
+        if (written != m_streamBuffer.size()) {
+            setError(errorOut, m_stream.errorString().isEmpty() ? QStringLiteral("Failed to write typed stream bytes.") : m_stream.errorString());
+            return false;
+        }
+        m_streamBuffer.clear();
+    }
+    if (!m_indexBuffer.isEmpty()) {
+        const qint64 written = m_index.write(m_indexBuffer);
+        if (written != m_indexBuffer.size()) {
+            setError(errorOut, m_index.errorString().isEmpty() ? QStringLiteral("Failed to write typed index bytes.") : m_index.errorString());
+            return false;
+        }
+        m_indexBuffer.clear();
+    }
     return true;
 }
 
@@ -301,7 +351,11 @@ void StorageRuntime::discard() {
     if (!m_paths.indexPart.isEmpty()) FilePersistence::removeFileIfExists(m_paths.indexPart);
     if (!m_paths.metaPart.isEmpty()) FilePersistence::removeFileIfExists(m_paths.metaPart);
     if (!m_paths.eventsPart.isEmpty()) FilePersistence::removeFileIfExists(m_paths.eventsPart);
+    if (!m_paths.diagnosticsPart.isEmpty()) FilePersistence::removeFileIfExists(m_paths.diagnosticsPart);
     m_active = false;
     m_recordCount = 0;
     m_bytesWritten = 0;
+    m_streamLogicalOffset = 0;
+    m_streamBuffer.clear();
+    m_indexBuffer.clear();
 }

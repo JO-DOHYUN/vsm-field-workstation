@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import json
 import pathlib
 import statistics
 import struct
@@ -27,7 +28,14 @@ TYPE_NAMES = {
     10: "HOST_CAN_TX_REQUEST",
     11: "HOST_HEARTBEAT",
     12: "HOST_CONTROL_SESSION",
+    16: "CAN_RX_SEGMENT",
 }
+
+CAN_RX_RAW = 1
+CAN_TX_RAW = 2
+CAN_RX_SEGMENT = 16
+SEGMENT_HEADER_LEN = 32
+SEGMENT_ENTRY_LEN = 30
 
 
 def crc16_ccitt(data: bytes) -> int:
@@ -64,14 +72,27 @@ def interval_stats_ms(times_us: list[int]) -> str:
 def parse_capture(session: pathlib.Path) -> dict:
     stream = session / "capture.stream"
     data = stream.read_bytes()
+    diagnostics_path = session / "capture.diagnostics.json"
+    diagnostics = {}
+    if diagnostics_path.exists():
+        try:
+            diagnostics = json.loads(diagnostics_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            diagnostics = {"format": "invalid-json"}
     pos = 0
     seq_prev: int | None = None
     records = 0
     counters: collections.Counter[int] = collections.Counter()
     can_rx: dict[tuple[int, int], list[tuple[int, bytes]]] = collections.defaultdict(list)
     can_tx: dict[tuple[int, int], list[tuple[int, bytes]]] = collections.defaultdict(list)
+    capture_seq_prev: int | None = None
+    capture_seq_seen: set[int] = set()
+    capture_seq_gaps = 0
+    capture_seq_duplicates = 0
+    capture_seq_reorders = 0
+    segment_frames = 0
     events: collections.Counter[tuple[int, int]] = collections.Counter()
-    health: list[tuple[int, int, int, int, int, int]] = []
+    health: list[dict[str, int | bool]] = []
     seq_gaps = 0
     crc_failures = 0
     length_failures = 0
@@ -110,14 +131,35 @@ def parse_capture(session: pathlib.Path) -> dict:
         seq_prev = seq
 
         payload = frame[9 : 9 + payload_len]
-        if record_type in (1, 2) and payload_len >= 30:
+        if record_type in (CAN_RX_RAW, CAN_TX_RAW) and payload_len >= 30:
             mono_us = struct.unpack_from("<Q", payload, 0)[0]
             can_id = struct.unpack_from("<I", payload, 8)[0] & 0x1FFFFFFF
             dlc = payload[12] & 0x0F
             bus = payload[13]
             frame_data = payload[14 : 14 + min(dlc, 8)]
-            target = can_tx if record_type == 2 else can_rx
+            target = can_tx if record_type == CAN_TX_RAW else can_rx
             target[(bus, can_id)].append((mono_us, bytes(frame_data)))
+        elif record_type == CAN_RX_SEGMENT and payload_len >= SEGMENT_HEADER_LEN:
+            frame_count = struct.unpack_from("<H", payload, 16)[0]
+            entry_size = payload[18]
+            if entry_size >= SEGMENT_ENTRY_LEN and payload_len >= SEGMENT_HEADER_LEN + frame_count * entry_size:
+                for index in range(frame_count):
+                    off = SEGMENT_HEADER_LEN + index * entry_size
+                    capture_seq = struct.unpack_from("<Q", payload, off)[0]
+                    if capture_seq in capture_seq_seen:
+                        capture_seq_duplicates += 1
+                    else:
+                        capture_seq_seen.add(capture_seq)
+                    if capture_seq_prev is not None and capture_seq < capture_seq_prev:
+                        capture_seq_reorders += 1
+                    capture_seq_prev = capture_seq
+                    mono_us = struct.unpack_from("<Q", payload, off + 8)[0]
+                    can_id = struct.unpack_from("<I", payload, off + 16)[0] & 0x1FFFFFFF
+                    dlc = payload[off + 20] & 0x0F
+                    bus = payload[off + 21]
+                    frame_data = payload[off + 22 : off + 22 + min(dlc, 8)]
+                    can_rx[(bus, can_id)].append((mono_us, bytes(frame_data)))
+                    segment_frames += 1
         elif record_type == 7 and payload_len >= 16:
             code = struct.unpack_from("<H", payload, 8)[0]
             detail = struct.unpack_from("<H", payload, 10)[0]
@@ -129,9 +171,37 @@ def parse_capture(session: pathlib.Path) -> dict:
             fifo_total = struct.unpack_from("<I", payload, 16)[0]
             serial_total = struct.unpack_from("<I", payload, 20)[0]
             queue_depth = struct.unpack_from("<I", payload, 24)[0]
-            health.append((mono_us, can_rx_total, drop_total, fifo_total, serial_total, queue_depth))
+            row: dict[str, int | bool] = {
+                "mono_us": mono_us,
+                "can_rx_total": can_rx_total,
+                "drop_total": drop_total,
+                "fifo_total": fifo_total,
+                "serial_total": serial_total,
+                "queue_depth": queue_depth,
+                "has_uplink": False,
+            }
+            if payload_len >= 192:
+                row.update(
+                    {
+                        "has_uplink": True,
+                        "serial_enqueue_fail_total": struct.unpack_from("<I", payload, 160)[0],
+                        "serial_ring_clear_total": struct.unpack_from("<I", payload, 164)[0],
+                        "serial_ring_cleared_bytes_total": struct.unpack_from("<I", payload, 168)[0],
+                        "serial_backpressure_total": struct.unpack_from("<I", payload, 172)[0],
+                        "serial_tx_high_water_bytes": struct.unpack_from("<I", payload, 176)[0],
+                        "shared_can_queue_high_water": struct.unpack_from("<I", payload, 180)[0],
+                        "mcp_drain_budget_hit_total": struct.unpack_from("<I", payload, 184)[0],
+                        "can_segment_enqueue_fail_total": struct.unpack_from("<I", payload, 188)[0],
+                    }
+                )
+            health.append(row)
 
         pos += frame_len
+
+    if capture_seq_seen:
+        first_seen = min(capture_seq_seen)
+        last_seen = max(capture_seq_seen)
+        capture_seq_gaps = max(0, (last_seen - first_seen + 1) - len(capture_seq_seen))
 
     return {
         "session": session,
@@ -146,6 +216,11 @@ def parse_capture(session: pathlib.Path) -> dict:
         "can_tx": can_tx,
         "events": events,
         "health": health,
+        "diagnostics": diagnostics,
+        "capture_seq_gaps": capture_seq_gaps,
+        "capture_seq_duplicates": capture_seq_duplicates,
+        "capture_seq_reorders": capture_seq_reorders,
+        "segment_frames": segment_frames,
     }
 
 
@@ -154,7 +229,11 @@ def print_report(report: dict, top: int) -> None:
     print(
         f"stream_bytes={report['stream_bytes']} records={report['records']} "
         f"seq_gaps={report['seq_gaps']} crc={report['crc_failures']} "
-        f"length={report['length_failures']} dropped_bytes={report['bytes_dropped']}"
+        f"length={report['length_failures']} dropped_bytes={report['bytes_dropped']} "
+        f"capture_seq_gaps={report['capture_seq_gaps']} "
+        f"capture_seq_duplicates={report['capture_seq_duplicates']} "
+        f"capture_seq_reorders={report['capture_seq_reorders']} "
+        f"segment_frames={report['segment_frames']}"
     )
     print("types=" + ", ".join(f"{TYPE_NAMES.get(key, key)}:{value}" for key, value in sorted(report["counters"].items())))
 
@@ -164,9 +243,32 @@ def print_report(report: dict, top: int) -> None:
         last = health[-1]
         print(
             "health "
-            f"can_rx_delta={last[1] - first[1]} drop_total={last[2]} "
-            f"fifo_delta={last[3] - first[3]} fifo_total={last[3]} "
-            f"serial_delta={last[4] - first[4]} max_queue={max(item[5] for item in health)}"
+            f"can_rx_delta={last['can_rx_total'] - first['can_rx_total']} drop_total={last['drop_total']} "
+            f"fifo_delta={last['fifo_total'] - first['fifo_total']} fifo_total={last['fifo_total']} "
+            f"serial_delta={last['serial_total'] - first['serial_total']} max_queue={max(int(item['queue_depth']) for item in health)}"
+        )
+        if last.get("has_uplink"):
+            print(
+                "csm_uplink "
+                f"ring_clear={last.get('serial_ring_clear_total', 0)} "
+                f"cleared_bytes={last.get('serial_ring_cleared_bytes_total', 0)} "
+                f"backpressure={last.get('serial_backpressure_total', 0)} "
+                f"enqueue_fail={last.get('serial_enqueue_fail_total', 0)} "
+                f"segment_enqueue_fail={last.get('can_segment_enqueue_fail_total', 0)} "
+                f"serial_high_water={last.get('serial_tx_high_water_bytes', 0)} "
+                f"shared_queue_high={last.get('shared_can_queue_high_water', 0)} "
+                f"mcp_budget_hits={last.get('mcp_drain_budget_hit_total', 0)}"
+            )
+
+    diagnostics = report.get("diagnostics") or {}
+    parser = diagnostics.get("parser") or {}
+    if parser:
+        print(
+            "live_parser_sidecar "
+            f"frames={parser.get('frames', 0)} dropped={parser.get('bytes_dropped', 0)} "
+            f"crc={parser.get('crc_failures', 0)} len={parser.get('length_failures', 0)} "
+            f"seq={parser.get('seq_gaps', 0)} ver={parser.get('version_warnings', 0)} "
+            f"buffered={parser.get('buffered_bytes', 0)}"
         )
 
     if report["events"]:

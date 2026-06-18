@@ -1,19 +1,24 @@
 #pragma once
 
 #include "CanTypes.h"
+#include "analysis/AnalysisRuntime.h"
 #include "control/ControlCycleRuntime.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LegacyIngressRuntime.h"
 #include "transport/LiveProjectionRuntime.h"
+#include "transport/LiveTruthRuntime.h"
 #include "transport/TypedIngressRuntime.h"
 
 #include <QJsonObject>
+#include <QIODevice>
 #include <QObject>
 #include <QSerialPort>
+#include <QTcpSocket>
 #include <QElapsedTimer>
 #include <QHash>
 #include <QStringList>
 #include <QTimerEvent>
+#include <QVariantList>
 #include <QVector>
 
 class SerialWorker : public QObject {
@@ -40,11 +45,14 @@ public slots:
     void updateControlCycle(int signedCommand, int rpm, double steeringDeg, quint8 motorMode, quint8 drivingMode, quint8 bus);
     void stopControlCycle();
     void sendControlCycleBurstOnce(int signedCommand, int rpm, double steeringDeg, quint8 motorMode, quint8 drivingMode, quint8 bus, const QString& reason, bool resetSlew = false);
+    void setAnalysisConfig(const CanMonitorAnalysis::AnalysisRuntime::Config& config);
 
 signals:
     void stateChanged(bool connected, const QString& message);
     void errorOccurred(const QString& message);
     void framesReceived(const FrameRecordList& frames);
+    void rawFramesReceived(const FrameRecordList& frames);
+    void rawTypedRecordsReceived(const TypedRecordList& records);
     void truthFramesReceived(const FrameRecordList& frames);
     void statsReceived(const StatsRecord& st);
     void typedRecordsReceived(const TypedRecordList& records);
@@ -57,7 +65,26 @@ signals:
                                       quint64 observedControlEvidenceRecords,
                                       quint64 projectedControlEvidenceRecords,
                                       quint64 sampledControlEvidenceRecords);
+    void typedTruthStatusChanged(quint64 observedCanRxFrames,
+                                 quint64 emittedTruthFrames,
+                                 quint64 coalescedTruthUpdates,
+                                 quint64 observedBus0CanRxFrames,
+                                 quint64 observedBus1CanRxFrames,
+                                 quint64 flushCount,
+                                 int pendingKeys,
+                                 int maxPendingKeys,
+                                 int lastInputRecords,
+                                 int lastOutputFrames,
+                                 int lastFlushMs,
+                                 quint64 truthLoss);
     void typedTransportStatusChanged(quint64 frames, quint64 bytesDropped, quint64 crcFailures, quint64 lengthFailures, quint64 versionWarnings, quint64 seqGaps);
+    void analysisRuntimeSnapshotChanged(const QString& source,
+                                        const QString& level,
+                                        const QString& summary,
+                                        const QVariantList& diagnostics,
+                                        const QVariantList& timingRows,
+                                        const QVariantList& valueRows,
+                                        const QVariantList& alarmRows);
     void typedStorageStateChanged(bool active, const QString& path);
     void typedStorageProgress(quint64 bytesWritten, quint64 recordCount);
     void hostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
@@ -80,11 +107,22 @@ private:
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
     void queueProjectedFrames(const FrameRecordList& frames);
     void flushQueuedProjectionFrames(bool force = false);
+    void queueRawLedgerRecords(const TypedRecordList& records);
+    void flushQueuedRawLedgerRecords(bool force = false);
     void queueTruthFrames(const TypedRecordList& records);
     void flushQueuedTruthFrames(bool force = false);
+    void queueAnalysisRecords(const TypedRecordList& records);
+    void emitAnalysisSnapshot(bool force = false);
     void emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
+    void emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status);
     void resetProjectionQueue();
     static quint64 projectionKeyForFrame(const FrameRecord& frame);
+    bool startGatewayTcp(const QString& endpoint);
+    QIODevice* activeDevice() const;
+    bool activeDeviceIsOpen() const;
+    bool activeDeviceIsWritable() const;
+    qint64 activeBytesToWrite() const;
+    QString activeTransportName() const;
     void dispatchControlCycleResult(const CanMonitorControl::ControlCycleRuntime::CycleResult& result);
     void startTypedHandshakeWatchdog();
     void stopTypedHandshakeWatchdog();
@@ -95,20 +133,24 @@ private:
     void continueControlCycleBurst();
 
     QSerialPort* m_serial = nullptr;
+    QTcpSocket* m_tcp = nullptr;
     CanMonitorTransport::LegacyIngressRuntime m_legacyIngress;
     CanMonitorTransport::TypedIngressRuntime m_typedIngress;
+    CanMonitorAnalysis::AnalysisRuntime m_analysisRuntime;
     CanMonitorTransport::LiveProjectionRuntime m_liveProjection;
+    CanMonitorTransport::LiveTruthRuntime m_liveTruth;
     CanMonitorTransport::HostTxRuntime m_hostTx;
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
     QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
-    QHash<quint64, FrameRecord> m_pendingTruthFramesByKey;
-    QHash<quint64, quint64> m_truthLastMonoUsByKey;
+    TypedRecordList m_pendingRawLedgerRecords;
     QElapsedTimer m_projectionFlushClock;
-    QElapsedTimer m_truthFlushClock;
+    QElapsedTimer m_analysisSnapshotClock;
     int m_projectionFlushTimerId = 0;
+    int m_rawLedgerFlushTimerId = 0;
     int m_truthFlushTimerId = 0;
     quint64 m_projectionQueueSampledFrames = 0;
     quint64 m_projectionQueueDroppedFrames = 0;
+    quint64 m_analysisRuntimeLatestUs = 0;
     CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;
     QElapsedTimer m_typedHandshakeClock;
     int m_typedHandshakeTimerId = 0;

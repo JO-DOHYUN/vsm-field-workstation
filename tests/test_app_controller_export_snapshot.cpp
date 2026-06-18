@@ -161,7 +161,7 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(controller.replayAlarmMarkerCount() > 0, 10000);
         QTRY_VERIFY_WITH_TIMEOUT(!controller.replayIssueMarkers().isEmpty(), 10000);
         QVERIFY(controller.seekReplayIssue(QStringLiteral("value"), 1));
-        QTRY_COMPARE(controller.selectedValueId(), QStringLiteral("0X321"));
+        QTRY_COMPARE(controller.selectedValueId(), QStringLiteral("BUS0|STD|DATA|0X321"));
         QVERIFY(controller.seekReplayId(QStringLiteral("0X321"), 1));
         QTRY_COMPARE(controller.valueFilterId(), QStringLiteral("0X321"));
 

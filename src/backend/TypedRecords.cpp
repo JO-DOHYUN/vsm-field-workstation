@@ -32,6 +32,7 @@ QString typedRecordTypeName(quint8 recordType) {
     case TypedRecordType::HostCanTxRequest: return QStringLiteral("HOST_CAN_TX_REQUEST");
     case TypedRecordType::HostHeartbeat: return QStringLiteral("HOST_HEARTBEAT");
     case TypedRecordType::HostControlSession: return QStringLiteral("HOST_CONTROL_SESSION");
+    case TypedRecordType::CanRxSegment: return QStringLiteral("CAN_RX_SEGMENT");
     case TypedRecordType::Unknown:
         break;
     }
@@ -39,6 +40,10 @@ QString typedRecordTypeName(quint8 recordType) {
 }
 
 quint64 typedRecordMonoUs(const TypedRecord& record) {
+    if (record.isType(TypedRecordType::CanRxSegment)) {
+        const auto first = decodeTypedCanRxSegmentEntry(record, 0);
+        return first ? first->monoUs : 0;
+    }
     if (record.payload.size() < 8) return 0;
     return typedReadU64Le(reinterpret_cast<const quint8*>(record.payload.constData()));
 }
@@ -64,6 +69,69 @@ std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record) {
     out.total = typedReadU32Le(p + 22);
     out.droppedOrFailed = typedReadU32Le(p + 26);
     return out;
+}
+
+std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record) {
+    if (!record.isType(TypedRecordType::CanRxSegment)) return std::nullopt;
+    if (record.payload.size() < kTypedCanRxSegmentHeaderSize) return std::nullopt;
+
+    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    TypedCanRxSegmentHeader out;
+    out.segmentSeq = typedReadU64Le(p + 0);
+    out.firstCaptureSeq = typedReadU64Le(p + 8);
+    out.frameCount = typedReadU16Le(p + 16);
+    out.entrySize = p[18];
+    out.flags = p[19];
+    out.droppedBeforeSegment = typedReadU32Le(p + 20);
+    out.fifoBeforeSegment = typedReadU32Le(p + 24);
+    if (out.entrySize < kTypedCanRxSegmentEntrySize) return std::nullopt;
+    const qsizetype needed = kTypedCanRxSegmentHeaderSize + qsizetype(out.frameCount) * qsizetype(out.entrySize);
+    if (needed > record.payload.size()) return std::nullopt;
+    return out;
+}
+
+std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record, qsizetype frameIndex) {
+    const auto header = decodeTypedCanRxSegmentHeader(record);
+    if (!header || frameIndex < 0 || frameIndex >= header->frameCount) return std::nullopt;
+
+    const qsizetype offset = kTypedCanRxSegmentHeaderSize + frameIndex * qsizetype(header->entrySize);
+    if (offset + kTypedCanRxSegmentEntrySize > record.payload.size()) return std::nullopt;
+    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData() + offset);
+
+    TypedCanRxSegmentEntry out;
+    out.captureSeq = typedReadU64Le(p + 0);
+    out.monoUs = typedReadU64Le(p + 8);
+    out.canIdFlags = typedReadU32Le(p + 16);
+    out.canId = out.canIdFlags & 0x1FFFFFFFu;
+    out.extended = ((out.canIdFlags >> 29) & 0x01u) != 0;
+    out.rtr = ((out.canIdFlags >> 30) & 0x01u) != 0;
+    out.dlc = p[20] & 0x0F;
+    if (out.dlc > 8) return std::nullopt;
+    out.bus = p[21];
+    std::memcpy(out.data, p + 22, 8);
+    return out;
+}
+
+QVector<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntries(const TypedRecord& record) {
+    QVector<TypedCanRxSegmentEntry> out;
+    const auto header = decodeTypedCanRxSegmentHeader(record);
+    if (!header) return out;
+    out.reserve(header->frameCount);
+    for (qsizetype index = 0; index < header->frameCount; ++index) {
+        const auto entry = decodeTypedCanRxSegmentEntry(record, index);
+        if (!entry) {
+            out.clear();
+            return out;
+        }
+        out.push_back(*entry);
+    }
+    return out;
+}
+
+quint64 typedCanRxFrameCount(const TypedRecord& record) {
+    if (record.isType(TypedRecordType::CanRxRaw)) return decodeTypedCanRaw(record).has_value() ? 1 : 0;
+    const auto header = decodeTypedCanRxSegmentHeader(record);
+    return header ? header->frameCount : 0;
 }
 
 std::optional<TypedAdcSampleRecord> decodeTypedAdcSample(const TypedRecord& record) {
@@ -141,6 +209,17 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
     out.encoderTimerOk = p[46];
     out.flags = p[47];
     out.faultFlags = typedReadU32Le(p + 48);
+    if (record.payload.size() >= kTypedBoardHealthExtendedPayloadSize) {
+        out.hasExtendedTransportCounters = true;
+        out.serialEnqueueFailTotal = typedReadU32Le(p + 160);
+        out.serialRingClearTotal = typedReadU32Le(p + 164);
+        out.serialRingClearedBytesTotal = typedReadU32Le(p + 168);
+        out.serialBackpressureTotal = typedReadU32Le(p + 172);
+        out.serialTxHighWaterBytes = typedReadU32Le(p + 176);
+        out.sharedCanQueueHighWater = typedReadU32Le(p + 180);
+        out.mcpDrainBudgetHitTotal = typedReadU32Le(p + 184);
+        out.canSegmentEnqueueFailTotal = typedReadU32Le(p + 188);
+    }
     return out;
 }
 

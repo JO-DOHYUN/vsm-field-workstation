@@ -68,6 +68,7 @@ private:
     bool countersChanged(const TypedTransportParser::Counters& before) const;
     bool statusDue();
     bool storageProgressDue();
+    QJsonObject makeCaptureDiagnostics() const;
 
     TypedTransportParser m_parser;
     StorageRuntime m_storage;
@@ -76,7 +77,7 @@ private:
     quint64 m_lastReportedStorageRecordCount = 0;
     quint64 m_bytesSinceOpen = 0;
     bool m_capabilitySeenSinceOpen = false;
-    int m_statusMinIntervalMs = 100;
+    int m_statusMinIntervalMs = 250;
 };
 
 } // namespace CanMonitorTransport

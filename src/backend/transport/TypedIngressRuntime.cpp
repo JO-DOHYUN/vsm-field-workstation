@@ -1,5 +1,7 @@
 #include "transport/TypedIngressRuntime.h"
 
+#include <algorithm>
+
 namespace {
 constexpr int kTypedLiveEmitBatchSize = 512;
 constexpr quint64 kTypedStorageProgressRecordStep = 1536;
@@ -50,7 +52,7 @@ TypedIngressRuntime::StorageUpdate TypedIngressRuntime::finalizeStorageIfActive(
     QString error;
     const quint64 bytesWritten = m_storage.bytesWritten();
     const quint64 recordCount = m_storage.recordCount();
-    const bool ok = m_storage.finalizeTypedSession(&error);
+    const bool ok = m_storage.finalizeTypedSession(&error, makeCaptureDiagnostics());
 
     StorageUpdate update;
     update.ok = ok;
@@ -177,6 +179,31 @@ bool TypedIngressRuntime::storageProgressDue() {
     m_lastReportedStorageRecordCount = records;
     m_storageProgressTimer.restart();
     return true;
+}
+
+QJsonObject TypedIngressRuntime::makeCaptureDiagnostics() const {
+    const auto counters = m_parser.counters();
+    QJsonObject parser;
+    parser.insert(QStringLiteral("frames"), QString::number(counters.frames));
+    parser.insert(QStringLiteral("bytes_dropped"), QString::number(counters.bytesDropped));
+    parser.insert(QStringLiteral("crc_failures"), QString::number(counters.crcFailures));
+    parser.insert(QStringLiteral("length_failures"), QString::number(counters.lengthFailures));
+    parser.insert(QStringLiteral("version_warnings"), QString::number(counters.versionWarnings));
+    parser.insert(QStringLiteral("seq_gaps"), QString::number(counters.seqGaps));
+    parser.insert(QStringLiteral("buffered_bytes"), QString::number(quint64(std::max<qsizetype>(0, m_parser.bufferedBytes()))));
+
+    QJsonObject storage;
+    storage.insert(QStringLiteral("active"), m_storage.isActive());
+    storage.insert(QStringLiteral("record_count"), QString::number(m_storage.recordCount()));
+    storage.insert(QStringLiteral("bytes_written"), QString::number(m_storage.bytesWritten()));
+
+    QJsonObject root;
+    root.insert(QStringLiteral("format"), QStringLiteral("typed-capture-diagnostics-v1"));
+    root.insert(QStringLiteral("parser"), parser);
+    root.insert(QStringLiteral("storage"), storage);
+    root.insert(QStringLiteral("bytes_since_open"), QString::number(m_bytesSinceOpen));
+    root.insert(QStringLiteral("capability_seen_since_open"), m_capabilitySeenSinceOpen);
+    return root;
 }
 
 } // namespace CanMonitorTransport

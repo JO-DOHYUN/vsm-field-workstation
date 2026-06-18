@@ -27,6 +27,7 @@ public:
         QString metaPath;
         QString indexPath;
         QString eventsPath;
+        QString diagnosticsPath;
         quint64 bytesRead = 0;
         quint64 recordCount = 0;
         QMap<quint8, quint64> typeCounts;
@@ -37,9 +38,11 @@ public:
         bool metaPresent = false;
         bool indexPresent = false;
         bool eventsPresent = false;
+        bool diagnosticsPresent = false;
         bool metaPart = false;
         bool indexPart = false;
         bool eventsPart = false;
+        bool diagnosticsPart = false;
         bool partialCapture = false;
         bool indexSizeAligned = true;
         quint64 indexEntryCount = 0;
@@ -51,6 +54,13 @@ public:
         quint64 indexFirstMonoUs = 0;
         quint64 indexLastMonoUs = 0;
         quint64 eventLineCount = 0;
+        quint64 liveParserFrames = 0;
+        quint64 liveParserBytesDropped = 0;
+        quint64 liveParserCrcFailures = 0;
+        quint64 liveParserLengthFailures = 0;
+        quint64 liveParserVersionWarnings = 0;
+        quint64 liveParserSeqGaps = 0;
+        quint64 liveParserBufferedBytes = 0;
         quint64 firstMonoUs = 0;
         quint64 lastMonoUs = 0;
         quint64 durationUs = 0;
@@ -65,6 +75,8 @@ public:
         QString metaFormat;
         QString metaCreatedLocal;
         QString metaStreamFile;
+        QString metaDiagnosticsFile;
+        QString diagnosticsFormat;
         QString firstEventText;
         QString lastEventText;
         QString captureState;

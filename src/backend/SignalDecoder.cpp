@@ -471,7 +471,15 @@ ValueAlarmResult SignalDecoder::makeValueAlarm(quint32 id,
     for (const CanModel::SignalSpec& sig : specs) {
         const int byteIndex0 = sig.byteIndex1Based - 1;
         if (byteIndex0 < 0 || byteIndex0 >= int(frame.dlc)) continue;
-        if (isPreviewNoiseName(sig.name) || sig.monitorOnly) continue;
+        if (sig.monitorOnly) continue;
+
+        const QString explicitMode = sig.alarmMode.trimmed().toLower();
+        const bool explicitRange = sig.hasWarnMin || sig.hasWarnMax || sig.hasErrMin || sig.hasErrMax;
+        const bool hasInactiveConfig = !sig.inactiveRawValues.isEmpty() || !sig.inactiveLabels.isEmpty();
+        const bool hasExplicitAlarm = sig.reserved || explicitRange || hasInactiveConfig ||
+                                      !sig.alarmSeverity.trimmed().isEmpty() || !sig.alarmMessage.trimmed().isEmpty() ||
+                                      (!explicitMode.isEmpty() && explicitMode != QStringLiteral("auto"));
+        if (isPreviewNoiseName(sig.name) && !hasExplicitAlarm) continue;
 
         quint64 raw = 0;
         if (!sig.bitPositionsLsb.isEmpty() && sig.lengthBits <= sig.bitPositionsLsb.size()) raw = extractExplicitBits(frame, byteIndex0, sig.bitPositionsLsb);
@@ -494,12 +502,6 @@ ValueAlarmResult SignalDecoder::makeValueAlarm(quint32 id,
         }
         const double physical = double(signedRaw) * scale + sig.offset;
 
-        const QString explicitMode = sig.alarmMode.trimmed().toLower();
-        const bool explicitRange = sig.hasWarnMin || sig.hasWarnMax || sig.hasErrMin || sig.hasErrMax;
-        const bool hasInactiveConfig = !sig.inactiveRawValues.isEmpty() || !sig.inactiveLabels.isEmpty();
-        const bool hasExplicitAlarm = sig.reserved || explicitRange || hasInactiveConfig ||
-                                      !sig.alarmSeverity.trimmed().isEmpty() || !sig.alarmMessage.trimmed().isEmpty() ||
-                                      (!explicitMode.isEmpty() && explicitMode != QStringLiteral("auto"));
         if (!hasExplicitAlarm) continue;
 
         total += 1;

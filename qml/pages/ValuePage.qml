@@ -61,9 +61,21 @@ Item {
     }
 
     function scrollToFocusedRow() {
-        const focusId = (appController.valueFilterId !== "") ? appController.valueFilterId : appController.selectedValueId
-        if (focusId === "") return
-        const rowIndex = appController.valueModel.findIndex("idText", focusId)
+        if (appController.valueFilterId !== "") {
+            let filterIndex = -1
+            for (let i = 0; i < appController.valueModel.count; ++i) {
+                const row = appController.valueModel.get(i)
+                if (row.idText && row.idText.indexOf(appController.valueFilterId) >= 0) {
+                    filterIndex = i
+                    break
+                }
+            }
+            if (filterIndex >= 0) idList.positionViewAtIndex(filterIndex, ListView.Visible)
+            return
+        }
+        const focusKey = appController.selectedValueId
+        if (focusKey === "") return
+        const rowIndex = appController.valueModel.indexOfKey(focusKey)
         if (rowIndex >= 0) idList.positionViewAtIndex(rowIndex, ListView.Visible)
     }
 
@@ -139,6 +151,14 @@ Item {
                     }
                 }
             }
+        }
+
+        Components.SummaryStrip {
+            uiScale: uiScale
+            title: "Truth 분석"
+            level: appController.analysisRuntimeLevel || "OK"
+            summary: appController.analysisRuntimeSummary || "truth analysis runtime 대기"
+            detailsModel: appController.analysisRuntimeDiagnostics || []
         }
 
         Frame {
@@ -317,13 +337,13 @@ Item {
                             required property string previewText
                             width: idList.width
                             height: Math.max(Math.round(30 * uiScale), rowSummary.implicitHeight + Math.round(6 * uiScale))
-                            onClicked: appController.selectValueId(idText)
+                            onClicked: appController.selectValueId(key)
 
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 6
-                                color: (appController.selectedValueId === idText || (appController.valueFilterId !== "" && appController.valueFilterId === idText)) ? "#eaf4ff" : "#fbfdff"
-                                border.color: (appController.selectedValueId === idText || (appController.valueFilterId !== "" && appController.valueFilterId === idText)) ? "#7ea5ff" : "#d7e0ea"
+                                color: (appController.selectedValueId === key || (appController.valueFilterId !== "" && idText.indexOf(appController.valueFilterId) >= 0)) ? "#eaf4ff" : "#fbfdff"
+                                border.color: (appController.selectedValueId === key || (appController.valueFilterId !== "" && idText.indexOf(appController.valueFilterId) >= 0)) ? "#7ea5ff" : "#d7e0ea"
 
                                 RowLayout {
                                     anchors.fill: parent

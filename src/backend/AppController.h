@@ -3,6 +3,7 @@
 #include "DetailListModel.h"
 #include "FrameFilterProxyModel.h"
 #include "FrameListModel.h"
+#include "RawFrameTableModel.h"
 #include "StableMapListModel.h"
 #include "ReplayEngine.h"
 #include "ReplayRuntime.h"
@@ -10,6 +11,7 @@
 #include "ModelPack.h"
 #include "SessionManager.h"
 #include "AnalysisTypes.h"
+#include "analysis/AnalysisRuntime.h"
 #include "SignalDecoder.h"
 #include "AlarmManager.h"
 #include "ControlCommandEncoder.h"
@@ -27,6 +29,7 @@
 #include <QSet>
 #include <QJsonObject>
 #include <QObject>
+#include <QProcess>
 #include <QStringList>
 #include <QTimer>
 #include <QVariantList>
@@ -67,6 +70,15 @@ class AppController : public QObject {
     Q_PROPERTY(QString transportDiagnosticsLevel READ transportDiagnosticsLevel NOTIFY transportDiagnosticsChanged)
     Q_PROPERTY(QString transportDiagnosticsSummary READ transportDiagnosticsSummary NOTIFY transportDiagnosticsChanged)
     Q_PROPERTY(QVariantList transportDiagnostics READ transportDiagnostics NOTIFY transportDiagnosticsChanged)
+    Q_PROPERTY(bool debugGatewayActive READ debugGatewayActive NOTIFY debugGatewayChanged)
+    Q_PROPERTY(QString debugGatewayStatus READ debugGatewayStatus NOTIFY debugGatewayChanged)
+    Q_PROPERTY(bool debugProfilerEnabled READ debugProfilerEnabled NOTIFY performanceDiagnosticsChanged)
+    Q_PROPERTY(QString performanceSummary READ performanceSummary NOTIFY performanceDiagnosticsChanged)
+    Q_PROPERTY(QVariantList performanceDiagnostics READ performanceDiagnostics NOTIFY performanceDiagnosticsChanged)
+    Q_PROPERTY(QVariantList verificationScenarioCatalog READ verificationScenarioCatalog CONSTANT)
+    Q_PROPERTY(bool verificationRunnerActive READ verificationRunnerActive NOTIFY verificationRunnerChanged)
+    Q_PROPERTY(QString verificationRunnerStatus READ verificationRunnerStatus NOTIFY verificationRunnerChanged)
+    Q_PROPERTY(QString verificationRunnerArtifactPath READ verificationRunnerArtifactPath NOTIFY verificationRunnerChanged)
     Q_PROPERTY(bool boardAlive READ boardAlive NOTIFY typedEvidenceChanged)
     Q_PROPERTY(QString boardConnectionSummary READ boardConnectionSummary NOTIFY typedEvidenceChanged)
     Q_PROPERTY(bool controlArmed READ controlArmed WRITE setControlArmed NOTIFY controlStateChanged)
@@ -138,6 +150,9 @@ class AppController : public QObject {
     Q_PROPERTY(QString liveStatsSummary READ liveStatsSummary NOTIFY liveStatsChanged)
     Q_PROPERTY(bool liveUiPaused READ liveUiPaused NOTIFY liveUiPausedChanged)
     Q_PROPERTY(QString analysisSourceText READ analysisSourceText NOTIFY derivedSummaryChanged)
+    Q_PROPERTY(QString analysisRuntimeSummary READ analysisRuntimeSummary NOTIFY analysisRuntimeChanged)
+    Q_PROPERTY(QString analysisRuntimeLevel READ analysisRuntimeLevel NOTIFY analysisRuntimeChanged)
+    Q_PROPERTY(QVariantList analysisRuntimeDiagnostics READ analysisRuntimeDiagnostics NOTIFY analysisRuntimeChanged)
     Q_PROPERTY(bool replayAnalysisActive READ replayAnalysisActive NOTIFY derivedSummaryChanged)
     Q_PROPERTY(bool replayAnalysisHeld READ replayAnalysisHeld NOTIFY replayStateChanged)
     Q_PROPERTY(bool modelActive READ modelActive NOTIFY rulesChanged)
@@ -194,6 +209,7 @@ class AppController : public QObject {
     Q_PROPERTY(DetailListModel* valueDetailModel READ valueDetailModel CONSTANT)
     Q_PROPERTY(FrameListModel* recentFrames READ recentFrames CONSTANT)
     Q_PROPERTY(FrameListModel* liveFrames READ liveFrames CONSTANT)
+    Q_PROPERTY(RawFrameTableModel* rawFrameTable READ rawFrameTable CONSTANT)
     Q_PROPERTY(FrameListModel* replayFrames READ replayFrames CONSTANT)
     Q_PROPERTY(FrameFilterProxyModel* liveFrameView READ liveFrameView CONSTANT)
     Q_PROPERTY(FrameFilterProxyModel* replayFrameView READ replayFrameView CONSTANT)
@@ -302,6 +318,15 @@ public:
     QString transportDiagnosticsLevel() const { return m_transportSession.level(); }
     QString transportDiagnosticsSummary() const { return m_transportSession.summary(); }
     QVariantList transportDiagnostics() const { return m_transportSession.rows(); }
+    bool debugGatewayActive() const { return m_debugGatewayProcess && m_debugGatewayProcess->state() != QProcess::NotRunning; }
+    QString debugGatewayStatus() const { return m_debugGatewayStatus; }
+    bool debugProfilerEnabled() const { return m_debugProfilerEnabled; }
+    QString performanceSummary() const { return m_performanceSummary; }
+    QVariantList performanceDiagnostics() const { return m_performanceDiagnostics; }
+    QVariantList verificationScenarioCatalog() const;
+    bool verificationRunnerActive() const { return m_verificationAttachedMode || (m_verificationProcess && m_verificationProcess->state() != QProcess::NotRunning); }
+    QString verificationRunnerStatus() const { return m_verificationRunnerStatus; }
+    QString verificationRunnerArtifactPath() const { return m_verificationRunnerArtifactPath; }
     bool boardAlive() const { return m_evidenceRuntime.boardAlive(); }
     QString boardConnectionSummary() const;
     bool controlArmed() const { return m_controlRuntime.armed(); }
@@ -375,6 +400,9 @@ public:
     QString liveStatsSummary() const;
     bool liveUiPaused() const { return m_liveUiPaused; }
     QString analysisSourceText() const;
+    QString analysisRuntimeSummary() const { return m_analysisRuntimeSummary; }
+    QString analysisRuntimeLevel() const { return m_analysisRuntimeLevel; }
+    QVariantList analysisRuntimeDiagnostics() const { return m_analysisRuntimeDiagnostics; }
     bool replayAnalysisHeld() const { return m_replayAnalysisHeld; }
     bool modelActive() const { return m_modelEnabled; }
     QString modelName() const { return m_modelEnabled ? m_modelMeta.modelName : QStringLiteral("모델 해제"); }
@@ -431,6 +459,7 @@ public:
     QString alarmFilterText() const { return m_alarmFilterText; }
     FrameListModel* recentFrames() { return &m_recentFrames; }
     FrameListModel* liveFrames() { return &m_liveFrames; }
+    RawFrameTableModel* rawFrameTable() { return &m_rawFrameTable; }
     FrameListModel* replayFrames() { return &m_replayFrames; }
     FrameFilterProxyModel* liveFrameView() { return &m_liveFrameView; }
     FrameFilterProxyModel* replayFrameView() { return &m_replayFrameView; }
@@ -526,6 +555,14 @@ public:
     Q_INVOKABLE void refreshPorts();
     Q_INVOKABLE void connectPort(const QString& portName);
     Q_INVOKABLE void disconnectPort();
+    Q_INVOKABLE void toggleDebugGateway(const QString& portName);
+    Q_INVOKABLE void startDebugGateway(const QString& portName);
+    Q_INVOKABLE void stopDebugGateway();
+    Q_INVOKABLE void setDebugProfilerEnabled(bool enabled);
+    Q_INVOKABLE void toggleDebugProfiler();
+    Q_INVOKABLE void resetPerformanceMetrics();
+    Q_INVOKABLE void runVerificationScenario(const QString& scenarioKey, const QString& portName = QString());
+    Q_INVOKABLE void stopVerificationRunner();
     Q_INVOKABLE void startLog();
     Q_INVOKABLE void stopLog();
     Q_INVOKABLE void finalizePendingLogSave(const QString& filePath);
@@ -621,6 +658,9 @@ signals:
     void transportModeChanged();
     void typedEvidenceChanged();
     void transportDiagnosticsChanged();
+    void debugGatewayChanged();
+    void performanceDiagnosticsChanged();
+    void verificationRunnerChanged();
     void controlStateChanged();
     void statusTextChanged();
     void rulesPathChanged();
@@ -639,6 +679,7 @@ signals:
     void sortOptionsChanged();
     void filtersChanged();
     void viewHoldChanged();
+    void analysisRuntimeChanged();
     void derivedSummaryChanged();
     void replayIssueMarkersChanged();
     void logStateChanged();
@@ -691,6 +732,9 @@ private:
         bool timingIssueLatched = false;
     };
 
+    using AnalysisStateKey = quint64;
+    using AnalysisStateMap = QHash<AnalysisStateKey, IdState>;
+
     struct ReplayIssueMarker {
         int index = -1;
         quint64 frameUs = 0;
@@ -741,7 +785,7 @@ private:
         int timingMarkerCount = 0;
         int valueMarkerCount = 0;
         int alarmMarkerCount = 0;
-        QHash<quint32, IdState> states;
+        AnalysisStateMap states;
         QVector<CanMonitorAnalysis::AlarmGroup> alarmGroups;
     };
 
@@ -757,6 +801,13 @@ private:
     using EvalResult = CanMonitorAnalysis::TimingEvalResult;
 
     void setStatus(const QString& text);
+    void startDebugGatewayNow(const QString& portName);
+    void finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
+    void finishVerificationRunnerProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
+    void runAttachedVerificationScenario(const QString& scenarioKey);
+    void startAttachedVerificationProcess(QProcess* process, const QStringList& args);
+    void finalizeAttachedVerificationReport();
+    void refreshPerformanceDiagnostics(bool force = false);
     void setReplayLoaded(bool loaded);
     void setReplayPlaying(bool playing);
     void updateReplayCursor(int index, int frameCount, quint64 currentUs, quint64 durationUs, double progress);
@@ -791,6 +842,21 @@ private:
     int countIssueRows(const StableMapListModel& model) const;
     QString makeTopSummary(const StableMapListModel& model, const QString& textField) const;
     void refreshDerivedSummaryCache();
+    void syncAnalysisRuntimeConfig();
+    void resetAnalysisRuntimes();
+    void refreshAnalysisRuntimeSnapshot(bool immediate = false);
+    void acceptLiveAnalysisRuntimeSnapshot(const QString& level,
+                                           const QString& summary,
+                                           const QVariantList& diagnostics,
+                                           const QVariantList& timingRows,
+                                           const QVariantList& valueRows,
+                                           const QVariantList& alarmRows);
+    bool liveAnalysisSnapshotReady() const;
+    void refreshTimingRowsFromAnalysisSnapshot();
+    void refreshValueRowsFromAnalysisSnapshot();
+    void refreshAlarmRowsFromAnalysisSnapshot();
+    CanMonitorAnalysis::AnalysisRuntime& analysisRuntimeForSource(const QString& source);
+    const CanMonitorAnalysis::AnalysisRuntime& activeAnalysisRuntime() const;
     void updateOperatorRecentEventsLocked();
     void pushOperatorRecentEvent(const QString& category, const QString& level, const QString& summary, const QString& detail = QString());
     void requestDerivedSummaryRefresh(bool immediate = false);
@@ -823,7 +889,7 @@ private:
     void flushGraphRefresh();
     void processTimingAnalysisSlice();
     void rebuildTimingEvalIdCache(const QString& source);
-    QVector<quint32>& timingEvalIdsForSource(const QString& source);
+    QVector<AnalysisStateKey>& timingEvalIdsForSource(const QString& source);
     int& timingEvalCursorForSource(const QString& source);
     qint64& timingEvalCacheWallMsForSource(const QString& source);
     bool timingScopeActive() const;
@@ -842,9 +908,9 @@ private:
     bool replayAnalysisActive() const;
     bool analysisPaused() const;
     void setReplayAnalysisHeld(bool held);
-    QHash<quint32, IdState>& stateMapForSource(const QString& source);
-    const QHash<quint32, IdState>& activeStateMap() const;
-    QHash<quint32, IdState>& activeStateMap();
+    AnalysisStateMap& stateMapForSource(const QString& source);
+    const AnalysisStateMap& activeStateMap() const;
+    AnalysisStateMap& activeStateMap();
     QVector<CanMonitorAnalysis::AlarmGroup>& alarmGroupsForSource(const QString& source);
     const QVector<CanMonitorAnalysis::AlarmGroup>& activeAlarmGroups() const;
     QVector<CanMonitorAnalysis::AlarmGroup>& activeAlarmGroups();
@@ -905,7 +971,7 @@ private:
     void captureReplaySnapshotState();
     void clearReplaySnapshotState();
     void restoreReplaySnapshotState();
-    const QHash<quint32, IdState>& replaySnapshotStateMap() const;
+    const AnalysisStateMap& replaySnapshotStateMap() const;
     const QVector<CanMonitorAnalysis::AlarmGroup>& replaySnapshotAlarmGroups() const;
     const QVector<ReplayIssueMarker>& replaySnapshotMarkersForKind(const QString& kind) const;
     quint64 replaySnapshotDisplayedUs() const;
@@ -917,8 +983,8 @@ private:
     bool jumpReplayToIndex(int index, const QString& reasonText = QString());
     bool shouldTrackTimingForId(quint32 id) const;
     bool hasAlarmCapableSignals(quint32 id) const;
-    int cumulativeTimingCountFor(const QHash<quint32, IdState>& states) const;
-    int cumulativeValueAlarmCountFor(const QHash<quint32, IdState>& states) const;
+    int cumulativeTimingCountFor(const AnalysisStateMap& states) const;
+    int cumulativeValueAlarmCountFor(const AnalysisStateMap& states) const;
 
     struct AnalysisViewState {
         QString timingFilterId;
@@ -945,6 +1011,7 @@ private:
         QString alarmFilterText;
         bool hasSelectedValueId = false;
         quint32 selectedValueCanId = 0;
+        AnalysisStateKey selectedValueKey = 0;
     };
 
     static bool moveOrReplaceFile(const QString& src, const QString& dst);
@@ -1031,7 +1098,7 @@ private:
     QVector<ReplayIssueMarker> m_replayValueIssueMarkers;
     QVector<ReplayIssueMarker> m_replayAlarmIssueMarkers;
     bool m_replaySnapshotValid = false;
-    QHash<quint32, IdState> m_replaySnapshotStates;
+    AnalysisStateMap m_replaySnapshotStates;
     QVector<CanMonitorAnalysis::AlarmGroup> m_replaySnapshotAlarmGroups;
     qint64 m_replaySnapshotAlarmSequence = 0;
     quint64 m_replaySnapshotDisplayedUs = 0;
@@ -1104,10 +1171,10 @@ private:
     int m_pendingLiveFrameOffset = 0;
     FrameRecordList m_pendingLiveViewFrames;
     QStringList m_pendingLiveViewTimeTexts;
-    int m_liveFlushChunk = 64;
-    int m_liveFlushMinChunk = 16;
-    int m_liveViewChunk = 40;
-    int m_liveFlushBudgetMs = 2;
+    int m_liveFlushChunk = 16;
+    int m_liveFlushMinChunk = 4;
+    int m_liveViewChunk = 4;
+    int m_liveFlushBudgetMs = 1;
     quint64 m_liveSampledViewDrops = 0;
     quint64 m_liveProjectionObservedFrames = 0;
     quint64 m_liveProjectionProjectedFrames = 0;
@@ -1144,6 +1211,7 @@ private:
     DetailListModel m_valueDetailModel;
     bool m_hasSelectedValueId = false;
     quint32 m_selectedValueCanId = 0;
+    AnalysisStateKey m_selectedValueKey = 0;
     QString m_timingSortMode = QStringLiteral("id");
     bool m_timingSortDescending = false;
     QString m_valueSortMode = QStringLiteral("id");
@@ -1178,8 +1246,20 @@ private:
     QHash<quint32, RuleSpec> m_rules;
     QHash<quint32, SignalMessageSpec> m_signalMessages;
     QSet<quint32> m_alarmCapableSignalIds;
-    QHash<quint32, IdState> m_liveStates;
-    QHash<quint32, IdState> m_replayStates;
+    AnalysisStateMap m_liveStates;
+    AnalysisStateMap m_replayStates;
+    CanMonitorAnalysis::AnalysisRuntime m_liveAnalysisRuntime;
+    CanMonitorAnalysis::AnalysisRuntime m_replayAnalysisRuntime;
+    CanMonitorAnalysis::AnalysisRuntime::Snapshot m_liveAnalysisSnapshot;
+    CanMonitorAnalysis::AnalysisRuntime::Snapshot m_replayAnalysisSnapshot;
+    QString m_analysisRuntimeSummary = QStringLiteral("truth analysis runtime pending");
+    QString m_analysisRuntimeLevel = QStringLiteral("OK");
+    QVariantList m_analysisRuntimeDiagnostics;
+    qint64 m_lastAnalysisRuntimeSnapshotWallMs = -1;
+    QVector<QVariantMap> m_liveAnalysisRuntimeTimingRows;
+    QVector<QVariantMap> m_liveAnalysisRuntimeValueRows;
+    QVector<QVariantMap> m_liveAnalysisRuntimeAlarmRows;
+    bool m_liveAnalysisRuntimeSnapshotReady = false;
     QElapsedTimer m_uptime;
     QTimer m_operatorPulseTimer;
     QTimer m_analysisTimer;
@@ -1189,8 +1269,8 @@ private:
     bool m_derivedSummaryDirty = false;
     bool m_logStateDirty = false;
     bool m_liveStatsDirty = false;
-    QVector<quint32> m_liveTimingEvalIds;
-    QVector<quint32> m_replayTimingEvalIds;
+    QVector<AnalysisStateKey> m_liveTimingEvalIds;
+    QVector<AnalysisStateKey> m_replayTimingEvalIds;
     int m_liveTimingEvalCursor = 0;
     int m_replayTimingEvalCursor = 0;
     qint64 m_lastLiveTimingEvalCacheWallMs = -1;
@@ -1201,6 +1281,7 @@ private:
     qint64 m_lastValueProjectionWallMs = -1;
     qint64 m_lastValueDetailProjectionWallMs = -1;
     qint64 m_lastAlarmProjectionWallMs = -1;
+    AnalysisStateKey m_cachedValueDetailKey = 0;
     quint32 m_cachedValueDetailCanId = 0;
     QString m_cachedValueDetailSource;
     quint64 m_cachedValueDetailFingerprint = 0;
@@ -1241,6 +1322,7 @@ private:
 
     FrameListModel m_recentFrames;
     FrameListModel m_liveFrames;
+    RawFrameTableModel m_rawFrameTable;
     FrameListModel m_replayFrames;
     FrameFilterProxyModel m_liveFrameView;
     FrameFilterProxyModel m_replayFrameView;
@@ -1251,6 +1333,27 @@ private:
     CanMonitorTransport::TransportRuntime m_transportRuntime;
     CanMonitorTransport::TransportSession m_transportSession;
     QString m_transportModeKey = QStringLiteral("typed");
+    QProcess* m_debugGatewayProcess = nullptr;
+    QString m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 꺼짐");
+    QString m_debugGatewayEndpoint;
+    QString m_debugGatewayStopFile;
+    int m_debugGatewayPort = 18477;
+    bool m_debugProfilerEnabled = false;
+    QString m_performanceSummary = QStringLiteral("성능 계측 꺼짐");
+    QVariantList m_performanceDiagnostics;
+    QTimer m_performanceTimer;
+    QProcess* m_verificationProcess = nullptr;
+    QString m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
+    QString m_verificationRunnerArtifactPath;
+    bool m_verificationAttachedMode = false;
+    bool m_verificationAttachedSenderOk = false;
+    int m_verificationAttachedSenderExitCode = -1;
+    int m_verificationAttachedFinalizeAttempts = 0;
+    QString m_verificationAttachedScenario;
+    QString m_verificationAttachedSnapshotPath;
+    QString m_verificationAttachedLogName;
+    QString m_verificationPreviousLogTargetName;
+    QString m_verificationPreviousLogTargetDirectory;
     quint64 m_typedRecordCount = 0;
     quint64 m_typedBytesDropped = 0;
     quint64 m_typedCrcFailures = 0;
@@ -1265,6 +1368,8 @@ private:
     quint64 m_lastTypedHealthMonoUs = 0;
     quint32 m_lastTypedHealthCanRxTotal = 0;
     quint32 m_lastTypedHealthSerialTxTotal = 0;
+    bool m_lastTypedHealthHasUplinkCounters = false;
+    CanMonitorTransport::TransportSession::BoardUplinkCounters m_lastTypedHealthUplinkCounters;
     bool m_typedRxHealthParityAnchored = false;
     quint32 m_typedRxHealthAnchorBoardTotal = 0;
     quint64 m_typedRxHealthAnchorStreamCount = 0;
