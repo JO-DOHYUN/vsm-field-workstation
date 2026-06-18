@@ -32,7 +32,8 @@ public:
         TimeUsRole,
         TimeTextRole,
         FlagsRole,
-        SourceRole
+        SourceRole,
+        ValidRole
     };
 
     explicit RawFrameTableModel(QObject* parent = nullptr);
@@ -67,12 +68,15 @@ signals:
     void rowsAppended(qulonglong firstSeq, qulonglong lastSeq, int count);
 
 private:
+    friend class RawLedgerRuntimeTest;
+
     struct IdFilterToken {
         QString textUpper;
         bool hasId = false;
         quint32 id = 0;
     };
 
+    static QVariant unreadableRowValue(int role, quint64 sourceRow);
     static QVector<IdFilterToken> parseIdFilterTokens(const QString& text);
     static bool parseTokenToId(const QString& token, quint32* out);
     static QString formatElapsedUs(quint64 us, quint64 baseUs);

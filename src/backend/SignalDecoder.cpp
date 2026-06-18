@@ -540,14 +540,16 @@ ValueAlarmResult SignalDecoder::makeValueAlarm(quint32 id,
                 if (label.isEmpty()) label = compactSignalName(cleanName) + QLatin1Char(' ') + fmtStablePhysicalNumber(physical, scale, sig.offset);
             }
         } else if (effectiveMode == QStringLiteral("flag")) {
-            const QString stateLabel = !enumLabel.isEmpty() ? compactStateLabel(enumLabel) : compactStateLabel(cleanName);
-            if (signedRaw != 0 && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(stateLabel)) {
+            const QString rawStateLabel = !enumLabel.isEmpty() ? enumLabel : cleanName;
+            const QString stateLabel = compactStateLabel(rawStateLabel);
+            if (signedRaw != 0 && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(rawStateLabel)) {
                 issue = true;
                 if (label.isEmpty()) label = stateLabel.isEmpty() ? compactSignalName(cleanName) : stateLabel;
             }
         } else if (effectiveMode == QStringLiteral("enum")) {
-            const QString stateLabel = !enumLabel.isEmpty() ? compactStateLabel(enumLabel) : compactStateLabel(cleanName);
-            if (!inactiveRaw && !inactiveLabel && !looksInactiveLabel(stateLabel)) {
+            const QString rawStateLabel = !enumLabel.isEmpty() ? enumLabel : cleanName;
+            const QString stateLabel = compactStateLabel(rawStateLabel);
+            if (!inactiveRaw && !inactiveLabel && !looksInactiveLabel(rawStateLabel)) {
                 issue = true;
                 if (label.isEmpty()) label = stateLabel.isEmpty() ? compactSignalName(cleanName) : stateLabel;
             }
@@ -679,15 +681,15 @@ QVector<DetailRow> SignalDecoder::makeDetailRows(quint32 id,
             }
         }
         if (!issue && hasExplicitAlarm && effectiveMode == QStringLiteral("flag")) {
-            const QString stateLabel = !enumText.isEmpty() ? compactStateLabel(enumText) : compactStateLabel(cleanName);
-            if (inDlc && signedRaw != 0 && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(stateLabel)) {
+            const QString rawStateLabel = !enumText.isEmpty() ? enumText : cleanName;
+            if (inDlc && signedRaw != 0 && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(rawStateLabel)) {
                 issue = true;
                 issueText = QStringLiteral("상태 비트 활성");
             }
         }
         if (!issue && hasExplicitAlarm && effectiveMode == QStringLiteral("enum")) {
-            const QString stateLabel = !enumText.isEmpty() ? compactStateLabel(enumText) : compactStateLabel(cleanName);
-            if (inDlc && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(stateLabel)) {
+            const QString rawStateLabel = !enumText.isEmpty() ? enumText : cleanName;
+            if (inDlc && !inactiveRaw && !inactiveLabel && !looksInactiveLabel(rawStateLabel)) {
                 issue = true;
                 issueText = QStringLiteral("비정상 enum 상태");
             }

@@ -167,6 +167,14 @@ private slots:
         QCOMPARE(model.totalRows(), quint64(0));
         QCOMPARE(model.count(), 0);
     }
+
+    void tableModelMarksUnreadableRowsInsteadOfBlankDlcZero() {
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::ValidRole, 7).toBool(), false);
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::IdTextRole, 7).toString(), QStringLiteral("LEDGER ERR"));
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::DlcRole, 7).toInt(), -1);
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::BusRole, 7).toInt(), -1);
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::SourceRole, 7).toString(), QStringLiteral("ledger-error"));
+    }
 };
 
 QTEST_MAIN(RawLedgerRuntimeTest)

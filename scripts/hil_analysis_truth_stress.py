@@ -28,6 +28,7 @@ from hil_vsm_user_route_stress import (
     crc16_ccitt,
     u16,
     u32,
+    wait_file_stable,
     wait_status,
 )
 
@@ -61,12 +62,12 @@ CSM_UPLINK_HIGH_WATER_KEYS = [
     "shared_can_queue_high_water",
 ]
 CSM_UPLINK_FATAL_KEYS = [
-    "serial_enqueue_fail_total",
     "serial_ring_clear_total",
     "serial_ring_cleared_bytes_total",
     "can_segment_enqueue_fail_total",
 ]
 CSM_UPLINK_WARNING_KEYS = [
+    "serial_enqueue_fail_total",
     "serial_backpressure_total",
     "mcp_drain_budget_hit_total",
 ]
@@ -236,10 +237,11 @@ class TruthLoadSenders:
         return noise_base + slot
 
     def run(self):
-        threads = [
-            threading.Thread(target=self.pcan_sender, daemon=True),
-            threading.Thread(target=self.kvaser_sender, daemon=True),
-        ]
+        threads = []
+        if self.args.source in {"both", "pcan"}:
+            threads.append(threading.Thread(target=self.pcan_sender, daemon=True))
+        if self.args.source in {"both", "kvaser"}:
+            threads.append(threading.Thread(target=self.kvaser_sender, daemon=True))
         for thread in threads:
             thread.start()
         time.sleep(0.2)
@@ -673,6 +675,7 @@ def main() -> int:
     parser.add_argument("--port", default="COM7")
     parser.add_argument("--control-port", type=int, default=28741)
     parser.add_argument("--duration", type=float, default=30.0)
+    parser.add_argument("--source", choices=["both", "pcan", "kvaser"], default="both")
     parser.add_argument("--pcan-rate", type=float, default=1000.0)
     parser.add_argument("--kvaser-rate", type=float, default=1000.0)
     parser.add_argument("--id-count", type=int, default=64)
@@ -698,9 +701,9 @@ def main() -> int:
         args.model = str(PROJECT_ROOT / "tests" / "fixtures" / fixture)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = pathlib.Path(args.artifact_root) / f"vsm_analysis_truth_{stamp}"
+    run_dir = (pathlib.Path(args.artifact_root) / f"vsm_analysis_truth_{stamp}").resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    log_root = pathlib.Path(args.log_root)
+    log_root = pathlib.Path(args.log_root).resolve()
     log_root.mkdir(parents=True, exist_ok=True)
     log_name = f"vsm_analysis_truth_{stamp}"
     before_dirs = {p.resolve() for p in log_root.glob("*.typed") if p.is_dir()}
@@ -723,6 +726,16 @@ def main() -> int:
         wait_status(args.control_port, lambda s: True, 20, "hil control")
         control_request(args.control_port, {"cmd": "set_model", "path": str(pathlib.Path(args.model))})
         wait_status(args.control_port, lambda s: "Analysis Truth Stress" in s.get("status_text", "") or True, 2, "model accepted")
+        control_request(args.control_port, {
+            "cmd": "set_filters",
+            "timing_id": "",
+            "timing_severity": "",
+            "value_id": "",
+            "value_severity": "",
+            "alarm_id": "",
+            "alarm_severity": "",
+            "alarm_text": "",
+        })
         control_request(args.control_port, {"cmd": "set_graph_selection", "keys": graph_keys_for_profile(args.profile)})
         control_request(args.control_port, {"cmd": "set_graph_window", "ms": 60000})
         for key in ["live", "timing", "value", "alarm", "graph"]:
@@ -735,7 +748,9 @@ def main() -> int:
         load_state = senders.run()
         time.sleep(args.read_tail_seconds)
         control_request(args.control_port, {"cmd": "panel", "key": "graph"})
-        control_request(args.control_port, {"cmd": "snapshot", "path": str(run_dir / "app_snapshot.json")})
+        app_snapshot_path = run_dir / "app_snapshot.json"
+        control_request(args.control_port, {"cmd": "snapshot", "path": str(app_snapshot_path)})
+        wait_file_stable(app_snapshot_path, timeout_s=15.0)
         control_request(args.control_port, {"cmd": "stop_log"})
         status = wait_status(
             args.control_port,

@@ -382,11 +382,12 @@ Item {
                         required property string dataHex
                         required property string timeText
                         required property string source
+                        required property bool valid
                         width: ListView.view.width
                         height: Math.round(30 * uiScale)
                         radius: 8
-                        color: index % 2 === 0 ? "#ffffff" : "#f7fbff"
-                        border.color: "#d7e0ea"
+                        color: valid ? (index % 2 === 0 ? "#ffffff" : "#f7fbff") : "#fff1f2"
+                        border.color: valid ? "#d7e0ea" : "#fda4af"
 
                         RowLayout {
                             anchors.fill: parent
@@ -396,20 +397,20 @@ Item {
                                 Layout.preferredWidth: 72
                                 Layout.preferredHeight: Math.round(20 * uiScale)
                                 radius: 6
-                                color: "#e8f0ff"
-                                Components.SafeText { anchors.fill: parent; anchors.margins: 3; text: idText; color: "#1e40af"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.bold: true; horizontalAlignment: Text.AlignHCenter }
+                                color: valid ? "#e8f0ff" : "#ffe4e6"
+                                Components.SafeText { anchors.fill: parent; anchors.margins: 3; text: idText; color: valid ? "#1e40af" : "#be123c"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.bold: true; horizontalAlignment: Text.AlignHCenter }
                             }
                             Components.SafeText { text: "#" + ledgerSeq; color: "#64748b"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.2 * uiScale); Layout.preferredWidth: 64; horizontalAlignment: Text.AlignRight }
-                            Components.SafeText { text: "버스 " + bus; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 54 }
-                            Components.SafeText { text: "DLC " + dlc; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 48 }
-                            Components.SafeText { text: dataHex; color: "#0f172a"; Layout.fillWidth: true; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.family: "Consolas" }
+                            Components.SafeText { text: bus >= 0 ? ("버스 " + bus) : "버스 -"; color: valid ? "#52606d" : "#be123c"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 54 }
+                            Components.SafeText { text: dlc >= 0 ? ("DLC " + dlc) : "DLC -"; color: valid ? "#52606d" : "#be123c"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 48 }
+                            Components.SafeText { text: dataHex; color: valid ? "#0f172a" : "#be123c"; Layout.fillWidth: true; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11 * uiScale); font.family: "Consolas" }
                             Components.SafeText { text: timeText; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.preferredWidth: 92; horizontalAlignment: Text.AlignRight }
                             Rectangle {
                                 Layout.preferredWidth: 54
                                 Layout.preferredHeight: Math.round(20 * uiScale)
                                 radius: 6
-                                color: "#e8f7ed"
-                                Components.SafeText { anchors.fill: parent; anchors.margins: 3; text: source; color: "#15803d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.2 * uiScale); horizontalAlignment: Text.AlignHCenter }
+                                color: valid ? "#e8f7ed" : "#ffe4e6"
+                                Components.SafeText { anchors.fill: parent; anchors.margins: 3; text: source; color: valid ? "#15803d" : "#be123c"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.2 * uiScale); horizontalAlignment: Text.AlignHCenter }
                             }
                         }
                     }

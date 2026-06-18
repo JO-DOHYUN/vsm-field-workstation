@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kvaser-channel", type=int, default=0)
     parser.add_argument("--kvaser-bitrate", type=int, default=-2)
     parser.add_argument("--kvaser-base-id", type=lambda x: int(x, 0), default=0x720)
-    parser.add_argument("--kvaser-expected-bus", type=int, default=1)
+    parser.add_argument("--kvaser-expected-bus", type=int, default=0)
     parser.add_argument("--kvaser-source-marker", type=lambda x: int(x, 0), default=0x6B)
     parser.add_argument("--kvaser-noise-base", type=lambda x: int(x, 0), default=0x740)
 

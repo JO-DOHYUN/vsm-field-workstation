@@ -290,7 +290,11 @@ Item {
 
     function testSetSignalListContentY(value) {
         const numeric = Number(value)
-        signalList.contentY = Math.max(0, Math.min(isFinite(numeric) ? numeric : 0, testSignalListMaxY()))
+        const maxY = testSignalListMaxY()
+        signalList.contentY = Math.max(0, Math.min(isFinite(numeric) ? numeric : 0, maxY))
+        if (signalList.contentY >= maxY - 1 && appController.graphCatalogModel.count > 0)
+            signalList.positionViewAtIndex(appController.graphCatalogModel.count - 1, ListView.End)
+        signalList.forceLayout()
         return signalList.contentY
     }
 
@@ -470,7 +474,7 @@ Item {
                         Layout.fillWidth: true
                         Components.SafeText { text: "전체 그래프 신호"; uiScale: uiScale; basePixelSize: Math.round(11.0 * uiScale); font.bold: true; color: "#243447"; Layout.fillWidth: true }
                         Item { Layout.fillWidth: true }
-                        Components.SafeText { text: "최대 4선"; uiScale: uiScale; basePixelSize: Math.round(10.2 * uiScale); color: "#5b6673"; Layout.preferredWidth: Math.round(68 * uiScale); horizontalAlignment: Text.AlignRight }
+                        Components.SafeText { text: "최대 16선"; uiScale: uiScale; basePixelSize: Math.round(10.2 * uiScale); color: "#5b6673"; Layout.preferredWidth: Math.round(74 * uiScale); horizontalAlignment: Text.AlignRight }
                     }
 
                     ListView {
@@ -480,11 +484,12 @@ Item {
                         clip: true
                         spacing: 2
                         reuseItems: true
-                        cacheBuffer: 220
+                        cacheBuffer: 4096
                         boundsBehavior: Flickable.StopAtBounds
                         model: appController.graphCatalogModel
                         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                         delegate: Rectangle {
+                            id: signalRow
                             required property string key
                             required property string label
                             required property bool selected
@@ -501,13 +506,13 @@ Item {
 
                                 Components.SafeCheckBox {
                                     objectName: "graphSignalCheckBox"
-                                    property string signalKey: key
+                                    property string signalKey: signalRow.key
                                     text: ""
                                     uiScale: uiScale
                                     minControlWidth: Math.round(24 * uiScale)
                                     maxControlWidth: Math.round(28 * uiScale)
                                     checked: selected
-                                    onClicked: toggleGraphSignalFromList(key)
+                                    onClicked: toggleGraphSignalFromList(signalRow.key)
                                 }
 
                                 Item {
@@ -515,14 +520,14 @@ Item {
                                     Layout.fillHeight: true
 
                                     TapHandler {
-                                        onTapped: toggleGraphSignalFromList(key)
+                                        onTapped: toggleGraphSignalFromList(signalRow.key)
                                     }
 
                                     Components.SafeText {
                                         anchors.left: parent.left
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: label
+                                        text: signalRow.label
                                         color: "#243447"
                                         uiScale: uiScale
                                         basePixelSize: Math.round(10.6 * uiScale)

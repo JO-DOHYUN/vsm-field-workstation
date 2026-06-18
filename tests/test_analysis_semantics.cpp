@@ -167,6 +167,35 @@ private slots:
         QVERIFY(result.alarmKey.startsWith(QStringLiteral("value|0X401|")));
     }
 
+    void signalDecoderDoesNotTreatFaultFlagLabelAsInactive() {
+        QHash<quint32, CanModel::SignalMessageSpec> messages;
+        CanModel::SignalMessageSpec msg;
+        msg.id = 0x580;
+        msg.name = QStringLiteral("Full Load Flag");
+
+        CanModel::SignalSpec flag;
+        flag.name = QStringLiteral("Fault Flag");
+        flag.byteIndex1Based = 3;
+        flag.lengthBits = 1;
+        flag.startBitLsb = 0;
+        flag.alarmMode = QStringLiteral("flag");
+        flag.alarmSeverity = QStringLiteral("ERR");
+        flag.alarmMessage = QStringLiteral("Full-load fault flag active");
+        flag.operatingText = QStringLiteral("0: OK, 1: Fault");
+        msg.signalSpecs = {flag};
+        messages.insert(0x580, msg);
+
+        const FrameRecord active = makeFrame(0x580, 8, {0x00, 0x00, 0x01});
+        const auto activeAlarm = CanMonitorAnalysis::SignalDecoder::makeValueAlarm(0x580, active, messages, true);
+        QCOMPARE(activeAlarm.active, true);
+        QCOMPARE(activeAlarm.severity, QStringLiteral("ERR"));
+        QVERIFY(activeAlarm.message.contains(QStringLiteral("Full-load fault flag active")));
+
+        const FrameRecord inactive = makeFrame(0x580, 8, {0x00, 0x00, 0x00});
+        const auto inactiveAlarm = CanMonitorAnalysis::SignalDecoder::makeValueAlarm(0x580, inactive, messages, true);
+        QCOMPARE(inactiveAlarm.active, false);
+    }
+
     void signalDecoderSuppressesInactiveFlagAndBuildsDetailRows() {
         QHash<quint32, CanModel::SignalMessageSpec> messages;
         messages.insert(0x401, makeValueMessage());

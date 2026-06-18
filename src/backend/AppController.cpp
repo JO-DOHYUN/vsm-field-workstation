@@ -49,6 +49,7 @@ constexpr int kLiveProjectionHardBacklog = 256;
 constexpr int kLiveProjectionMaxFlushFrames = 16;
 constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
+constexpr int kGraphMaxSelectedSeries = 16;
 
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
     if (elapsedUs == 0) return 0;
@@ -752,10 +753,12 @@ int graphRefreshIntervalMs(int seriesCount, int windowMs) {
     if (seriesCount >= 2) base = 190;
     if (seriesCount >= 3) base = 250;
     if (seriesCount >= 4) base = 320;
+    if (seriesCount >= 8) base = 420;
+    if (seriesCount >= 12) base = 500;
     if (windowMs >= 15000) base += 30;
     if (windowMs >= 30000) base += 70;
     if (windowMs >= 60000) base += 110;
-    return std::clamp(base, 140, 540);
+    return std::clamp(base, 140, 720);
 }
 
 int graphHistoryRetentionMs(int windowMs) {
@@ -6279,8 +6282,9 @@ void AppController::setPanelActive(const QString& key, bool active) {
     else if (normalized == QStringLiteral("alarm")) target = &m_alarmPanelActive;
     else return;
 
-    if (*target == active) return;
-    *target = active;
+    const bool changed = (*target != active);
+    if (changed) *target = active;
+    else if (!active) return;
 
     if (!active) {
         if (normalized == QStringLiteral("graph")) m_graphRefreshTimer.stop();
@@ -7495,7 +7499,7 @@ QStringList AppController::normalizedGraphOverviewKeys(const QStringList& keys) 
         if (!m_graphSignals.contains(key)) continue;
         if (selected.contains(key)) continue;
         selected << key;
-        if (selected.size() >= 4) break;
+        if (selected.size() >= kGraphMaxSelectedSeries) break;
     }
     return selected;
 }
@@ -7649,7 +7653,7 @@ void AppController::refreshGraphOverviewSeries() {
             m_graphOverviewBuildTextCache = QStringLiteral("재생 파일을 열면 전체 그래프가 준비됩니다");
         } else if (selected.isEmpty()) {
             m_graphOverviewSourceSummaryCache = QStringLiteral("전체 그래프 신호를 선택하세요");
-            m_graphOverviewBuildTextCache = QStringLiteral("그래프/전체그래프 탭에서 최대 4선까지 선택 가능합니다");
+            m_graphOverviewBuildTextCache = QStringLiteral("그래프/전체그래프 탭에서 최대 %1선까지 선택 가능합니다").arg(kGraphMaxSelectedSeries);
         } else {
             m_graphOverviewSourceSummaryCache = QStringLiteral("전체 그래프 데이터 준비 전");
         }
@@ -7801,7 +7805,7 @@ QVariantList AppController::buildGraphOverviewDetailSeries(double startMs, doubl
         if (!m_graphSignals.contains(key)) continue;
         if (selected.contains(key)) continue;
         selected << key;
-        if (selected.size() >= 4) break;
+        if (selected.size() >= kGraphMaxSelectedSeries) break;
     }
     if (selected.isEmpty()) return seriesOut;
 
@@ -7990,7 +7994,7 @@ void AppController::toggleGraphSignal(const QString& key) {
         next.removeAll(key);
     } else {
         if (!m_graphSignals.contains(key)) return;
-        while (next.size() >= 4) next.removeFirst();
+        while (next.size() >= kGraphMaxSelectedSeries) next.removeFirst();
         next << key;
     }
     setGraphSelectedKeys(next);
@@ -8006,7 +8010,7 @@ void AppController::setGraphSelectedKeys(const QStringList& keys) {
         if (!m_graphSignals.contains(key)) continue;
         if (filtered.contains(key)) continue;
         filtered << key;
-        if (filtered.size() >= 4) break;
+        if (filtered.size() >= kGraphMaxSelectedSeries) break;
     }
     if (filtered == m_graphSelectedKeys && m_graphPresetKey == QStringLiteral("manual")) return;
     m_graphSelectedKeys = filtered;
@@ -8307,13 +8311,25 @@ QVariantList AppController::verificationScenarioCatalog() const {
             QStringLiteral("현재 앱 MCP/PCAN 30s"),
             QStringLiteral("새 VSM 창 없이 현재 COM7/로그/성능 경로에서 MCP에 물린 PCAN만 1000fps 송신 검증"),
             false),
+        row(QStringLiteral("attached_kvaser_load_30s"),
+            QStringLiteral("현재 앱 Kvaser 30s"),
+            QStringLiteral("새 VSM 창 없이 현재 COM/로그/성능 경로에서 Kvaser만 1000fps 송신 검증"),
+            false),
         row(QStringLiteral("attached_pcan_mcp_truth_30s"),
             QStringLiteral("현재 앱 MCP Truth 30s"),
             QStringLiteral("MCP/PCAN 단일 버스에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
             false),
+        row(QStringLiteral("attached_kvaser_truth_30s"),
+            QStringLiteral("현재 앱 Kvaser Truth 30s"),
+            QStringLiteral("Kvaser 단일 버스에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
+            false),
         row(QStringLiteral("attached_full_pcan_mcp_30s"),
             QStringLiteral("현재 앱 MCP Full 30s"),
             QStringLiteral("MCP/PCAN 단일 버스에서 160개 모델 ID와 noise를 섞어 주기/값/경보/그래프 풀부하 검증"),
+            false),
+        row(QStringLiteral("attached_full_kvaser_30s"),
+            QStringLiteral("현재 앱 Kvaser Full 30s"),
+            QStringLiteral("Kvaser 단일 버스에서 160개 모델 ID와 noise를 섞어 주기/값/경보/그래프 풀부하 검증"),
             false),
         row(QStringLiteral("attached_full_pcan_mcp_60s"),
             QStringLiteral("현재 앱 MCP Full 60s"),
@@ -8335,13 +8351,25 @@ QVariantList AppController::verificationScenarioCatalog() const {
             QStringLiteral("독립 HIL 30s"),
             QStringLiteral("별도 VSM exe를 새로 실행하는 CI/독립형 user-route 검증"),
             true),
+        row(QStringLiteral("user_route_kvaser_30s"),
+            QStringLiteral("독립 Kvaser HIL 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser만 1000fps로 user-route 검증"),
+            true),
         row(QStringLiteral("analysis_truth_30s"),
             QStringLiteral("독립 Truth HIL 30s"),
             QStringLiteral("별도 VSM exe를 새로 실행하는 fixture + noise user-route 검증"),
             true),
+        row(QStringLiteral("analysis_truth_kvaser_30s"),
+            QStringLiteral("독립 Kvaser Truth 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser 단일 버스로 fixture + noise 검증"),
+            true),
         row(QStringLiteral("full_analysis_truth_30s"),
             QStringLiteral("독립 Full Truth HIL 30s"),
             QStringLiteral("별도 VSM exe를 새로 실행하는 풀부하 주기/값/경보/그래프 user-route 검증"),
+            true),
+        row(QStringLiteral("full_analysis_truth_kvaser_30s"),
+            QStringLiteral("독립 Kvaser Full Truth 30s"),
+            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser 단일 버스로 풀부하 truth 검증"),
             true),
         row(QStringLiteral("control_smoke"),
             QStringLiteral("Control smoke"),
@@ -8401,8 +8429,11 @@ void AppController::runVerificationScenario(const QString& scenarioKey, const QS
         return;
     }
     if (scenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
+        scenario == QStringLiteral("attached_kvaser_load_30s") ||
         scenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+        scenario == QStringLiteral("attached_kvaser_truth_30s") ||
         scenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
+        scenario == QStringLiteral("attached_full_kvaser_30s") ||
         scenario == QStringLiteral("attached_full_pcan_mcp_60s") ||
         scenario == QStringLiteral("attached_load_30s") ||
         scenario == QStringLiteral("attached_analysis_truth_30s") ||
@@ -8535,17 +8566,23 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
 
     setDebugProfilerEnabled(true);
     resetPerformanceMetrics();
+    resetAllAnalysisFilters();
 
     const bool fullScenario = scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
                               scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s") ||
+                              scenarioKey == QStringLiteral("attached_full_kvaser_30s") ||
                               scenarioKey == QStringLiteral("attached_full_load_30s");
     const bool analysisScenario = fullScenario ||
                                   scenarioKey == QStringLiteral("attached_analysis_truth_30s") ||
-                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s");
+                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+                                  scenarioKey == QStringLiteral("attached_kvaser_truth_30s");
     const bool pcanOnlyScenario = scenarioKey == QStringLiteral("attached_pcan_mcp_load_30s") ||
                                   scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s") ||
                                   scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
                                   scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s");
+    const bool kvaserOnlyScenario = scenarioKey == QStringLiteral("attached_kvaser_load_30s") ||
+                                    scenarioKey == QStringLiteral("attached_kvaser_truth_30s") ||
+                                    scenarioKey == QStringLiteral("attached_full_kvaser_30s");
 
     if (analysisScenario) {
         const QString fixturePath = QDir(workDir).filePath(fullScenario
@@ -8616,14 +8653,20 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
         senderScenario = QStringLiteral("full_pcan_mcp_load_60s");
     } else if (fullScenario && pcanOnlyScenario) {
         senderScenario = QStringLiteral("full_pcan_mcp_load_30s");
+    } else if (fullScenario && kvaserOnlyScenario) {
+        senderScenario = QStringLiteral("full_kvaser_load_30s");
     } else if (fullScenario) {
         senderScenario = QStringLiteral("full_can_load_30s");
     } else if (analysisScenario && pcanOnlyScenario) {
         senderScenario = QStringLiteral("analysis_pcan_mcp_load_30s");
+    } else if (analysisScenario && kvaserOnlyScenario) {
+        senderScenario = QStringLiteral("analysis_kvaser_load_30s");
     } else if (analysisScenario) {
         senderScenario = QStringLiteral("analysis_can_load_30s");
     } else if (pcanOnlyScenario) {
         senderScenario = QStringLiteral("pcan_mcp_load_30s");
+    } else if (kvaserOnlyScenario) {
+        senderScenario = QStringLiteral("kvaser_load_30s");
     } else {
         senderScenario = QStringLiteral("can_load_30s");
     }
@@ -8665,9 +8708,14 @@ void AppController::startAttachedVerificationProcess(QProcess* process, const QS
                                   m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
                                   m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
                                   m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s");
+    const bool kvaserOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_kvaser_load_30s") ||
+                                    m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth_30s") ||
+                                    m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser_30s");
     m_verificationRunnerStatus = pcanOnlyScenario
         ? QStringLiteral("현재 앱 검증 중 · MCP/PCAN 송신 시작")
-        : QStringLiteral("현재 앱 검증 중 · PCAN/Kvaser 송신 시작");
+        : (kvaserOnlyScenario
+               ? QStringLiteral("현재 앱 검증 중 · Kvaser 송신 시작")
+               : QStringLiteral("현재 앱 검증 중 · PCAN/Kvaser 송신 시작"));
     emit verificationRunnerChanged();
     setStatus(m_verificationRunnerStatus);
     process->start(QStringLiteral("py"), args);
@@ -8776,9 +8824,11 @@ void AppController::finalizeAttachedVerificationReport() {
 
     const bool fullScenario = m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
                               m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s") ||
+                              m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser_30s") ||
                               m_verificationAttachedScenario == QStringLiteral("attached_full_load_30s");
     const bool truthValidationRequired = fullScenario ||
                                          m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
+                                         m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth_30s") ||
                                          m_verificationAttachedScenario == QStringLiteral("attached_analysis_truth_30s");
     int truthValidationExit = truthValidationRequired ? -1 : 0;
     QString truthValidationResultPath;
@@ -8812,7 +8862,8 @@ void AppController::finalizeAttachedVerificationReport() {
     }
 
     const bool logFinalized = !m_logRecordingActive && !m_logStopping && !m_logSaving && !m_logPath.isEmpty();
-    const quint64 canRxFrames = m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw));
+    const quint64 canRxFrames = std::max(m_rawFrameTable.totalRows(),
+                                         m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw)));
     const bool logHasCanRxFrames = canRxFrames > 0;
     const bool truthValidationOk = !truthValidationRequired || truthValidationExit == 0;
     const bool pass = m_verificationAttachedSenderOk && logFinalized && logHasCanRxFrames && truthValidationOk;
@@ -9539,10 +9590,21 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     context.insert(QStringLiteral("replay_loop"), replayLoop());
     root.insert(QStringLiteral("context"), context);
 
+    const bool useLiveRuntimeRows = liveAnalysisSnapshotReady();
+    const QJsonArray timingRows = useLiveRuntimeRows ? variantRowsToArray(m_liveAnalysisRuntimeTimingRows) : modelToArray(&m_timingModel);
+    const QJsonArray valueRows = useLiveRuntimeRows ? variantRowsToArray(m_liveAnalysisRuntimeValueRows) : modelToArray(&m_valueModel);
+    const QJsonArray alarmRows = useLiveRuntimeRows ? variantRowsToArray(m_liveAnalysisRuntimeAlarmRows) : modelToArray(&m_alarmModel);
+    const QJsonArray valueDetailRows = detailModelToArray(&m_valueDetailModel);
+    const QJsonArray liveAlarmGroups = alarmGroupArray(m_liveAlarmGroups);
+    const QJsonArray replayAlarmGroups = alarmGroupArray(m_replayAlarmGroups);
+
     QJsonObject counts;
-    counts.insert(QStringLiteral("timing_rows"), m_timingModel.count());
-    counts.insert(QStringLiteral("value_rows"), m_valueModel.count());
-    counts.insert(QStringLiteral("alarm_rows"), m_alarmModel.count());
+    counts.insert(QStringLiteral("timing_rows"), timingRows.size());
+    counts.insert(QStringLiteral("value_rows"), valueRows.size());
+    counts.insert(QStringLiteral("alarm_rows"), alarmRows.size());
+    counts.insert(QStringLiteral("visible_timing_rows"), m_timingModel.count());
+    counts.insert(QStringLiteral("visible_value_rows"), m_valueModel.count());
+    counts.insert(QStringLiteral("visible_alarm_rows"), m_alarmModel.count());
     counts.insert(QStringLiteral("timing_issue_count"), timingIssueCount());
     counts.insert(QStringLiteral("value_issue_count"), valueIssueCount());
     counts.insert(QStringLiteral("active_alarm_count"), activeAlarmCount());
@@ -9599,13 +9661,6 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     sorts.insert(QStringLiteral("alarm_descending"), m_alarmSortDescending);
     root.insert(QStringLiteral("sorts"), sorts);
 
-    const QJsonArray timingRows = modelToArray(&m_timingModel);
-    const QJsonArray valueRows = modelToArray(&m_valueModel);
-    const QJsonArray alarmRows = modelToArray(&m_alarmModel);
-    const QJsonArray valueDetailRows = detailModelToArray(&m_valueDetailModel);
-    const QJsonArray liveAlarmGroups = alarmGroupArray(m_liveAlarmGroups);
-    const QJsonArray replayAlarmGroups = alarmGroupArray(m_replayAlarmGroups);
-
     root.insert(QStringLiteral("timing_rows"), timingRows);
     root.insert(QStringLiteral("value_rows"), valueRows);
     root.insert(QStringLiteral("alarm_rows"), alarmRows);
@@ -9646,9 +9701,12 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
         markdown << QStringLiteral("- default_snapshot_directory: %1").arg(defaultSnapshotDirectory());
         markdown << QStringLiteral("");
         markdown << QStringLiteral("## Counts");
-        markdown << QStringLiteral("- timing_rows: %1").arg(m_timingModel.count());
-        markdown << QStringLiteral("- value_rows: %1").arg(m_valueModel.count());
-        markdown << QStringLiteral("- alarm_rows: %1").arg(m_alarmModel.count());
+        markdown << QStringLiteral("- timing_rows: %1").arg(timingRows.size());
+        markdown << QStringLiteral("- value_rows: %1").arg(valueRows.size());
+        markdown << QStringLiteral("- alarm_rows: %1").arg(alarmRows.size());
+        markdown << QStringLiteral("- visible_timing_rows: %1").arg(m_timingModel.count());
+        markdown << QStringLiteral("- visible_value_rows: %1").arg(m_valueModel.count());
+        markdown << QStringLiteral("- visible_alarm_rows: %1").arg(m_alarmModel.count());
         markdown << QStringLiteral("- timing_issue_count: %1").arg(timingIssueCount());
         markdown << QStringLiteral("- value_issue_count: %1").arg(valueIssueCount());
         markdown << QStringLiteral("- active_alarm_count: %1").arg(activeAlarmCount());
@@ -9703,9 +9761,12 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
             markdown << QStringLiteral("- default_snapshot_directory: %1").arg(defaultSnapshotDirectory());
             markdown << QStringLiteral("");
             markdown << QStringLiteral("## Counts");
-            markdown << QStringLiteral("- timing_rows: %1").arg(m_timingModel.count());
-            markdown << QStringLiteral("- value_rows: %1").arg(m_valueModel.count());
-            markdown << QStringLiteral("- alarm_rows: %1").arg(m_alarmModel.count());
+            markdown << QStringLiteral("- timing_rows: %1").arg(timingRows.size());
+            markdown << QStringLiteral("- value_rows: %1").arg(valueRows.size());
+            markdown << QStringLiteral("- alarm_rows: %1").arg(alarmRows.size());
+            markdown << QStringLiteral("- visible_timing_rows: %1").arg(m_timingModel.count());
+            markdown << QStringLiteral("- visible_value_rows: %1").arg(m_valueModel.count());
+            markdown << QStringLiteral("- visible_alarm_rows: %1").arg(m_alarmModel.count());
             markdown << QStringLiteral("- timing_issue_count: %1").arg(timingIssueCount());
             markdown << QStringLiteral("- value_issue_count: %1").arg(valueIssueCount());
             markdown << QStringLiteral("- active_alarm_count: %1").arg(activeAlarmCount());

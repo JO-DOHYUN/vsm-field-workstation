@@ -8,6 +8,7 @@ const QRegularExpression& idFilterSeparator() {
     static const QRegularExpression separator(QStringLiteral("[,;\\s]+"));
     return separator;
 }
+
 }
 
 RawFrameTableModel::RawFrameTableModel(QObject* parent)
@@ -25,7 +26,7 @@ QVariant RawFrameTableModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid() || index.row() < 0 || index.row() >= rowCount()) return {};
     const quint64 sourceRow = sourceRowForDisplayRow(index.row());
     const auto row = m_ledger.readRow(sourceRow);
-    if (!row) return {};
+    if (!row) return unreadableRowValue(role, sourceRow);
 
     switch (role) {
     case LedgerSeqRole: return QString::number(row->ledgerSeq);
@@ -44,6 +45,7 @@ QVariant RawFrameTableModel::data(const QModelIndex& index, int role) const {
         return flags.isEmpty() ? QStringLiteral("STD") : flags.join(QLatin1Char('|'));
     }
     case SourceRole: return QStringLiteral("truth");
+    case ValidRole: return true;
     default: return {};
     }
 }
@@ -60,8 +62,37 @@ QHash<int, QByteArray> RawFrameTableModel::roleNames() const {
         {TimeUsRole, "timeUs"},
         {TimeTextRole, "timeText"},
         {FlagsRole, "flags"},
-        {SourceRole, "source"}
+        {SourceRole, "source"},
+        {ValidRole, "valid"}
     };
+}
+
+QVariant RawFrameTableModel::unreadableRowValue(int role, quint64 sourceRow) {
+    switch (role) {
+    case LedgerSeqRole:
+    case RowNumberRole:
+        return QString::number(sourceRow);
+    case IdRole:
+        return QVariant::fromValue<quint32>(0);
+    case IdTextRole:
+        return QStringLiteral("LEDGER ERR");
+    case BusRole:
+    case DlcRole:
+        return -1;
+    case DataHexRole:
+        return QStringLiteral("row read failed");
+    case TimeUsRole:
+    case TimeTextRole:
+        return QStringLiteral("-");
+    case FlagsRole:
+        return QStringLiteral("INVALID");
+    case SourceRole:
+        return QStringLiteral("ledger-error");
+    case ValidRole:
+        return false;
+    default:
+        return {};
+    }
 }
 
 QString RawFrameTableModel::summary() const {

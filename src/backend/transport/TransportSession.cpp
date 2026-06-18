@@ -195,11 +195,12 @@ QString TransportSession::liveLevel() const {
 QString TransportSession::boardUplinkLevel() const {
     if (!m_boardUplink.present) return QStringLiteral("INFO");
     if (m_boardUplink.serialRingClearTotal > 0 ||
-        m_boardUplink.serialEnqueueFailTotal > 0 ||
+        m_boardUplink.serialRingClearedBytesTotal > 0 ||
         m_boardUplink.canSegmentEnqueueFailTotal > 0) {
         return QStringLiteral("ERR");
     }
-    if (m_boardUplink.serialBackpressureTotal > 0 ||
+    if (m_boardUplink.serialEnqueueFailTotal > 0 ||
+        m_boardUplink.serialBackpressureTotal > 0 ||
         m_boardUplink.mcpDrainBudgetHitTotal > 0) {
         return QStringLiteral("WARN");
     }
@@ -333,7 +334,7 @@ QVariantList TransportSession::rows() const {
                 : QStringLiteral("BOARD_HEALTH payload is legacy 52B; cannot separate USB backpressure from board CAN counters"),
             m_boardUplink.present &&
                 (m_boardUplink.serialRingClearTotal > 0 ||
-                 m_boardUplink.serialEnqueueFailTotal > 0 ||
+                 m_boardUplink.serialRingClearedBytesTotal > 0 ||
                  m_boardUplink.canSegmentEnqueueFailTotal > 0)),
         row(QStringLiteral("live_truth"),
             QStringLiteral("Live truth"),

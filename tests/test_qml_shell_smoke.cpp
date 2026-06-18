@@ -117,10 +117,23 @@ QString writeGraphModelFixture(const QString& rootPath) {
     return path;
 }
 
+void collectObjectAndQuickItemTree(QObject* object, QVector<QObject*>& out, QSet<QObject*>* seen) {
+    if (!object || seen->contains(object)) return;
+    seen->insert(object);
+    out.push_back(object);
+    for (QObject* child : object->children()) collectObjectAndQuickItemTree(child, out, seen);
+    if (auto* item = qobject_cast<QQuickItem*>(object)) {
+        for (QQuickItem* childItem : item->childItems()) collectObjectAndQuickItemTree(childItem, out, seen);
+    }
+}
+
 QObject* findGraphSignalCheckBox(QObject* graphPage, const QString& key) {
-    const auto boxes = graphPage->findChildren<QObject*>(QStringLiteral("graphSignalCheckBox"));
-    for (QObject* box : boxes) {
-        if (box && box->property("signalKey").toString() == key) return box;
+    QVector<QObject*> objects;
+    QSet<QObject*> seen;
+    collectObjectAndQuickItemTree(graphPage, objects, &seen);
+    for (QObject* object : objects) {
+        if (!object || object->objectName() != QStringLiteral("graphSignalCheckBox")) continue;
+        if (object->property("signalKey").toString() == key) return object;
     }
     return nullptr;
 }

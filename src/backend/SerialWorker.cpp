@@ -19,6 +19,8 @@ constexpr int kUiProjectionMaxFramesPerFlush = 4;
 constexpr int kUiProjectionHardPendingKeys = 64;
 constexpr int kRawLedgerFlushIntervalMs = 60;
 constexpr int kRawLedgerMaxRecordsPerFlush = 512;
+constexpr qint64 kSerialReadBufferBytes = 4 * 1024 * 1024;
+constexpr int kReadyReadMaxDrainLoops = 16;
 
 FrameRecord typedCanToFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
     FrameRecord frame;
@@ -93,6 +95,7 @@ void SerialWorker::start(const QString& portName) {
     m_serial->setParity(QSerialPort::NoParity);
     m_serial->setStopBits(QSerialPort::OneStop);
     m_serial->setFlowControl(QSerialPort::NoFlowControl);
+    m_serial->setReadBufferSize(kSerialReadBufferBytes);
 
     if (!m_serial->open(QIODevice::ReadWrite)) {
         qCWarning(logTransport).noquote() << "Serial open failed" << endpoint << m_serial->errorString();
@@ -275,7 +278,16 @@ void SerialWorker::setLogging(bool enable, const QString& binPath, const QString
 void SerialWorker::onReadyRead() {
     QIODevice* device = activeDevice();
     if (!device) return;
-    processIncomingBytes(device->readAll());
+    QByteArray bytes;
+    const qint64 initialAvailable = std::max<qint64>(0, device->bytesAvailable());
+    bytes.reserve(int(std::min<qint64>(initialAvailable, kSerialReadBufferBytes)));
+    for (int pass = 0; pass < kReadyReadMaxDrainLoops; ++pass) {
+        const QByteArray chunk = device->readAll();
+        if (chunk.isEmpty()) break;
+        bytes.append(chunk);
+        if (device->bytesAvailable() <= 0) break;
+    }
+    if (!bytes.isEmpty()) processIncomingBytes(bytes);
 }
 
 void SerialWorker::onBytesWritten(qint64 bytes) {

@@ -44,12 +44,12 @@ CSM_UPLINK_HIGH_WATER_KEYS = [
     "shared_can_queue_high_water",
 ]
 CSM_UPLINK_FATAL_KEYS = [
-    "serial_enqueue_fail_total",
     "serial_ring_clear_total",
     "serial_ring_cleared_bytes_total",
     "can_segment_enqueue_fail_total",
 ]
 CSM_UPLINK_WARNING_KEYS = [
+    "serial_enqueue_fail_total",
     "serial_backpressure_total",
     "mcp_drain_budget_hit_total",
 ]
@@ -324,7 +324,11 @@ class CanLoadSenders:
             self.stop_event.set()
 
     def run(self):
-        threads = [threading.Thread(target=self.pcan_sender), threading.Thread(target=self.kvaser_sender)]
+        threads = []
+        if self.args.source in {"both", "pcan"}:
+            threads.append(threading.Thread(target=self.pcan_sender))
+        if self.args.source in {"both", "kvaser"}:
+            threads.append(threading.Thread(target=self.kvaser_sender))
         for thread in threads:
             thread.start()
         self.start_event.set()
@@ -453,6 +457,25 @@ def control_request(port: int, payload: dict, timeout: float = 5.0) -> dict:
                 break
             buf += chunk
     return json.loads(buf.decode("utf-8"))
+
+
+def wait_file_stable(path: pathlib.Path, timeout_s: float = 10.0, stable_s: float = 0.25) -> pathlib.Path:
+    deadline = time.time() + timeout_s
+    last_size = -1
+    stable_since: float | None = None
+    while time.time() < deadline:
+        if path.exists():
+            size = path.stat().st_size
+            if size > 0 and size == last_size:
+                if stable_since is None:
+                    stable_since = time.time()
+                if time.time() - stable_since >= stable_s:
+                    return path
+            else:
+                last_size = size
+                stable_since = None
+        time.sleep(0.05)
+    raise TimeoutError(f"file not finalized: {path}")
 
 
 def wait_tcp_endpoint(host: str, port: int, timeout_s: float, process: subprocess.Popen | None = None) -> None:
@@ -754,6 +777,7 @@ def main() -> int:
     parser.add_argument("--control-port", type=int, default=28731)
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--no-api-load", action="store_true")
+    parser.add_argument("--source", choices=["both", "pcan", "kvaser"], default="both")
     parser.add_argument("--control-smoke", action="store_true")
     parser.add_argument("--control-rpm", type=int, default=800)
     parser.add_argument("--control-bus", type=int, default=-1)
@@ -769,7 +793,7 @@ def main() -> int:
     parser.add_argument("--kvaser-channel", type=int, default=0)
     parser.add_argument("--kvaser-bitrate", type=int, default=-2)
     parser.add_argument("--kvaser-base-id", type=lambda x: int(x, 0), default=0x720)
-    parser.add_argument("--kvaser-expected-bus", type=int, default=1)
+    parser.add_argument("--kvaser-expected-bus", type=int, default=0)
     parser.add_argument("--kvaser-source-marker", type=lambda x: int(x, 0), default=-1)
     parser.add_argument("--drain-seconds", type=float, default=1.0)
     parser.add_argument("--read-tail-seconds", type=float, default=5.0)
@@ -787,9 +811,9 @@ def main() -> int:
         args.pcan_source_marker = 0x40 | (int(time.time() * 1000) & 0x0F)
     if args.kvaser_source_marker < 0:
         args.kvaser_source_marker = 0x60 | ((int(time.time() * 1000) >> 4) & 0x0F)
-    run_dir = pathlib.Path(args.artifact_root) / f"vsm_user_route_{stamp}"
+    run_dir = (pathlib.Path(args.artifact_root) / f"vsm_user_route_{stamp}").resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    log_root = pathlib.Path(args.log_root)
+    log_root = pathlib.Path(args.log_root).resolve()
     log_root.mkdir(parents=True, exist_ok=True)
     log_name = f"vsm_user_route_{stamp}"
     before_dirs = {p.resolve() for p in log_root.glob("*.typed") if p.is_dir()}
@@ -908,7 +932,9 @@ def main() -> int:
         if control_driver is not None:
             control_driver.stop()
         time.sleep(args.read_tail_seconds)
-        control_request(args.control_port, {"cmd": "snapshot", "path": str(run_dir / "app_state.json")})
+        app_state_path = run_dir / "app_state.json"
+        control_request(args.control_port, {"cmd": "snapshot", "path": str(app_state_path)})
+        wait_file_stable(app_state_path, timeout_s=15.0)
         control_request(args.control_port, {"cmd": "stop_log"})
         status = wait_status(
             args.control_port,
