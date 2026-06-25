@@ -45,6 +45,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/HostTxRuntime.cpp
     src/backend/transport/DrainByteQueue.h
     src/backend/transport/DrainByteQueue.cpp
+    src/backend/transport/TypedRecordHandoffQueue.h
+    src/backend/transport/TypedRecordHandoffQueue.cpp
     src/backend/transport/LegacyIngressRuntime.h
     src/backend/transport/LegacyIngressRuntime.cpp
     src/backend/transport/LiveProjectionRuntime.h
@@ -57,6 +59,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
     src/backend/transport/TypedEvidencePipelineRuntime.h
     src/backend/transport/TypedEvidencePipelineRuntime.cpp
+    src/backend/transport/CaptureCoreRuntime.h
+    src/backend/transport/CaptureCoreRuntime.cpp
     src/backend/transport/TypedEvidencePipelineWorkerRuntime.h
     src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
     src/backend/transport/LiveTruthRuntime.h
@@ -208,7 +212,7 @@ target_link_libraries(can_monitor_qml_reboot
 )
 
 if (WIN32)
-    target_link_libraries(can_monitor_qml_reboot PRIVATE winmm)
+    target_link_libraries(can_monitor_qml_reboot PRIVATE winmm psapi)
 endif()
 
 if (WIN32)

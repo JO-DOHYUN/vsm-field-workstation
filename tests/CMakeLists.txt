@@ -110,6 +110,20 @@ target_link_libraries(test_drain_byte_queue PRIVATE
 )
 add_test(NAME drain_byte_queue COMMAND test_drain_byte_queue)
 
+add_executable(test_typed_record_handoff_queue
+    test_typed_record_handoff_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
+)
+target_include_directories(test_typed_record_handoff_queue PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_typed_record_handoff_queue PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME typed_record_handoff_queue COMMAND test_typed_record_handoff_queue)
+
 add_executable(test_typed_capture_writer_runtime
     test_typed_capture_writer_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -119,6 +133,7 @@ add_executable(test_typed_capture_writer_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/TypedReplayReader.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
 )
 target_include_directories(test_typed_capture_writer_runtime PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -886,15 +901,31 @@ foreach(_can_monitor_transport_target IN ITEMS
         target_sources(${_can_monitor_transport_target} PRIVATE
             ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/CaptureCoreRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerWriterRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisWorkerRuntime.cpp
         )
     endif()
 endforeach()
+
+if (WIN32)
+    foreach(_can_monitor_appcontroller_target IN ITEMS
+        test_app_controller_replay_flow
+        test_app_controller_log_flow
+        test_app_controller_analysis_source_flow
+        test_app_controller_export_snapshot
+        test_qml_shell_smoke
+    )
+        if (TARGET ${_can_monitor_appcontroller_target})
+            target_link_libraries(${_can_monitor_appcontroller_target} PRIVATE psapi)
+        endif()
+    endforeach()
+endif()
 
 if (WIN32)
     set(_can_monitor_test_env "PATH=${QT_BIN_DIR};$ENV{PATH}")
@@ -905,6 +936,7 @@ if (WIN32)
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(typed_record_handoff_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_capture_writer_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_ingress_parser_only PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(evidence_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

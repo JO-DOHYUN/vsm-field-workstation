@@ -39,7 +39,7 @@ public:
     StorageUpdate stopStorage(const QString& inactivePath, const QJsonObject& diagnostics);
     StorageUpdate finalizeStorageIfActive(const QJsonObject& diagnostics);
 
-    StorageUpdate enqueueRecords(const TypedRecordList& records);
+    StorageUpdate enqueueRecords(TypedRecordList records);
     StorageUpdate noteOverrun(quint64 records, quint64 bytes, const QString& reason);
     StorageUpdate flushQueued(bool force = false);
     void resetQueue();

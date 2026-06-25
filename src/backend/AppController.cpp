@@ -28,6 +28,20 @@
 #include <QSet>
 #include <QThread>
 
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#endif
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -51,6 +65,8 @@ constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr int kLiveTruthMaxDisplayStateUpdates = 512;
 constexpr int kLiveTruthMaxGraphUpdates = 128;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
+constexpr int kLiveGraphSeriesHardPointLimit = 20000;
+constexpr int kLiveGraphBucketHardPointLimit = 20000;
 constexpr int kGraphMaxSelectedSeries = 16;
 
 int verificationDurationSeconds(const QString& durationKey) {
@@ -69,6 +85,36 @@ QString verificationDurationLabel(const QString& durationKey) {
     if (key == QStringLiteral("1h")) return QStringLiteral("1h");
     if (key == QStringLiteral("manual") || key == QStringLiteral("unlimited")) return QStringLiteral("manual");
     return QStringLiteral("30s");
+}
+
+QVariantMap processMemoryDiagnosticsRow() {
+    QVariantMap row;
+    row.insert(QStringLiteral("name"), QStringLiteral("process_memory"));
+#ifdef Q_OS_WIN
+    PROCESS_MEMORY_COUNTERS_EX counters;
+    std::memset(&counters, 0, sizeof(counters));
+    counters.cb = sizeof(counters);
+    if (GetProcessMemoryInfo(GetCurrentProcess(),
+                             reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+                             sizeof(counters))) {
+        const double workingSetMb = double(counters.WorkingSetSize) / (1024.0 * 1024.0);
+        const double privateMb = double(counters.PrivateUsage) / (1024.0 * 1024.0);
+        row.insert(QStringLiteral("value"),
+                   QStringLiteral("private %1 MB / working %2 MB")
+                       .arg(QString::number(privateMb, 'f', 1))
+                       .arg(QString::number(workingSetMb, 'f', 1)));
+        row.insert(QStringLiteral("level"), privateMb >= 4096.0 ? QStringLiteral("ERR") : (privateMb >= 2048.0 ? QStringLiteral("WARN") : QStringLiteral("OK")));
+        row.insert(QStringLiteral("detail"),
+                   QStringLiteral("process_private_bytes_mb=%1 process_working_set_mb=%2")
+                       .arg(QString::number(privateMb, 'f', 1))
+                       .arg(QString::number(workingSetMb, 'f', 1)));
+        return row;
+    }
+#endif
+    row.insert(QStringLiteral("value"), QStringLiteral("unavailable"));
+    row.insert(QStringLiteral("level"), QStringLiteral("WARN"));
+    row.insert(QStringLiteral("detail"), QStringLiteral("process memory counters unavailable on this platform"));
+    return row;
 }
 
 bool replaceArgValue(QStringList& args, const QString& option, const QString& value) {
@@ -7143,6 +7189,10 @@ void AppController::appendGraphBucketCaches(const QString& source, const QString
             back.maxV = std::max(back.maxV, point.value);
             back.closeV = point.value;
         }
+        if (source == QStringLiteral("live") && buckets.size() > kLiveGraphBucketHardPointLimit) {
+            const int excess = buckets.size() - kLiveGraphBucketHardPointLimit;
+            buckets.erase(buckets.begin(), buckets.begin() + excess);
+        }
     }
 }
 
@@ -7246,7 +7296,7 @@ void AppController::appendGraphSamples(const FrameRecord& fr, const QString& sou
     // Graph history is part of the truth-visible analysis surface. Under load,
     // reduce only rendered points via peak-preserving buckets; do not coalesce
     // selected signal input samples before min/max/latest are calculated.
-    const bool compactLiveGraph = false;
+    const bool compactLiveGraph = source == QStringLiteral("live");
     bool changed = false;
     const quint64 retentionUs = quint64(graphHistoryRetentionMs(m_graphWindowMs)) * 1000ULL;
     QSet<QString> updatedHistoryKeys;
@@ -7287,6 +7337,13 @@ void AppController::appendGraphSamples(const FrameRecord& fr, const QString& sou
                 series.erase(series.begin(), firstKeep);
                 trimGraphBucketCaches(source, historyKey, minUs);
             }
+        }
+        if (source == QStringLiteral("live") && series.size() > kLiveGraphSeriesHardPointLimit) {
+            const int excess = series.size() - kLiveGraphSeriesHardPointLimit;
+            const quint64 minUs = series.at(excess).frameUs;
+            series.erase(series.begin(), series.begin() + excess);
+            trimGraphBucketCaches(source, historyKey, minUs);
+            m_liveProjectionDroppedFrames += quint64(excess);
         }
         updatedHistoryKeys.insert(historyKey);
         changed = true;
@@ -8623,6 +8680,7 @@ void AppController::refreshPerformanceDiagnostics(bool force) {
     const QString probeSummary = CanMonitorPerf::PerformanceProbeRuntime::summary();
     m_performanceSummary = QStringLiteral("%1 | %2").arg(m_uiResponsiveness.summary(), probeSummary);
     m_performanceDiagnostics = m_uiResponsiveness.rows();
+    m_performanceDiagnostics.push_back(processMemoryDiagnosticsRow());
     const QVariantList probeRows = CanMonitorPerf::PerformanceProbeRuntime::rows(80);
     for (const QVariant& row : probeRows) m_performanceDiagnostics.push_back(row);
     emit performanceDiagnosticsChanged();

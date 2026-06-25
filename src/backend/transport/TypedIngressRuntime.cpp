@@ -2,10 +2,6 @@
 
 #include <algorithm>
 
-namespace {
-constexpr int kTypedLiveEmitBatchSize = 512;
-}
-
 namespace CanMonitorTransport {
 
 void TypedIngressRuntime::resetStreamState() {
@@ -16,6 +12,20 @@ void TypedIngressRuntime::resetStreamState() {
 }
 
 TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& bytes, qint64 handshakeElapsedMs) {
+    IngestResult result = ingestEach(bytes, handshakeElapsedMs, [&result](TypedRecord&& record) {
+        static constexpr int kTypedLiveEmitBatchSize = 512;
+        if (result.recordBatches.isEmpty() || result.recordBatches.last().size() >= kTypedLiveEmitBatchSize) {
+            result.recordBatches.push_back(TypedRecordList{});
+            result.recordBatches.last().reserve(kTypedLiveEmitBatchSize);
+        }
+        result.recordBatches.last().push_back(std::move(record));
+    });
+    return result;
+}
+
+TypedIngressRuntime::IngestResult TypedIngressRuntime::ingestEach(const QByteArray& bytes,
+                                                                  qint64 handshakeElapsedMs,
+                                                                  const std::function<void(TypedRecord&&)>& onRecord) {
     IngestResult result;
     if (bytes.isEmpty()) {
         result.status = makeStatusSnapshot();
@@ -26,15 +36,6 @@ TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& 
     const TypedTransportParser::Counters countersBefore = m_parser.counters();
     m_parser.append(bytes);
 
-    TypedRecordList batch;
-    batch.reserve(kTypedLiveEmitBatchSize);
-    auto flushBatch = [&result, &batch]() {
-        if (batch.isEmpty()) return;
-        result.recordBatches.push_back(batch);
-        batch.clear();
-        batch.reserve(kTypedLiveEmitBatchSize);
-    };
-
     while (true) {
         auto record = m_parser.takeOne();
         if (!record) break;
@@ -44,11 +45,9 @@ TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& 
             result.capabilityElapsedMs = handshakeElapsedMs;
             result.capabilityBytes = m_bytesSinceOpen;
         }
-        batch.push_back(*record);
-        if (batch.size() >= kTypedLiveEmitBatchSize) flushBatch();
+        if (onRecord) onRecord(std::move(*record));
     }
 
-    flushBatch();
     result.status = makeStatusSnapshot();
     result.statusDue = countersChanged(countersBefore) && statusDue();
     return result;

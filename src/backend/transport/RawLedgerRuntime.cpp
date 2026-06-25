@@ -133,7 +133,7 @@ RawLedgerRuntime::AppendResult RawLedgerRuntime::appendTypedRecords(const TypedR
         QByteArray segmentPayload;
         if (record.isType(TypedRecordType::CanRxSegment)) {
             if (!decodeTypedCanRxSegmentHeader(record)) continue;
-            segmentPayload = record.payload;
+            segmentPayload = QByteArray(record.payload.constData(), record.payload.size());
         } else if (record.isType(TypedRecordType::CanRxRaw)) {
             const auto can = decodeTypedCanRaw(record);
             if (!can) continue;

@@ -9,6 +9,8 @@
 #include <QStringList>
 #include <QVector>
 
+#include <functional>
+
 namespace CanMonitorTransport {
 
 class TypedIngressRuntime {
@@ -41,6 +43,9 @@ public:
     void resetStreamState();
 
     IngestResult ingest(const QByteArray& bytes, qint64 handshakeElapsedMs);
+    IngestResult ingestEach(const QByteArray& bytes,
+                            qint64 handshakeElapsedMs,
+                            const std::function<void(TypedRecord&&)>& onRecord);
     HandshakeWatchdogState evaluateHandshake(qint64 elapsedMs, qint64 timeoutMs) const;
     QJsonObject makeCaptureDiagnostics() const;
 

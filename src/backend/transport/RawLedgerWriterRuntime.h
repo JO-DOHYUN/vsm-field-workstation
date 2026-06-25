@@ -15,6 +15,7 @@ public:
 public slots:
     void reset(const QString& label);
     void appendRecords(TypedRecordList records);
+    void appendFrames(FrameRecordList frames);
 
 signals:
     void resetCompleted(bool ok, const QString& path, const QString& error);

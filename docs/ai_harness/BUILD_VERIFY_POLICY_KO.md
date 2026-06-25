@@ -38,6 +38,7 @@ Use the smallest level that proves the changed path, then escalate only when the
 Recommended subset map:
 
 - typed/protocol: `typed_transport_foundation|typed_replay_reader|serial_worker_typed_ingest`
+- capture-core memory: `drain_byte_queue|typed_ingress_parser_only|typed_capture_writer_runtime|serial_worker_typed_ingest|analysis_worker_runtime|raw_ledger_runtime|transport_runtime_foundation`
 - control: `control_command_encoder|control_slew_limiter|app_controller_log_flow`
 - replay/source: `replay_engine|app_controller_replay_flow|app_controller_analysis_source_flow`
 - graph/QML/operator UI: `qml_shell_smoke|analysis_semantics`
@@ -58,6 +59,22 @@ Optional CSM firmware gate:
 ```powershell
 & "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -e portenta_h7_m7_mid_mcp2515_j4_dual_csm
 ```
+
+## Capture-Core Memory Gate
+
+Use `.agents/skills/capture-core-memory/SKILL.md` when touching live capture hot path, raw byte/slab ownership, bounded queue, typed frame fanout, writer handoff, analysis handoff, projection snapshot, or process memory telemetry.
+
+For this surface, a normal Release build and full `ctest` prove only compile/regression safety. They do not prove the reported field failure is fixed.
+
+Minimum completion evidence:
+
+- Release build passes.
+- Full `ctest` passes.
+- Startup smoke passes if app/runtime wiring changed.
+- If hardware/HIL is unavailable, report memory fix as structurally implemented but HIL-unverified.
+- If hardware/HIL is available, run `docs/runbooks/VSM_CAPTURE_CORE_MEMORY_VERIFY_KO.md` matrix at least through 10m, and 1h before field-final claim.
+
+Never claim capture-core memory completion if `TypedRecordList` remains the main live fanout object, if full typed batches can accumulate in Qt queued events outside telemetry, or if private memory grows linearly in a 10m/1h run.
 
 ## Reporting Rule
 

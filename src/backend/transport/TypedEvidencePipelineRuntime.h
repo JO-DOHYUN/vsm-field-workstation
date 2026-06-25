@@ -7,6 +7,8 @@
 #include <QJsonObject>
 #include <QVector>
 
+#include <functional>
+
 namespace CanMonitorTransport {
 
 class TypedEvidencePipelineRuntime {
@@ -22,6 +24,10 @@ public:
     TypedIngressRuntime::IngestResult ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
                                                    qint64 handshakeElapsedMs,
                                                    quint64 parseBacklogBytes);
+    TypedIngressRuntime::IngestResult ingestBlocksEach(const QVector<DrainByteQueue::Block>& blocks,
+                                                       qint64 handshakeElapsedMs,
+                                                       quint64 parseBacklogBytes,
+                                                       const std::function<void(TypedRecord&&)>& onRecord);
     TypedIngressRuntime::HandshakeWatchdogState evaluateHandshake(qint64 elapsedMs, qint64 timeoutMs) const;
     QJsonObject makeCaptureDiagnostics() const;
     Status status() const { return m_status; }

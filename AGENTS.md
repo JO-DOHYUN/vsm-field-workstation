@@ -1,31 +1,32 @@
 # AGENTS.md
 
 이 저장소의 Codex 상위 운영 맵이다. 이 파일은 짧고 안정적으로 유지한다.
-상세 절차는 `.agents/skills/`, 상세 근거는 `docs/`, 오래된 이력은 `history/`에 둔다.
+상세 절차는 `.agents/skills/`, 설계 근거는 `docs/`, 오래된 이력은 `history/`에 둔다.
 
 ## 1. 먼저 읽을 것
 항상 아래 순서로 본다.
-1. `START_HERE_KO.md` (새 계정 또는 채팅 히스토리 없는 시작)
+
+1. `START_HERE_KO.md`
 2. `BRIEF.md`
 3. `INDEX.md`
 4. 이번 턴과 직접 관련된 skill 또는 문서만 추가
 5. 하네스 자체를 바꾸는 턴일 때만 `HARNESS_MASTER_KO.md`
 
-## 2. 이 프로젝트의 목표
+## 2. 프로젝트 목표
 목표는 실차/현장 기준에서 신뢰 가능한 CAN monitor / logger / replay / decode / evidence-first control workstation을 완성하는 것이다.
 
-항상 아래를 보존한다.
-- VMS live production path는 CSM typed evidence stream 전용
-- COM open만으로 board alive로 보지 않고 valid `CAPABILITY` 수신을 기준으로 판단
-- live와 replay 의미 분리
-- graph truth-first, fixed-axis, peak 보존
-- legacy 20-byte packet / CRC8 / DLC / `t_us` wrap은 replay/import 호환으로 보존
-- typed board stream 원본 byte를 production truth로 취급
-- CAN RX, CAN TX audit, voltage raw, board health/event, control ack evidence type 분리
-- host 요청 TX, `CONTROL_ACK`, `CAN_TX_RAW`, feedback은 서로 다른 evidence로 분리
-- host 요청 TX는 board가 matching `CAN_TX_RAW`를 낼 때까지 실제 CAN 송신 성공으로 보지 않음
-- Windows Qt/CMake build, test, deploy 재현성
-- 모델팩/rules/decode 해석 추적 가능성
+항상 보존한다.
+
+- VSM live production path는 CSM typed evidence stream 전용이다.
+- COM open만으로 board alive로 보지 않고 valid `CAPABILITY`와 fresh `BOARD_HEALTH`를 기준으로 판단한다.
+- typed board stream 원본 byte가 production truth다.
+- CAN RX, CAN TX audit, voltage/ADC raw, board health/event, capability, control ack evidence type은 분리한다.
+- host 요청 TX, `CONTROL_ACK`, `CAN_TX_RAW`, feedback은 서로 다른 evidence다.
+- host 요청 TX는 matching `CAN_TX_RAW` 전까지 실제 CAN 송신 성공으로 보지 않는다.
+- live와 replay 의미는 분리한다.
+- graph는 truth-first, fixed-axis, peak-preserving 기준을 유지한다.
+- legacy 20-byte packet / CRC8 / DLC / `t_us` wrap은 replay/import 호환으로만 보존한다.
+- Windows Qt/CMake build, test, deploy 재현성을 유지한다.
 
 ## 3. 상시 규칙
 - `BRIEF.md`는 현재 기준본, 유지 기능, 현재 목표, 즉시 다음 작업만 둔다.
@@ -33,22 +34,30 @@
 - routine 코드 수정 턴에서 하네스 재설계를 섞지 않는다.
 - `.agents/`와 `.codex/` 수정은 명시적인 하네스 변경 턴에서만 한다.
 - 기능을 없애서 UI/성능/빌드 문제를 숨기지 않는다.
-- 검증하지 않은 build/run/replay/graph/deploy 성공은 단정하지 않는다.
-- 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary/테스트/exit condition을 같은 slice에 포함한다.
+- 검증하지 않은 build/run/replay/graph/deploy/HIL 성공은 단정하지 않는다.
+- 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary, telemetry, tests, exit condition을 같은 slice에 포함한다.
+- live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라 capture-core ownership 문제로 먼저 의심한다.
 
 ## 4. 작업 라우팅
-- 빌드/테스트/배포/실행 smoke: `.agents/skills/qt-build-verify/SKILL.md`
-- replay/live/source semantics: `.agents/skills/replay-semantics/SKILL.md`
+- capture-core memory/hot path/slab/bounded queue/projection snapshot: `.agents/skills/capture-core-memory/SKILL.md`
+- typed board evidence/storage/control gate/protocol semantics: `.agents/skills/typed-evidence/SKILL.md`
 - graph truth/performance/overview/detail: `.agents/skills/graph-performance/SKILL.md`
-- typed board evidence/storage/control gate: `.agents/skills/typed-evidence/SKILL.md`
-- VMS-CSM 통합 원칙: `docs/architecture/PROJECT_CONSTITUTION_KO.md`
-- typed stream/protocol 계약: `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`, `shared/protocol/typed_stream_v1.md`
-- control evidence 계약: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
-- BRIEF 축소/history 이관/Obsidian 링크: `.agents/skills/doc-history-rollup/SKILL.md`
-- AGENTS/.codex/skill boundary/하네스 구조: `.agents/skills/harness-maint/SKILL.md`
+- replay/live/source semantics: `.agents/skills/replay-semantics/SKILL.md`
+- build/test/deploy/startup smoke: `.agents/skills/qt-build-verify/SKILL.md`
+- AGENTS/.codex/skill boundary/harness structure: `.agents/skills/harness-maint/SKILL.md`
+- BRIEF 축소/history 이관/Obsidian link: `.agents/skills/doc-history-rollup/SKILL.md`
+
+핵심 계약 문서:
+
+- VSM-CSM 통합 원칙: `docs/architecture/PROJECT_CONSTITUTION_KO.md`
+- typed stream/protocol: `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`, `shared/protocol/typed_stream_v1.md`
+- capture-core memory architecture: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
+- control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
+- build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
 
 ## 5. 보고 형식
 작업 결과는 기본적으로 아래를 포함한다.
+
 - 변경 파일
 - 핵심 변경점
 - 실행한 검증과 결과

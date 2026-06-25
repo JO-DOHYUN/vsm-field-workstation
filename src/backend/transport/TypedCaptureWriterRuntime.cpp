@@ -69,7 +69,7 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::finalizeStor
     return update;
 }
 
-TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::enqueueRecords(const TypedRecordList& records) {
+TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::enqueueRecords(TypedRecordList records) {
     StorageUpdate update;
     if (!m_storage.isActive() || records.isEmpty()) return update;
 
@@ -85,7 +85,7 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::enqueueRecor
     }
 
     m_queue.reserve(m_queue.size() + records.size());
-    for (const TypedRecord& record : records) m_queue.push_back(record);
+    for (TypedRecord& record : records) m_queue.push_back(std::move(record));
     m_queuedBytes += incomingBytes;
     m_maxQueuedBytes = std::max(m_maxQueuedBytes, m_queuedBytes);
     return flushQueued(false);

@@ -15,6 +15,7 @@
 #include "transport/TypedEvidencePipelineRuntime.h"
 #include "transport/TypedEvidencePipelineWorkerRuntime.h"
 #include "transport/TypedIngressRuntime.h"
+#include "transport/TypedRecordHandoffQueue.h"
 
 #include <QJsonObject>
 #include <QIODevice>
@@ -158,12 +159,12 @@ private:
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
     void queueProjectedFrames(const FrameRecordList& frames);
     void flushQueuedProjectionFrames(bool force = false);
-    void queueRawLedgerRecords(const TypedRecordList& records);
+    void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushQueuedRawLedgerRecords(bool force = false);
     void flushRawLedgerHandoffSync();
     void queueTruthFrames(const TypedRecordList& records);
     void flushQueuedTruthFrames(bool force = false);
-    void queueAnalysisRecords(const TypedRecordList& records);
+    void queueAnalysisFrames(const FrameRecordList& frames);
     void scheduleAnalysisDispatch();
     void dispatchAnalysisFrames();
     void queueCaptureWriterRecords(const TypedRecordList& records);
@@ -213,6 +214,7 @@ private:
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
     QThread m_drainThread;
     QSharedPointer<CanMonitorTransport::DrainByteQueue> m_drainQueue;
+    QSharedPointer<CanMonitorTransport::TypedRecordHandoffQueue> m_captureRecordQueue;
     CanMonitorTransport::SerialDrainRuntime* m_drainRuntime = nullptr;
     QThread m_typedPipelineThread;
     CanMonitorTransport::TypedEvidencePipelineWorkerRuntime* m_typedPipelineWorker = nullptr;
@@ -223,7 +225,7 @@ private:
     QThread m_rawLedgerThread;
     CanMonitorTransport::RawLedgerWriterRuntime* m_rawLedgerWorker = nullptr;
     QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
-    TypedRecordList m_pendingRawLedgerRecords;
+    FrameRecordList m_pendingRawLedgerFrames;
     TypedRecordList m_pendingCaptureWriterRecords;
     FrameRecordList m_pendingAnalysisFrames;
     QElapsedTimer m_projectionFlushClock;

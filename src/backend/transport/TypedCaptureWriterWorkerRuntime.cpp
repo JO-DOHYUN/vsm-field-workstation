@@ -1,9 +1,17 @@
 #include "transport/TypedCaptureWriterWorkerRuntime.h"
 
+#include <QMetaObject>
+
+#include <utility>
+
 namespace CanMonitorTransport {
 
 TypedCaptureWriterWorkerRuntime::TypedCaptureWriterWorkerRuntime(QObject* parent)
     : QObject(parent) {}
+
+void TypedCaptureWriterWorkerRuntime::setRecordQueue(QSharedPointer<TypedRecordHandoffQueue> queue) {
+    m_recordQueue = std::move(queue);
+}
 
 TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterWorkerRuntime::startStorageSync(const QString& sessionDir,
                                                                                            const QJsonObject& metadata) {
@@ -26,10 +34,33 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterWorkerRuntime::finali
 }
 
 void TypedCaptureWriterWorkerRuntime::enqueueRecords(TypedRecordList records) {
-    const auto update = m_writer.enqueueRecords(records);
+    const auto update = m_writer.enqueueRecords(std::move(records));
     emitStorageUpdate(update);
     emitStatus(m_writer.status());
     emit batchFinished();
+}
+
+void TypedCaptureWriterWorkerRuntime::drainQueuedRecords() {
+    if (!m_recordQueue) {
+        emit batchFinished();
+        return;
+    }
+
+    TypedRecordList records = m_recordQueue->popRecords(4096, 4ULL * 1024ULL * 1024ULL);
+    if (records.isEmpty()) {
+        emitStatus(m_writer.status());
+        emit batchFinished();
+        return;
+    }
+
+    const auto update = m_writer.enqueueRecords(std::move(records));
+    emitStorageUpdate(update);
+    emitStatus(m_writer.status());
+    emit batchFinished();
+
+    if (m_recordQueue && m_recordQueue->hasQueuedRecords()) {
+        QMetaObject::invokeMethod(this, &TypedCaptureWriterWorkerRuntime::drainQueuedRecords, Qt::QueuedConnection);
+    }
 }
 
 void TypedCaptureWriterWorkerRuntime::noteOverrun(quint64 records, quint64 bytes, const QString& reason) {

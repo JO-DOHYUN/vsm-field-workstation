@@ -39,8 +39,10 @@
 - Keep build/test verification reproducible without duplicate workspace edits or noisy successful logs.
 - Work in one user-visible vertical slice per turn, not file-by-file cleanup. Each slice should include at least three of: operator UI change, evidence contract/model change, regression coverage, executable smoke.
 - Do not add temporary `AppController` responsibilities that already belong to Storage/Replay/Transport/Control runtimes without an explicit boundary plan in the same slice.
+- Resolve long-run VSM live high-load memory growth by moving the live capture hot path toward the capture-core memory architecture, not by UI throttling alone.
 
 ## Immediate Next Work
+- Capture-core memory priority: remove `TypedRecordList`/owning `QByteArray` full-batch fanout from the live production hot path, introduce bounded slab/descriptor ownership, and prove memory plateau with the capture-core memory verification runbook. See `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md` and `.agents/skills/capture-core-memory/SKILL.md`.
 - Program RC status: prior Windows VSM portable RC exists at `portable_field_rc_20260604`; current workspace now has truth-first live analysis boundary plus analysis truth stress verification, verified by Release build, full 27/27 ctest, and exe startup smoke. Fresh HIL/vehicle run is still required before field-final claim.
 - Documentation status: `START_HERE_KO`, completion plan, architecture note, release checklist, Android feasibility, field runbook, and analysis truth stress HIL runbook are aligned to the current 27/27 verified state.
 - Immediate architecture state: `LiveTruthRuntime` owns worker-side truth snapshot/coalescing diagnostics, `TransportSession` exposes separate `live_truth` and `live_projection` rows, debug gateway mode is implemented through `scripts/vsm_debug_gateway.py`, and typed capture storage writes are buffered while preserving `capture.stream`/`capture.index` format.

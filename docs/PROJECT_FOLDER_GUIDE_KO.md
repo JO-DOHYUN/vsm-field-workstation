@@ -1,64 +1,78 @@
 # PROJECT_FOLDER_GUIDE_KO
 
-이 문서는 VSM 단독 repository 폴더를 처음 여는 Codex 계정이 source, docs, history, runtime data를 구분하도록 돕는 폴더 지도다.
+이 문서는 VSM standalone repository의 폴더 기준이다.
+목표는 source, docs, history, runtime data, generated output을 명확히 분리해 Codex와 사람이 같은 기준으로 작업하게 만드는 것이다.
 
-## 루트 진입 파일
+## Root Entry Files
+- `AGENTS.md`: 항상 먼저 읽는 상위 운영 맵.
+- `START_HERE_KO.md`: 새 계정/새 채팅 진입 문서.
+- `BRIEF.md`: 현재 기준본과 즉시 다음 작업.
+- `INDEX.md`: 문서 허브.
+- `HARNESS_MASTER_KO.md`: 하네스 구조 변경 전용 상위 문서.
+- `CMakeLists.txt`, `CMakePresets.json`: Windows Qt/CMake build entry.
+- `README_SETUP_KO.md`, `BUILD_FOLDER_USAGE_KO.md`: deploy/install 호환 안내.
 
-- `AGENTS.md`: 항상 먼저 읽는 상위 운영 맵
-- `START_HERE_KO.md`: 새 계정/메모리 없는 시작점
-- `BRIEF.md`: 현재 기준본과 즉시 다음 작업
-- `INDEX.md`: 문서 허브
-- `HARNESS_MASTER_KO.md`: 하네스 상세 원칙. 하네스 자체를 바꾸는 턴에만 읽는다.
-- `CMakeLists.txt`, `CMakePresets.json`: Windows Qt/CMake build entry
-- `README_SETUP_KO.md`, `BUILD_FOLDER_USAGE_KO.md`: CMake install/deploy 호환용 짧은 안내 파일
+Root에는 임시 계획서, handoff, 실패 분석 초안, 긴 prompt를 두지 않는다.
+그런 파일은 목적에 따라 `docs/architecture/`, `docs/runbooks/`, `docs/field/`, `history/`로 이동한다.
 
 ## Source
-
-- `src/`: Qt/C++ backend, runtime, parser, replay, recorder, model validation
-- `qml/`: operator UI, replay bar, live/board/control/graph 화면
-- `tests/`: unit/component/QML smoke tests
-- `shared/`: CSM/VSM 공용 protocol contract
-- `data/`: active model/rules baseline and fixtures
-- `scripts/`: deploy/build helper scripts
-- `packaging/`: release notice, SBOM, installer hook
+- `src/`: Qt/C++ backend, runtime, parser, transport, replay, recorder, model validation.
+- `src/backend/transport/`: serial drain, typed parser/pipeline, capture writer, raw ledger, host TX, transport diagnostics.
+- `src/backend/analysis/`: timing/value/alarm truth analysis runtime.
+- `src/backend/perf/`: performance and UI responsiveness telemetry.
+- `qml/`: operator UI pages/components.
+- `tests/`: unit/component/QML smoke tests.
+- `shared/`: CSM/VSM shared protocol contract.
+- `data/`: active model/rules baseline and fixtures.
+- `scripts/`: build/deploy/HIL/debug/report helpers.
+- `packaging/`: release notice, SBOM, installer hook.
 
 ## Docs
+- `docs/architecture/`: product constitution, runtime split, capture-core memory architecture, protocol/control architecture.
+- `docs/interfaces/`: external format and hardware/software data contracts.
+- `docs/ai_harness/`: Codex workflow, build verification policy, regression matrix.
+- `docs/runbooks/`: build, release, HIL, debug gateway, memory verification, field validation procedures.
+- `docs/field/`: dated field/HIL observations and triage reports.
+- `docs/quality/`: traceability, release checklist, architecture map, coding rules.
 
-- `docs/architecture/`: product constitution, runtime split, protocol/control architecture
-- `docs/interfaces/`: external format and hardware/software data contract
-- `docs/ai_harness/`: Codex 작업 운영, 검증 정책, regression matrix
-- `docs/runbooks/`: build, release, Obsidian vault 운용 절차
-- `docs/quality/`: traceability, release checklist, architecture map, coding rules
+Current truth는 `BRIEF.md`가 우선이다.
+과거 보고서나 field report는 현재 판단 근거가 될 수 있지만, 최신 코드와 검증 결과로 재확인해야 한다.
 
-현재 기준은 `BRIEF.md`가 우선이고, 세부 근거는 필요한 문서만 지연 참조한다.
+## Harness And Skills
+- `.agents/skills/capture-core-memory/`: live capture hot path, memory growth, bounded queue, slab/pool, telemetry, 10m/1h load verification.
+- `.agents/skills/typed-evidence/`: typed protocol/evidence semantics and control gate.
+- `.agents/skills/graph-performance/`: graph renderer, recent/overview/detail graph performance.
+- `.agents/skills/replay-semantics/`: replay/live source meaning and replay fixtures.
+- `.agents/skills/qt-build-verify/`: Qt/CMake build, tests, deploy, startup smoke.
+- `.agents/skills/harness-maint/`: AGENTS, skills, `.codex`, harness document architecture.
+- `.agents/skills/doc-history-rollup/`: BRIEF/history cleanup and Obsidian link maintenance.
 
 ## History
+- `history/decisions/`: architecture/operation decisions and rollback rules.
+- `history/incidents/`: failures, regressions, field incidents.
+- `history/changes/`: retired handoffs, prompts, old setup notes.
 
-- `history/changes/`: 오래된 handoff, setup, prompt, cleanup 기록
-- `history/decisions/`: 구조/운영 결정과 rollback 조건
-- `history/incidents/`: 장애, 실패, 현장 이슈 기록
-
-과거 문서는 현재 기준이 아니다. 현재 작업 판단에는 `BRIEF.md`, `START_HERE_KO.md`, 관련 `docs/`를 먼저 본다.
+History는 current truth가 아니다.
+현재 작업 판단은 `BRIEF.md`, relevant skill, relevant architecture/runbook 순서로 한다.
 
 ## Runtime Data And Generated Output
+- `replay_data/`: project-local runtime data root. Source가 아니다.
+- `replay_data/logs/`: typed captures and session logs.
+- `replay_data/snapshots/`: replay/export snapshot staging.
+- `artifacts/`: HIL/debug/report generated artifacts.
+- `out/`: CMake build output.
+- `.logs/`: local Codex/build/run logs.
+- `.ref-replay/`: local reference replay cache.
+- `.vs/`, `build/`: local IDE/build output.
 
-- `replay_data/`: 프로젝트 내부 runtime data root. source가 아니다.
-- `replay_data/logs/`: session logs, typed captures, migrated legacy logs
-- `replay_data/snapshots/`: replay/export snapshot staging
-- `out/`: CMake build output
-- `.logs/`: local Codex/build/run logs
-- `.ref-replay/`: local reference replay binary cache
-- `.vs/`, `build/`: local IDE/build output
+Generated capture/log/binary files are not tracked except intentional README/placeholder files.
 
-`replay_data`, `.logs`, `.ref-replay`, `artifacts` 내부 실제 capture/log/binary/generated 파일은 git에 넣지 않는다. README 파일만 추적해 폴더 의도를 보존한다.
+## Capture-Core Memory Work Placement
+- 설계 기준: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
+- 검증 기준: `docs/runbooks/VSM_CAPTURE_CORE_MEMORY_VERIFY_KO.md`
+- 하네스 결정: `history/decisions/2026-06-25-capture-core-memory-harness-remodel.md`
+- 기존 root 임시 계획서는 root에 두지 말고 위 문서로 흡수한다.
 
-## 루트 정리 원칙
-
-루트에는 새 계정이 반드시 읽어야 하는 entry 문서와 build/config 파일만 남긴다. 긴 handoff, architect prompt, 오래된 setup 전문은 `history/`나 `docs/architecture/`로 이동한다.
-
-루트에 예외로 남긴 파일:
-
-- `README_SETUP_KO.md`: installer/deploy copy 대상이라 짧은 호환 안내로 유지한다.
-- `BUILD_FOLDER_USAGE_KO.md`: installer/deploy copy 대상이라 짧은 호환 안내로 유지한다.
-
-새 문서를 추가할 때는 목적에 맞는 하위 폴더에 둔다. 임시 메모나 긴 작업 기록은 root에 만들지 않는다.
+## Cleanup Rule
+새 문서를 추가할 때는 목적에 맞는 하위 폴더에 둔다.
+Root에 새 markdown을 추가해야 하는 경우는 entry document 또는 build/deploy 호환 문서뿐이다.

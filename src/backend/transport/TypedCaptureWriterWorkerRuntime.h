@@ -1,8 +1,10 @@
 #pragma once
 
 #include "transport/TypedCaptureWriterRuntime.h"
+#include "transport/TypedRecordHandoffQueue.h"
 
 #include <QObject>
+#include <QSharedPointer>
 
 namespace CanMonitorTransport {
 
@@ -11,6 +13,7 @@ class TypedCaptureWriterWorkerRuntime : public QObject {
 public:
     explicit TypedCaptureWriterWorkerRuntime(QObject* parent = nullptr);
 
+    void setRecordQueue(QSharedPointer<TypedRecordHandoffQueue> queue);
     TypedCaptureWriterRuntime::StorageUpdate startStorageSync(const QString& sessionDir, const QJsonObject& metadata);
     TypedCaptureWriterRuntime::StorageUpdate stopStorageSync(const QString& inactivePath, const QJsonObject& diagnostics);
     TypedCaptureWriterRuntime::StorageUpdate finalizeStorageIfActiveSync(const QJsonObject& diagnostics);
@@ -18,6 +21,7 @@ public:
 
 public slots:
     void enqueueRecords(TypedRecordList records);
+    void drainQueuedRecords();
     void noteOverrun(quint64 records, quint64 bytes, const QString& reason);
     void resetQueue();
     void emitCurrentStatus();
@@ -46,6 +50,7 @@ private:
     void emitStatus(const TypedCaptureWriterRuntime::Status& status);
 
     TypedCaptureWriterRuntime m_writer;
+    QSharedPointer<TypedRecordHandoffQueue> m_recordQueue;
 };
 
 } // namespace CanMonitorTransport
