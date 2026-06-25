@@ -67,7 +67,7 @@ bool TypedTransportParser::noteSequence(quint16 seq) {
     return contiguous;
 }
 
-std::optional<TypedRecord> TypedTransportParser::takeOne() {
+std::optional<TypedRecord> TypedTransportParser::takeOne(bool includeFrameBytes) {
     while (true) {
         if (bufferedBytes() < kTypedTransportFrameOverhead) return std::nullopt;
 
@@ -114,8 +114,12 @@ std::optional<TypedRecord> TypedTransportParser::takeOne() {
         record.header.flags = p[4];
         record.header.seq = typedReadU16Le(p + 5);
         record.header.payloadLength = payloadLength;
-        record.frameBytes = QByteArray(reinterpret_cast<const char*>(p), frameLength);
-        record.payload = QByteArray::fromRawData(record.frameBytes.constData() + 9, payloadLength);
+        if (includeFrameBytes) {
+            record.frameBytes = QByteArray(reinterpret_cast<const char*>(p), frameLength);
+            record.payload = QByteArray::fromRawData(record.frameBytes.constData() + 9, payloadLength);
+        } else {
+            record.payload = QByteArray(reinterpret_cast<const char*>(p + 9), payloadLength);
+        }
 
         if (record.header.version != kTypedTransportVersion) {
             ++m_counters.versionWarnings;

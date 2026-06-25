@@ -18,7 +18,7 @@ public:
 
     void reset();
     void append(const QByteArray& chunk);
-    std::optional<TypedRecord> takeOne();
+    std::optional<TypedRecord> takeOne(bool includeFrameBytes = true);
 
     const Counters& counters() const { return m_counters; }
     qsizetype bufferedBytes() const { return m_buffer.size() - m_bufferOffset; }

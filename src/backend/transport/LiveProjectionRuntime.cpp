@@ -228,10 +228,17 @@ bool LiveProjectionRuntime::queueSampledControlEvidence(QHash<quint64, TypedReco
                                                         quint64 key,
                                                         const TypedRecord& record) {
     const bool replaced = bucket.contains(key);
+    if (bucket.size() >= kControlEvidenceHardPendingRecords && !replaced) {
+        ++m_status.sampledControlEvidenceRecords;
+        return true;
+    }
     if (replaced) {
         ++m_status.sampledControlEvidenceRecords;
     }
-    bucket.insert(key, record);
+    TypedRecord compactRecord;
+    compactRecord.header = record.header;
+    compactRecord.payload = record.payload;
+    bucket.insert(key, std::move(compactRecord));
     return replaced;
 }
 

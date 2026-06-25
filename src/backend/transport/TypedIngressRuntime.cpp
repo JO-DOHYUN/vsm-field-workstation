@@ -1,6 +1,7 @@
 #include "transport/TypedIngressRuntime.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace CanMonitorTransport {
 
@@ -13,12 +14,15 @@ void TypedIngressRuntime::resetStreamState() {
 
 TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& bytes, qint64 handshakeElapsedMs) {
     IngestResult result = ingestEach(bytes, handshakeElapsedMs, [&result](TypedRecord&& record) {
-        static constexpr int kTypedLiveEmitBatchSize = 512;
+        static constexpr int kTypedLiveEmitBatchSize = 64;
         if (result.recordBatches.isEmpty() || result.recordBatches.last().size() >= kTypedLiveEmitBatchSize) {
             result.recordBatches.push_back(TypedRecordList{});
             result.recordBatches.last().reserve(kTypedLiveEmitBatchSize);
         }
-        result.recordBatches.last().push_back(std::move(record));
+        TypedRecord liveRecord;
+        liveRecord.header = record.header;
+        liveRecord.payload = std::move(record.payload);
+        result.recordBatches.last().push_back(std::move(liveRecord));
     });
     return result;
 }
@@ -37,7 +41,7 @@ TypedIngressRuntime::IngestResult TypedIngressRuntime::ingestEach(const QByteArr
     m_parser.append(bytes);
 
     while (true) {
-        auto record = m_parser.takeOne();
+        auto record = m_parser.takeOne(false);
         if (!record) break;
         if (!m_capabilitySeenSinceOpen && record->isType(TypedRecordType::Capability)) {
             m_capabilitySeenSinceOpen = true;
