@@ -48,6 +48,8 @@ constexpr int kLiveProjectionSoftBacklog = 128;
 constexpr int kLiveProjectionHardBacklog = 256;
 constexpr int kLiveProjectionMaxFlushFrames = 16;
 constexpr int kLiveProjectionFlushBudgetMs = 1;
+constexpr int kLiveTruthMaxDisplayStateUpdates = 512;
+constexpr int kLiveTruthMaxGraphUpdates = 128;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 constexpr int kGraphMaxSelectedSeries = 16;
 
@@ -2328,9 +2330,52 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
         const QString liveSource = QStringLiteral("live");
         const bool graphIngestActive = m_graphPageActive && !m_graphSelectedKeys.isEmpty() && !m_graphSelectedIds.isEmpty();
+        if (m_liveBaseFrameUs == 0 && !frames.isEmpty()) {
+            ensureTimeAnchorForFrame(liveSource, frames.front().tExtUs);
+        }
+
+        QHash<AnalysisStateKey, FrameRecord> latestByState;
+        latestByState.reserve(frames.size());
+        QHash<quint64, FrameRecord> latestGraphByKey;
+        if (graphIngestActive) latestGraphByKey.reserve(std::min<int>(int(frames.size()), kLiveTruthMaxGraphUpdates));
+
         for (const FrameRecord& frame : frames) {
-            ensureTimeAnchorForFrame(liveSource, frame.tExtUs);
             if (frame.tExtUs > m_liveLatestUs) m_liveLatestUs = frame.tExtUs;
+            const AnalysisStateKey stateKey = analysisStateKeyForFrame(frame);
+            auto stateIt = latestByState.find(stateKey);
+            if (stateIt == latestByState.end()) {
+                latestByState.insert(stateKey, frame);
+            } else if (frame.tExtUs >= stateIt.value().tExtUs) {
+                stateIt.value() = frame;
+            }
+
+            if (graphIngestActive && m_graphSelectedIds.contains(frame.canId)) {
+                const quint64 graphKey = liveProjectionFrameKey(frame);
+                auto graphIt = latestGraphByKey.find(graphKey);
+                if (graphIt == latestGraphByKey.end()) {
+                    latestGraphByKey.insert(graphKey, frame);
+                } else if (frame.tExtUs >= graphIt.value().tExtUs) {
+                    graphIt.value() = frame;
+                }
+            }
+        }
+
+        FrameRecordList displayFrames;
+        displayFrames.reserve(latestByState.size());
+        for (auto it = latestByState.cbegin(); it != latestByState.cend(); ++it) displayFrames.push_back(it.value());
+        std::sort(displayFrames.begin(), displayFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+            if (a.tExtUs != b.tExtUs) return a.tExtUs > b.tExtUs;
+            if (a.bus != b.bus) return a.bus < b.bus;
+            return a.canId < b.canId;
+        });
+
+        if (displayFrames.size() > kLiveTruthMaxDisplayStateUpdates) {
+            m_liveProjectionDroppedFrames += quint64(displayFrames.size() - kLiveTruthMaxDisplayStateUpdates);
+            displayFrames.resize(kLiveTruthMaxDisplayStateUpdates);
+        }
+
+        bool selectedValueUpdated = false;
+        for (const FrameRecord& frame : displayFrames) {
             const AnalysisStateKey stateKey = analysisStateKeyForFrame(frame);
             IdState& state = m_liveStates[stateKey];
             state.seen = true;
@@ -2338,10 +2383,39 @@ AppController::AppController(QObject* parent) : QObject(parent) {
             state.lastSource = liveSource;
             state.lastLocalSeenMs = qint64(frame.tExtUs / 1000ULL);
             state.lastBoardSeenUs = frame.tExtUs;
-            if (m_hasSelectedValueId && m_selectedValueKey == stateKey) m_valueDetailsDirty = true;
-            if (graphIngestActive && m_graphSelectedIds.contains(frame.canId)) {
-                appendGraphSamples(frame, liveSource);
+            if (m_hasSelectedValueId && m_selectedValueKey == stateKey) {
+                m_valueDetailsDirty = true;
+                selectedValueUpdated = true;
             }
+        }
+
+        if (m_hasSelectedValueId && !selectedValueUpdated) {
+            const auto selectedIt = latestByState.constFind(m_selectedValueKey);
+            if (selectedIt != latestByState.cend()) {
+                IdState& state = m_liveStates[m_selectedValueKey];
+                state.seen = true;
+                state.lastFrame = selectedIt.value();
+                state.lastSource = liveSource;
+                state.lastLocalSeenMs = qint64(selectedIt.value().tExtUs / 1000ULL);
+                state.lastBoardSeenUs = selectedIt.value().tExtUs;
+                m_valueDetailsDirty = true;
+            }
+        }
+
+        if (graphIngestActive && !latestGraphByKey.isEmpty()) {
+            FrameRecordList graphFrames;
+            graphFrames.reserve(latestGraphByKey.size());
+            for (auto it = latestGraphByKey.cbegin(); it != latestGraphByKey.cend(); ++it) graphFrames.push_back(it.value());
+            std::sort(graphFrames.begin(), graphFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+                if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
+                if (a.bus != b.bus) return a.bus < b.bus;
+                return a.canId < b.canId;
+            });
+            if (graphFrames.size() > kLiveTruthMaxGraphUpdates) {
+                m_liveProjectionDroppedFrames += quint64(graphFrames.size() - kLiveTruthMaxGraphUpdates);
+                graphFrames.erase(graphFrames.begin(), graphFrames.end() - kLiveTruthMaxGraphUpdates);
+            }
+            for (const FrameRecord& frame : graphFrames) appendGraphSamples(frame, liveSource);
         }
         requestLiveStatsRefresh(false);
     });

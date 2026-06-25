@@ -82,6 +82,7 @@ SerialWorker::~SerialWorker() {
     finalizeCaptureWriterIfActive();
     flushRawLedgerHandoffSync();
     shutdownDrainRuntime();
+    shutdownTypedPipelineRuntime();
     shutdownAnalysisRuntime();
     shutdownCaptureWriterRuntime();
     shutdownRawLedgerRuntime();
@@ -97,6 +98,7 @@ void SerialWorker::start(const QString& portName) {
     ensureRawLedgerRuntime();
     resetRawLedger(QStringLiteral("live"));
     ensureDrainRuntime();
+    ensureTypedPipelineRuntime();
     if (endpoint.startsWith(QStringLiteral("tcp://"), Qt::CaseInsensitive)) {
         startGatewayTcp(endpoint);
         return;
@@ -169,7 +171,9 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
 
     flushCaptureWriterHandoffSync();
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
-    const QJsonObject diagnostics = m_typedPipeline.makeCaptureDiagnostics();
+    const QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
+        ? m_typedPipeline.makeCaptureDiagnostics()
+        : m_pipelineCaptureDiagnostics;
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, sessionDir, diagnostics, &update]() {
         update = m_captureWriterWorker->stopStorageSync(sessionDir, diagnostics);
     }, Qt::BlockingQueuedConnection);
@@ -339,6 +343,13 @@ void SerialWorker::setTransportMode(TransportMode mode) {
     m_transportMode = mode;
     m_legacyIngress.resetStreamState();
     m_typedPipeline.reset();
+    m_pipelineStatus = {};
+    m_pipelineCaptureDiagnostics = {};
+    if (m_typedPipelineWorker) {
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::reset,
+                                  Qt::QueuedConnection);
+    }
     if (activeDeviceIsOpen()) {
         if (m_transportMode == TransportMode::TypedEvidence) {
             startTypedHandshakeWatchdog();
@@ -363,6 +374,15 @@ void SerialWorker::processIncomingBytes(const QByteArray& bytes) {
 }
 
 void SerialWorker::scheduleDrainPump() {
+    if (m_transportMode == TransportMode::TypedEvidence && m_typedPipelineWorker) {
+        const qint64 handshakeElapsedMs = m_typedHandshakeClock.isValid() ? m_typedHandshakeClock.elapsed() : -1;
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  [worker = m_typedPipelineWorker, handshakeElapsedMs]() {
+                                      if (worker) worker->schedulePump(handshakeElapsedMs);
+                                  },
+                                  Qt::QueuedConnection);
+        return;
+    }
     if (m_drainPumpScheduled) return;
     m_drainPumpScheduled = true;
     QMetaObject::invokeMethod(this, &SerialWorker::processDrainQueue, Qt::QueuedConnection);
@@ -389,7 +409,7 @@ void SerialWorker::processDrainQueue() {
         return;
     }
 
-    CanMonitorPerf::ScopedProbe probe("serial.drain_pipeline_blocks", blocks.size(), 3000);
+    CanMonitorPerf::ScopedProbe probe("serial.drain_pipeline_blocks_legacy_fallback", blocks.size(), 3000);
     const qint64 handshakeElapsedMs = m_typedHandshakeClock.isValid() ? m_typedHandshakeClock.elapsed() : -1;
     const auto result = m_typedPipeline.ingestBlocks(blocks, handshakeElapsedMs, snapshotBefore.usedBytes);
     if (result.capabilityFirstSeen) {
@@ -403,20 +423,7 @@ void SerialWorker::processDrainQueue() {
     for (const QString& error : result.errors) {
         emit errorOccurred(error);
     }
-    for (const TypedRecordList& batch : result.recordBatches) {
-        queueCaptureWriterRecords(batch);
-        queueAnalysisRecords(batch);
-        queueRawLedgerRecords(batch);
-        queueTruthFrames(batch);
-        const auto projection = m_liveProjection.ingest(batch);
-        if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
-        if (!projection.projectedFrames.isEmpty()) {
-            queueProjectedFrames(projection.projectedFrames);
-        }
-        if (projection.statusDue) {
-            emitProjectionStatus(projection.status);
-        }
-    }
+    for (const TypedRecordList& batch : result.recordBatches) handleTypedRecordBatch(batch);
     if (result.statusDue) emitTypedStatus(result.status);
     emitDrainPipelineStatus();
     if (m_drainQueue->snapshot().usedBytes > 0) {
@@ -460,20 +467,7 @@ void SerialWorker::processTypedBytes(const QByteArray& bytes) {
     for (const QString& error : result.errors) {
         emit errorOccurred(error);
     }
-    for (const TypedRecordList& batch : result.recordBatches) {
-        queueCaptureWriterRecords(batch);
-        queueAnalysisRecords(batch);
-        queueRawLedgerRecords(batch);
-        queueTruthFrames(batch);
-        const auto projection = m_liveProjection.ingest(batch);
-        if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
-        if (!projection.projectedFrames.isEmpty()) {
-            queueProjectedFrames(projection.projectedFrames);
-        }
-        if (projection.statusDue) {
-            emitProjectionStatus(projection.status);
-        }
-    }
+    for (const TypedRecordList& batch : result.recordBatches) handleTypedRecordBatch(batch);
     if (result.statusDue) emitTypedStatus(result.status);
     emitDrainPipelineStatus();
 }
@@ -493,6 +487,18 @@ void SerialWorker::emitTypedStatus(const CanMonitorTransport::TypedIngressRuntim
                                      status.lengthFailures,
                                      status.versionWarnings,
                                      status.seqGaps);
+}
+
+void SerialWorker::handleTypedRecordBatch(const TypedRecordList& batch) {
+    if (batch.isEmpty()) return;
+    queueCaptureWriterRecords(batch);
+    queueAnalysisRecords(batch);
+    queueRawLedgerRecords(batch);
+    queueTruthFrames(batch);
+    const auto projection = m_liveProjection.ingest(batch);
+    if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
+    if (!projection.projectedFrames.isEmpty()) queueProjectedFrames(projection.projectedFrames);
+    if (projection.statusDue) emitProjectionStatus(projection.status);
 }
 
 quint64 SerialWorker::projectionKeyForFrame(const FrameRecord& frame) {
@@ -873,6 +879,13 @@ void SerialWorker::emitTypedStorageUpdate(const CanMonitorTransport::TypedCaptur
 void SerialWorker::startTypedHandshakeWatchdog() {
     stopTypedHandshakeWatchdog();
     m_typedPipeline.reset();
+    m_pipelineStatus = {};
+    m_pipelineCaptureDiagnostics = {};
+    if (m_typedPipelineWorker) {
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::reset,
+                                  Qt::QueuedConnection);
+    }
     m_liveProjection.reset();
     resetProjectionQueue();
     m_typedHandshakeClock.restart();
@@ -992,6 +1005,75 @@ void SerialWorker::shutdownDrainRuntime() {
     m_drainRuntime = nullptr;
     m_connected = false;
     m_drainPumpScheduled = false;
+}
+
+void SerialWorker::ensureTypedPipelineRuntime() {
+    if (m_typedPipelineWorker) return;
+    if (!m_drainQueue) m_drainQueue.reset(new CanMonitorTransport::DrainByteQueue());
+    m_typedPipelineWorker = new CanMonitorTransport::TypedEvidencePipelineWorkerRuntime(m_drainQueue);
+    m_typedPipelineWorker->moveToThread(&m_typedPipelineThread);
+    connect(&m_typedPipelineThread, &QThread::finished, m_typedPipelineWorker, &QObject::deleteLater);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::capabilityFirstSeen,
+            this,
+            [this](qint64 elapsedMs, quint64 bytes) {
+                qCInfo(logTransport).noquote()
+                    << "Typed CAPABILITY received after"
+                    << elapsedMs
+                    << "ms"
+                    << "bytes" << bytes;
+                stopTypedHandshakeWatchdog();
+            },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::errorsOccurred,
+            this,
+            [this](const QStringList& errors) {
+                for (const QString& error : errors) emit errorOccurred(error);
+            },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::recordBatchReady,
+            this,
+            &SerialWorker::handleTypedRecordBatch,
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::typedStatusReady,
+            this,
+            &SerialWorker::typedTransportStatusChanged,
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::pipelineStatusChanged,
+            this,
+            [this](quint64 parseBacklogBytes, quint64 parserBatchMaxMs) {
+                m_pipelineStatus.parseBacklogBytes = parseBacklogBytes;
+                m_pipelineStatus.parserBatchMaxMs = parserBatchMaxMs;
+                emitDrainPipelineStatus();
+            },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::captureDiagnosticsChanged,
+            this,
+            [this](const QJsonObject& diagnostics) {
+                m_pipelineCaptureDiagnostics = diagnostics;
+            },
+            Qt::QueuedConnection);
+    m_typedPipelineThread.start(QThread::HighPriority);
+}
+
+void SerialWorker::shutdownTypedPipelineRuntime() {
+    if (m_typedPipelineWorker) {
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::reset,
+                                  Qt::BlockingQueuedConnection);
+    }
+    if (m_typedPipelineThread.isRunning()) {
+        m_typedPipelineThread.quit();
+        m_typedPipelineThread.wait();
+    }
+    m_typedPipelineWorker = nullptr;
+    m_pipelineStatus = {};
+    m_pipelineCaptureDiagnostics = {};
 }
 
 void SerialWorker::ensureAnalysisRuntime() {
@@ -1192,7 +1274,9 @@ CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate SerialWorker::fina
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
     if (!m_captureWriterWorker) return update;
     flushCaptureWriterHandoffSync();
-    const QJsonObject diagnostics = m_typedPipeline.makeCaptureDiagnostics();
+    const QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
+        ? m_typedPipeline.makeCaptureDiagnostics()
+        : m_pipelineCaptureDiagnostics;
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, diagnostics, &update]() {
         update = m_captureWriterWorker->finalizeStorageIfActiveSync(diagnostics);
     }, Qt::BlockingQueuedConnection);
@@ -1214,7 +1298,9 @@ void SerialWorker::emitDrainPipelineStatus(bool force) {
         return;
     }
     m_drainStatusClock.restart();
-    const auto pipeline = m_typedPipeline.status();
+    const auto pipeline = (m_pipelineStatus.parserBatchMaxMs > 0 || m_pipelineStatus.parseBacklogBytes > 0)
+        ? m_pipelineStatus
+        : m_typedPipeline.status();
     const quint64 captureWriterQueueBytes = m_captureWriterQueueBytes + m_pendingCaptureWriterBytes;
     const quint64 captureWriterMaxQueueBytes = std::max(m_captureWriterMaxQueueBytes, m_pendingCaptureWriterMaxBytes);
     const quint64 captureWriterOverrunBytes = std::max(m_captureWriterOverrunBytes, m_captureWriterHandoffOverrunBytes);

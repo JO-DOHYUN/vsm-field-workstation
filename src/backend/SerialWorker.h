@@ -13,6 +13,7 @@
 #include "transport/TypedCaptureWriterRuntime.h"
 #include "transport/TypedCaptureWriterWorkerRuntime.h"
 #include "transport/TypedEvidencePipelineRuntime.h"
+#include "transport/TypedEvidencePipelineWorkerRuntime.h"
 #include "transport/TypedIngressRuntime.h"
 
 #include <QJsonObject>
@@ -176,6 +177,9 @@ private:
     bool startGatewayTcp(const QString& endpoint);
     void ensureDrainRuntime();
     void shutdownDrainRuntime();
+    void ensureTypedPipelineRuntime();
+    void shutdownTypedPipelineRuntime();
+    void handleTypedRecordBatch(const TypedRecordList& batch);
     void ensureAnalysisRuntime();
     void shutdownAnalysisRuntime();
     void resetAnalysisWorker();
@@ -210,6 +214,8 @@ private:
     QThread m_drainThread;
     QSharedPointer<CanMonitorTransport::DrainByteQueue> m_drainQueue;
     CanMonitorTransport::SerialDrainRuntime* m_drainRuntime = nullptr;
+    QThread m_typedPipelineThread;
+    CanMonitorTransport::TypedEvidencePipelineWorkerRuntime* m_typedPipelineWorker = nullptr;
     QThread m_analysisThread;
     CanMonitorAnalysis::AnalysisWorkerRuntime* m_analysisWorker = nullptr;
     QThread m_captureWriterThread;
@@ -228,6 +234,8 @@ private:
     quint64 m_projectionQueueSampledFrames = 0;
     quint64 m_projectionQueueDroppedFrames = 0;
     CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;
+    CanMonitorTransport::TypedEvidencePipelineRuntime::Status m_pipelineStatus;
+    QJsonObject m_pipelineCaptureDiagnostics;
     quint64 m_drainBytesTotal = 0;
     quint64 m_drainReadyReadCount = 0;
     quint64 m_drainReadyReadMaxUs = 0;

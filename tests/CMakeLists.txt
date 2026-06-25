@@ -889,6 +889,7 @@ foreach(_can_monitor_transport_target IN ITEMS
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerWriterRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisWorkerRuntime.cpp
         )

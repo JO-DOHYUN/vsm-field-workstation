@@ -57,6 +57,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
     src/backend/transport/TypedEvidencePipelineRuntime.h
     src/backend/transport/TypedEvidencePipelineRuntime.cpp
+    src/backend/transport/TypedEvidencePipelineWorkerRuntime.h
+    src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
     src/backend/transport/LiveTruthRuntime.h
     src/backend/transport/LiveTruthRuntime.cpp
     src/backend/transport/RawLedgerRuntime.h
