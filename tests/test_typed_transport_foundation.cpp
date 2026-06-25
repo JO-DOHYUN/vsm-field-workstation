@@ -338,7 +338,7 @@ private slots:
     }
 
     void decodesExtendedBoardHealthTransportCounters() {
-        QByteArray payload(kTypedBoardHealthExtendedPayloadSize, char(0));
+        QByteArray payload(kTypedBoardHealthV5PayloadSize, char(0));
         auto putU32 = [&payload](qsizetype offset, quint32 value) {
             payload[offset + 0] = char(value & 0xFF);
             payload[offset + 1] = char((value >> 8) & 0xFF);
@@ -356,6 +356,14 @@ private slots:
         putU32(180, 32);
         putU32(184, 7);
         putU32(188, 8);
+        putU32(192, 9);
+        putU32(196, 40);
+        putU32(200, 10);
+        putU32(204, 11);
+        putU32(208, 12);
+        putU32(212, 13);
+        putU32(216, 14);
+        putU32(220, 15);
 
         TypedRecord record;
         record.header.recordType = static_cast<quint8>(TypedRecordType::BoardHealth);
@@ -371,6 +379,15 @@ private slots:
         QCOMPARE(health->serialRingClearedBytesTotal, quint32(36'772'683u));
         QCOMPARE(health->serialBackpressureTotal, quint32(6));
         QCOMPARE(health->canSegmentEnqueueFailTotal, quint32(8));
+        QVERIFY(health->hasUplinkPoolCounters);
+        QCOMPARE(health->uplinkLargePoolUsedBlocks, quint32(9));
+        QCOMPARE(health->uplinkLargePoolCapacityBlocks, quint32(40));
+        QCOMPARE(health->uplinkLargePoolCanReserveUsedBlocks, quint32(10));
+        QCOMPARE(health->canTruthDescriptorQueueHighWater, quint32(11));
+        QCOMPARE(health->uplinkPoolAllocFailTotal, quint32(12));
+        QCOMPARE(health->canTruthPoolAllocFailTotal, quint32(13));
+        QCOMPARE(health->uplinkDescriptorHighWaterTotal, quint32(14));
+        QCOMPARE(health->diagnosticSuppressedTotal, quint32(15));
     }
 };
 

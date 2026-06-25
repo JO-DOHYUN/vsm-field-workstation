@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QHash>
 #include <QVariantList>
 #include <QString>
 #include <QtGlobal>
@@ -18,6 +19,15 @@ public:
         quint32 sharedCanQueueHighWater = 0;
         quint32 mcpDrainBudgetHitTotal = 0;
         quint32 canSegmentEnqueueFailTotal = 0;
+        bool hasPoolCounters = false;
+        quint32 uplinkLargePoolUsedBlocks = 0;
+        quint32 uplinkLargePoolCapacityBlocks = 0;
+        quint32 uplinkLargePoolCanReserveUsedBlocks = 0;
+        quint32 canTruthDescriptorQueueHighWater = 0;
+        quint32 uplinkPoolAllocFailTotal = 0;
+        quint32 canTruthPoolAllocFailTotal = 0;
+        quint32 uplinkDescriptorHighWaterTotal = 0;
+        quint32 diagnosticSuppressedTotal = 0;
     };
 
     void reset();
@@ -69,6 +79,32 @@ public:
                          quint64 segmentBytes,
                          quint64 droppedDisplayRows,
                          quint64 latestSeq);
+    void updateDrainPipeline(quint64 bytesTotal,
+                             quint64 readyReadCount,
+                             quint64 readyReadMaxUs,
+                             quint64 drainBurstMaxBytes,
+                             quint64 rawQueueUsedBytes,
+                             quint64 rawQueueMaxUsedBytes,
+                             quint64 rawQueueCapacityBytes,
+                             quint64 rawQueueOverrunBytes,
+                             quint64 rawQueueContentionCount,
+                             quint64 parseBacklogBytes,
+                             quint64 parserBatchMaxMs,
+                             quint64 captureWriterQueueBytes,
+                             quint64 captureWriterMaxQueueBytes,
+                             quint64 captureWriterOverrunBytes,
+                             quint64 captureWriteMaxMs);
+    void updateAnalysisQueue(quint64 queuedFrames,
+                             quint64 maxQueuedFrames,
+                             quint64 capacityFrames,
+                             quint64 enqueuedFrames,
+                             quint64 processedFrames,
+                             quint64 overrunFrames,
+                             quint64 pumpCount,
+                             quint64 pumpMaxMs,
+                             quint64 snapshotMaxMs,
+                             quint64 truthLoss);
+    void noteBoardEvent(quint16 code, quint16 detail, quint32 counter, quint64 monoUs);
 
     QString level() const;
     QString summary() const;
@@ -81,6 +117,8 @@ private:
     QString liveStateText() const;
     QString liveLevel() const;
     QString boardUplinkLevel() const;
+    QString boardEventLevel() const;
+    QString boardEventDetailText() const;
 
     bool m_connected = false;
     quint64 m_typedFrames = 0;
@@ -131,6 +169,39 @@ private:
     quint64 m_rawLedgerSegmentBytes = 0;
     quint64 m_rawLedgerDroppedDisplayRows = 0;
     quint64 m_rawLedgerLatestSeq = 0;
+    quint64 m_drainBytesTotal = 0;
+    quint64 m_drainReadyReadCount = 0;
+    quint64 m_drainReadyReadMaxUs = 0;
+    quint64 m_drainBurstMaxBytes = 0;
+    quint64 m_rawQueueUsedBytes = 0;
+    quint64 m_rawQueueMaxUsedBytes = 0;
+    quint64 m_rawQueueCapacityBytes = 0;
+    quint64 m_rawQueueOverrunBytes = 0;
+    quint64 m_rawQueueContentionCount = 0;
+    quint64 m_parseBacklogBytes = 0;
+    quint64 m_parserBatchMaxMs = 0;
+    quint64 m_captureWriterQueueBytes = 0;
+    quint64 m_captureWriterMaxQueueBytes = 0;
+    quint64 m_captureWriterOverrunBytes = 0;
+    quint64 m_captureWriteMaxMs = 0;
+    quint64 m_analysisQueuedFrames = 0;
+    quint64 m_analysisMaxQueuedFrames = 0;
+    quint64 m_analysisCapacityFrames = 0;
+    quint64 m_analysisEnqueuedFrames = 0;
+    quint64 m_analysisProcessedFrames = 0;
+    quint64 m_analysisOverrunFrames = 0;
+    quint64 m_analysisPumpCount = 0;
+    quint64 m_analysisPumpMaxMs = 0;
+    quint64 m_analysisSnapshotMaxMs = 0;
+    quint64 m_analysisTruthLoss = 0;
+    quint64 m_boardEventTotal = 0;
+    quint64 m_mcp2515EventTotal = 0;
+    quint64 m_boardEventFatalTotal = 0;
+    quint16 m_lastBoardEventCode = 0;
+    quint16 m_lastBoardEventDetail = 0;
+    quint32 m_lastBoardEventCounter = 0;
+    quint64 m_lastBoardEventMonoUs = 0;
+    QHash<quint16, quint64> m_mcp2515Details;
 };
 
 } // namespace CanMonitorTransport

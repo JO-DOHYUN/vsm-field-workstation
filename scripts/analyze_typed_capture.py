@@ -85,11 +85,17 @@ def parse_capture(session: pathlib.Path) -> dict:
     counters: collections.Counter[int] = collections.Counter()
     can_rx: dict[tuple[int, int], list[tuple[int, bytes]]] = collections.defaultdict(list)
     can_tx: dict[tuple[int, int], list[tuple[int, bytes]]] = collections.defaultdict(list)
-    capture_seq_prev: int | None = None
+    capture_seq_prev_global: int | None = None
+    capture_seq_prev_by_bus: dict[int, int] = {}
+    capture_seq_prev_by_id: dict[tuple[int, int], int] = {}
     capture_seq_seen: set[int] = set()
     capture_seq_gaps = 0
     capture_seq_duplicates = 0
-    capture_seq_reorders = 0
+    capture_seq_global_reorders = 0
+    capture_seq_bus_reorders = 0
+    capture_seq_id_reorders = 0
+    capture_seq_top_bus_reorders: collections.Counter[int] = collections.Counter()
+    capture_seq_top_id_reorders: collections.Counter[tuple[int, int]] = collections.Counter()
     segment_frames = 0
     events: collections.Counter[tuple[int, int]] = collections.Counter()
     health: list[dict[str, int | bool]] = []
@@ -97,6 +103,35 @@ def parse_capture(session: pathlib.Path) -> dict:
     crc_failures = 0
     length_failures = 0
     bytes_dropped = 0
+
+    def note_capture_seq(capture_seq: int, bus: int, can_id: int) -> None:
+        nonlocal capture_seq_duplicates
+        nonlocal capture_seq_global_reorders
+        nonlocal capture_seq_bus_reorders
+        nonlocal capture_seq_id_reorders
+        nonlocal capture_seq_prev_global
+
+        if capture_seq in capture_seq_seen:
+            capture_seq_duplicates += 1
+        else:
+            capture_seq_seen.add(capture_seq)
+
+        if capture_seq_prev_global is not None and capture_seq < capture_seq_prev_global:
+            capture_seq_global_reorders += 1
+        capture_seq_prev_global = capture_seq
+
+        bus_prev = capture_seq_prev_by_bus.get(bus)
+        if bus_prev is not None and capture_seq < bus_prev:
+            capture_seq_bus_reorders += 1
+            capture_seq_top_bus_reorders[bus] += 1
+        capture_seq_prev_by_bus[bus] = capture_seq
+
+        id_key = (bus, can_id)
+        id_prev = capture_seq_prev_by_id.get(id_key)
+        if id_prev is not None and capture_seq < id_prev:
+            capture_seq_id_reorders += 1
+            capture_seq_top_id_reorders[id_key] += 1
+        capture_seq_prev_by_id[id_key] = capture_seq
 
     while pos + 11 <= len(data):
         sof = data.find(SOF, pos)
@@ -146,18 +181,12 @@ def parse_capture(session: pathlib.Path) -> dict:
                 for index in range(frame_count):
                     off = SEGMENT_HEADER_LEN + index * entry_size
                     capture_seq = struct.unpack_from("<Q", payload, off)[0]
-                    if capture_seq in capture_seq_seen:
-                        capture_seq_duplicates += 1
-                    else:
-                        capture_seq_seen.add(capture_seq)
-                    if capture_seq_prev is not None and capture_seq < capture_seq_prev:
-                        capture_seq_reorders += 1
-                    capture_seq_prev = capture_seq
                     mono_us = struct.unpack_from("<Q", payload, off + 8)[0]
                     can_id = struct.unpack_from("<I", payload, off + 16)[0] & 0x1FFFFFFF
                     dlc = payload[off + 20] & 0x0F
                     bus = payload[off + 21]
                     frame_data = payload[off + 22 : off + 22 + min(dlc, 8)]
+                    note_capture_seq(capture_seq, bus, can_id)
                     can_rx[(bus, can_id)].append((mono_us, bytes(frame_data)))
                     segment_frames += 1
         elif record_type == 7 and payload_len >= 16:
@@ -219,7 +248,12 @@ def parse_capture(session: pathlib.Path) -> dict:
         "diagnostics": diagnostics,
         "capture_seq_gaps": capture_seq_gaps,
         "capture_seq_duplicates": capture_seq_duplicates,
-        "capture_seq_reorders": capture_seq_reorders,
+        "capture_seq_reorders": capture_seq_global_reorders,
+        "capture_seq_global_reorders": capture_seq_global_reorders,
+        "capture_seq_bus_reorders": capture_seq_bus_reorders,
+        "capture_seq_id_reorders": capture_seq_id_reorders,
+        "capture_seq_top_bus_reorders": capture_seq_top_bus_reorders,
+        "capture_seq_top_id_reorders": capture_seq_top_id_reorders,
         "segment_frames": segment_frames,
     }
 
@@ -233,8 +267,24 @@ def print_report(report: dict, top: int) -> None:
         f"capture_seq_gaps={report['capture_seq_gaps']} "
         f"capture_seq_duplicates={report['capture_seq_duplicates']} "
         f"capture_seq_reorders={report['capture_seq_reorders']} "
+        f"capture_seq_bus_reorders={report['capture_seq_bus_reorders']} "
+        f"capture_seq_id_reorders={report['capture_seq_id_reorders']} "
         f"segment_frames={report['segment_frames']}"
     )
+    if report["capture_seq_bus_reorders"] or report["capture_seq_id_reorders"]:
+        bus_top = ", ".join(
+            f"bus={bus}:{count}" for bus, count in report["capture_seq_top_bus_reorders"].most_common(6)
+        )
+        id_top = ", ".join(
+            f"bus={bus}/id=0x{can_id:X}:{count}"
+            for (bus, can_id), count in report["capture_seq_top_id_reorders"].most_common(8)
+        )
+        print(
+            "capture_seq_ordering "
+            f"global={report['capture_seq_global_reorders']} "
+            f"bus_top={bus_top or 'none'} "
+            f"id_top={id_top or 'none'}"
+        )
     print("types=" + ", ".join(f"{TYPE_NAMES.get(key, key)}:{value}" for key, value in sorted(report["counters"].items())))
 
     health = report["health"]

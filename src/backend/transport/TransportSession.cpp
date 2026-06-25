@@ -1,5 +1,6 @@
 #include "transport/TransportSession.h"
 
+#include <algorithm>
 #include <QStringList>
 #include <QVariantMap>
 
@@ -55,6 +56,39 @@ void TransportSession::reset() {
     m_rawLedgerSegmentBytes = 0;
     m_rawLedgerDroppedDisplayRows = 0;
     m_rawLedgerLatestSeq = 0;
+    m_drainBytesTotal = 0;
+    m_drainReadyReadCount = 0;
+    m_drainReadyReadMaxUs = 0;
+    m_drainBurstMaxBytes = 0;
+    m_rawQueueUsedBytes = 0;
+    m_rawQueueMaxUsedBytes = 0;
+    m_rawQueueCapacityBytes = 0;
+    m_rawQueueOverrunBytes = 0;
+    m_rawQueueContentionCount = 0;
+    m_parseBacklogBytes = 0;
+    m_parserBatchMaxMs = 0;
+    m_captureWriterQueueBytes = 0;
+    m_captureWriterMaxQueueBytes = 0;
+    m_captureWriterOverrunBytes = 0;
+    m_captureWriteMaxMs = 0;
+    m_analysisQueuedFrames = 0;
+    m_analysisMaxQueuedFrames = 0;
+    m_analysisCapacityFrames = 0;
+    m_analysisEnqueuedFrames = 0;
+    m_analysisProcessedFrames = 0;
+    m_analysisOverrunFrames = 0;
+    m_analysisPumpCount = 0;
+    m_analysisPumpMaxMs = 0;
+    m_analysisSnapshotMaxMs = 0;
+    m_analysisTruthLoss = 0;
+    m_boardEventTotal = 0;
+    m_mcp2515EventTotal = 0;
+    m_boardEventFatalTotal = 0;
+    m_lastBoardEventCode = 0;
+    m_lastBoardEventDetail = 0;
+    m_lastBoardEventCounter = 0;
+    m_lastBoardEventMonoUs = 0;
+    m_mcp2515Details.clear();
 }
 
 void TransportSession::setConnected(bool connected) {
@@ -177,8 +211,77 @@ void TransportSession::updateRawLedger(quint64 totalRows,
     m_rawLedgerLatestSeq = latestSeq;
 }
 
+void TransportSession::updateDrainPipeline(quint64 bytesTotal,
+                                           quint64 readyReadCount,
+                                           quint64 readyReadMaxUs,
+                                           quint64 drainBurstMaxBytes,
+                                           quint64 rawQueueUsedBytes,
+                                           quint64 rawQueueMaxUsedBytes,
+                                           quint64 rawQueueCapacityBytes,
+                                           quint64 rawQueueOverrunBytes,
+                                           quint64 rawQueueContentionCount,
+                                           quint64 parseBacklogBytes,
+                                           quint64 parserBatchMaxMs,
+                                           quint64 captureWriterQueueBytes,
+                                           quint64 captureWriterMaxQueueBytes,
+                                           quint64 captureWriterOverrunBytes,
+                                           quint64 captureWriteMaxMs) {
+    m_drainBytesTotal = bytesTotal;
+    m_drainReadyReadCount = readyReadCount;
+    m_drainReadyReadMaxUs = readyReadMaxUs;
+    m_drainBurstMaxBytes = drainBurstMaxBytes;
+    m_rawQueueUsedBytes = rawQueueUsedBytes;
+    m_rawQueueMaxUsedBytes = rawQueueMaxUsedBytes;
+    m_rawQueueCapacityBytes = rawQueueCapacityBytes;
+    m_rawQueueOverrunBytes = rawQueueOverrunBytes;
+    m_rawQueueContentionCount = rawQueueContentionCount;
+    m_parseBacklogBytes = parseBacklogBytes;
+    m_parserBatchMaxMs = parserBatchMaxMs;
+    m_captureWriterQueueBytes = captureWriterQueueBytes;
+    m_captureWriterMaxQueueBytes = captureWriterMaxQueueBytes;
+    m_captureWriterOverrunBytes = captureWriterOverrunBytes;
+    m_captureWriteMaxMs = captureWriteMaxMs;
+}
+
+void TransportSession::updateAnalysisQueue(quint64 queuedFrames,
+                                           quint64 maxQueuedFrames,
+                                           quint64 capacityFrames,
+                                           quint64 enqueuedFrames,
+                                           quint64 processedFrames,
+                                           quint64 overrunFrames,
+                                           quint64 pumpCount,
+                                           quint64 pumpMaxMs,
+                                           quint64 snapshotMaxMs,
+                                           quint64 truthLoss) {
+    m_analysisQueuedFrames = queuedFrames;
+    m_analysisMaxQueuedFrames = maxQueuedFrames;
+    m_analysisCapacityFrames = capacityFrames;
+    m_analysisEnqueuedFrames = enqueuedFrames;
+    m_analysisProcessedFrames = processedFrames;
+    m_analysisOverrunFrames = overrunFrames;
+    m_analysisPumpCount = pumpCount;
+    m_analysisPumpMaxMs = pumpMaxMs;
+    m_analysisSnapshotMaxMs = snapshotMaxMs;
+    m_analysisTruthLoss = truthLoss;
+}
+
+void TransportSession::noteBoardEvent(quint16 code, quint16 detail, quint32 counter, quint64 monoUs) {
+    ++m_boardEventTotal;
+    m_lastBoardEventCode = code;
+    m_lastBoardEventDetail = detail;
+    m_lastBoardEventCounter = counter;
+    m_lastBoardEventMonoUs = monoUs;
+    if (code == 9) {
+        ++m_mcp2515EventTotal;
+        m_mcp2515Details[detail] = m_mcp2515Details.value(detail) + 1;
+    }
+    if (code == 12 || code == 17) {
+        ++m_boardEventFatalTotal;
+    }
+}
+
 quint64 TransportSession::parserFaultCount() const {
-    return m_bytesDropped + m_crcFailures + m_lengthFailures + m_versionWarnings + m_seqGaps + m_truthLoss;
+    return m_bytesDropped + m_crcFailures + m_lengthFailures + m_versionWarnings + m_seqGaps + m_truthLoss + m_analysisTruthLoss;
 }
 
 QString TransportSession::liveLevel() const {
@@ -196,22 +299,39 @@ QString TransportSession::boardUplinkLevel() const {
     if (!m_boardUplink.present) return QStringLiteral("INFO");
     if (m_boardUplink.serialRingClearTotal > 0 ||
         m_boardUplink.serialRingClearedBytesTotal > 0 ||
-        m_boardUplink.canSegmentEnqueueFailTotal > 0) {
+        m_boardUplink.canSegmentEnqueueFailTotal > 0 ||
+        m_boardUplink.canTruthPoolAllocFailTotal > 0) {
         return QStringLiteral("ERR");
     }
     if (m_boardUplink.serialEnqueueFailTotal > 0 ||
         m_boardUplink.serialBackpressureTotal > 0 ||
-        m_boardUplink.mcpDrainBudgetHitTotal > 0) {
+        m_boardUplink.mcpDrainBudgetHitTotal > 0 ||
+        m_boardUplink.uplinkPoolAllocFailTotal > 0) {
         return QStringLiteral("WARN");
     }
     return QStringLiteral("OK");
 }
 
+QString TransportSession::boardEventLevel() const {
+    if (m_boardEventFatalTotal > 0) return QStringLiteral("ERR");
+    if (m_mcp2515EventTotal > 0) return QStringLiteral("WARN");
+    if (m_boardEventTotal > 0) return QStringLiteral("INFO");
+    return QStringLiteral("OK");
+}
+
 QString TransportSession::level() const {
-    if (parserFaultCount() > 0 || m_hostDroppedFrames > 0) return QStringLiteral("ERR");
+    if (parserFaultCount() > 0 ||
+        m_hostDroppedFrames > 0 ||
+        m_rawQueueOverrunBytes > 0 ||
+        m_captureWriterOverrunBytes > 0 ||
+        m_analysisOverrunFrames > 0) {
+        return QStringLiteral("ERR");
+    }
     if (boardUplinkLevel() == QStringLiteral("ERR")) return QStringLiteral("ERR");
+    if (boardEventLevel() == QStringLiteral("ERR")) return QStringLiteral("ERR");
     if (m_hostQueuedFrames > 64 || m_hostQueuedBytes > 16 * 1024) return QStringLiteral("WARN");
     if (boardUplinkLevel() == QStringLiteral("WARN")) return QStringLiteral("WARN");
+    if (boardEventLevel() == QStringLiteral("WARN")) return QStringLiteral("WARN");
     if (liveLevel() == QStringLiteral("WARN")) return QStringLiteral("WARN");
     return QStringLiteral("OK");
 }
@@ -227,6 +347,13 @@ QString TransportSession::summary() const {
     QStringList parts;
     parts << QStringLiteral("transport %1").arg(level());
     parts << QStringLiteral("typed frames %1 faults %2").arg(m_typedFrames).arg(parserFaultCount());
+    if (m_drainBytesTotal > 0 || m_rawQueueMaxUsedBytes > 0) {
+        parts << QStringLiteral("drain bytes %1 raw_q %2/%3 max %4")
+                     .arg(m_drainBytesTotal)
+                     .arg(m_rawQueueUsedBytes)
+                     .arg(m_rawQueueCapacityBytes)
+                     .arg(m_rawQueueMaxUsedBytes);
+    }
     parts << QStringLiteral("hostTX q %1/%2B written %3 drop %4")
                  .arg(m_hostQueuedFrames)
                  .arg(m_hostQueuedBytes)
@@ -241,14 +368,53 @@ QString TransportSession::summary() const {
                      .arg(m_sampledControlEvidenceRecords);
     }
     if (m_droppedProjectionFrames > 0) parts << QStringLiteral("projection dropped %1").arg(m_droppedProjectionFrames);
+    if (m_analysisCapacityFrames > 0) {
+        parts << QStringLiteral("analysis_q %1/%2 max %3 overrun %4")
+                     .arg(m_analysisQueuedFrames)
+                     .arg(m_analysisCapacityFrames)
+                     .arg(m_analysisMaxQueuedFrames)
+                     .arg(m_analysisOverrunFrames);
+    }
     if (m_boardUplink.present) {
         parts << QStringLiteral("csm uplink clear %1 bp %2 seg_fail %3")
                      .arg(m_boardUplink.serialRingClearTotal)
                      .arg(m_boardUplink.serialBackpressureTotal)
                      .arg(m_boardUplink.canSegmentEnqueueFailTotal);
     }
+    if (m_mcp2515EventTotal > 0) {
+        parts << QStringLiteral("mcp2515 events %1 last 0x%2")
+                     .arg(m_mcp2515EventTotal)
+                     .arg(m_lastBoardEventDetail, 4, 16, QLatin1Char('0')).toUpper();
+    }
     if (m_rawLedgerTotalRows > 0) parts << QStringLiteral("raw ledger %1 rows").arg(m_rawLedgerTotalRows);
     return parts.join(QStringLiteral(" | "));
+}
+
+QString TransportSession::boardEventDetailText() const {
+    QStringList topDetails;
+    QVector<QPair<quint16, quint64>> details;
+    details.reserve(m_mcp2515Details.size());
+    for (auto it = m_mcp2515Details.cbegin(); it != m_mcp2515Details.cend(); ++it) {
+        details.push_back(qMakePair(it.key(), it.value()));
+    }
+    std::sort(details.begin(), details.end(), [](const auto& left, const auto& right) {
+        if (left.second != right.second) return left.second > right.second;
+        return left.first < right.first;
+    });
+    for (int index = 0; index < details.size() && index < 6; ++index) {
+        topDetails << QStringLiteral("0x%1:%2")
+                          .arg(details.at(index).first, 4, 16, QLatin1Char('0')).toUpper()
+                          .arg(details.at(index).second);
+    }
+    return QStringLiteral("total %1 mcp2515 %2 fatal %3 last code %4 detail 0x%5 counter %6 mono_us %7 top %8")
+        .arg(m_boardEventTotal)
+        .arg(m_mcp2515EventTotal)
+        .arg(m_boardEventFatalTotal)
+        .arg(m_lastBoardEventCode)
+        .arg(m_lastBoardEventDetail, 4, 16, QLatin1Char('0')).toUpper()
+        .arg(m_lastBoardEventCounter)
+        .arg(m_lastBoardEventMonoUs)
+        .arg(topDetails.isEmpty() ? QStringLiteral("none") : topDetails.join(QStringLiteral(", ")));
 }
 
 QVariantList TransportSession::rows() const {
@@ -270,6 +436,8 @@ QVariantList TransportSession::rows() const {
 
     const quint64 parserFaults = parserFaultCount();
     const QString parserLevel = parserFaults > 0 ? QStringLiteral("ERR") : QStringLiteral("OK");
+    const QString drainLevel = (m_rawQueueOverrunBytes > 0 || m_captureWriterOverrunBytes > 0) ? QStringLiteral("ERR")
+        : (m_rawQueueCapacityBytes > 0 && m_rawQueueMaxUsedBytes > (m_rawQueueCapacityBytes * 3 / 4) ? QStringLiteral("WARN") : QStringLiteral("OK"));
     const QString hostLevel = m_hostDroppedFrames > 0 ? QStringLiteral("ERR")
         : (m_hostQueuedFrames > 64 || m_hostQueuedBytes > 16 * 1024 ? QStringLiteral("WARN") : QStringLiteral("OK"));
     const QString captureLevel = m_captureActive || m_captureRecordCount > 0 ? QStringLiteral("OK") : QStringLiteral("INFO");
@@ -281,6 +449,9 @@ QVariantList TransportSession::rows() const {
         : (m_truthPendingKeys > 4096 ? QStringLiteral("WARN") : QStringLiteral("OK"));
     const QString rawLedgerLevel = m_rawLedgerDroppedDisplayRows > 0 ? QStringLiteral("WARN") : QStringLiteral("OK");
     const QString uplinkLevel = boardUplinkLevel();
+    const QString eventLevel = boardEventLevel();
+    const QString analysisQueueLevel = m_analysisOverrunFrames > 0 || m_analysisTruthLoss > 0 ? QStringLiteral("ERR")
+        : (m_analysisCapacityFrames > 0 && m_analysisMaxQueuedFrames > (m_analysisCapacityFrames * 3 / 4) ? QStringLiteral("WARN") : QStringLiteral("OK"));
 
     return QVariantList{
         row(QStringLiteral("capture_storage"),
@@ -300,6 +471,45 @@ QVariantList TransportSession::rows() const {
                 .arg(m_seqGaps)
                 .arg(m_versionWarnings),
             parserFaults > 0),
+        row(QStringLiteral("host_drain"),
+            QStringLiteral("Host drain"),
+            drainLevel,
+            QStringLiteral("bytes %1 reads %2").arg(m_drainBytesTotal).arg(m_drainReadyReadCount),
+            QStringLiteral("ready_max_us %1 burst_max %2 raw_q %3/%4 max %5 overrun %6 contention %7 parse_backlog %8 parser_batch_max_ms %9")
+                .arg(m_drainReadyReadMaxUs)
+                .arg(m_drainBurstMaxBytes)
+                .arg(m_rawQueueUsedBytes)
+                .arg(m_rawQueueCapacityBytes)
+                .arg(m_rawQueueMaxUsedBytes)
+                .arg(m_rawQueueOverrunBytes)
+                .arg(m_rawQueueContentionCount)
+                .arg(m_parseBacklogBytes)
+                .arg(m_parserBatchMaxMs),
+            m_rawQueueOverrunBytes > 0),
+        row(QStringLiteral("capture_writer"),
+            QStringLiteral("Capture writer"),
+            m_captureWriterOverrunBytes > 0 ? QStringLiteral("ERR") : QStringLiteral("OK"),
+            QStringLiteral("queue %1 max %2").arg(m_captureWriterQueueBytes).arg(m_captureWriterMaxQueueBytes),
+            QStringLiteral("overrun %1 write_max_ms %2")
+                .arg(m_captureWriterOverrunBytes)
+                .arg(m_captureWriteMaxMs),
+            m_captureWriterOverrunBytes > 0),
+        row(QStringLiteral("analysis_queue"),
+            QStringLiteral("Analysis queue"),
+            analysisQueueLevel,
+            QStringLiteral("frames %1/%2 max %3")
+                .arg(m_analysisQueuedFrames)
+                .arg(m_analysisCapacityFrames)
+                .arg(m_analysisMaxQueuedFrames),
+            QStringLiteral("enqueued %1 processed %2 overrun %3 truth_loss %4 pumps %5 pump_max_ms %6 snapshot_max_ms %7")
+                .arg(m_analysisEnqueuedFrames)
+                .arg(m_analysisProcessedFrames)
+                .arg(m_analysisOverrunFrames)
+                .arg(m_analysisTruthLoss)
+                .arg(m_analysisPumpCount)
+                .arg(m_analysisPumpMaxMs)
+                .arg(m_analysisSnapshotMaxMs),
+            m_analysisOverrunFrames > 0 || m_analysisTruthLoss > 0),
         row(QStringLiteral("host_tx_queue"),
             QStringLiteral("Host TX queue"),
             hostLevel,
@@ -324,18 +534,42 @@ QVariantList TransportSession::rows() const {
                       .arg(m_boardUplink.serialBackpressureTotal)
                 : QStringLiteral("extended health counters unavailable"),
             m_boardUplink.present
-                ? QStringLiteral("cleared_bytes %1 enqueue_fail %2 can_segment_enqueue_fail %3 serial_high_water %4 shared_queue_high %5 mcp_budget_hits %6")
+                ? (m_boardUplink.hasPoolCounters
+                       ? QStringLiteral("cleared_bytes %1 enqueue_fail %2 can_segment_enqueue_fail %3 pool_fail %4 can_pool_fail %5 large_pool %6/%7 can_reserve_used %8 can_q_high %9 desc_high %10 diag_suppressed %11")
+                             .arg(m_boardUplink.serialRingClearedBytesTotal)
+                             .arg(m_boardUplink.serialEnqueueFailTotal)
+                             .arg(m_boardUplink.canSegmentEnqueueFailTotal)
+                             .arg(m_boardUplink.uplinkPoolAllocFailTotal)
+                             .arg(m_boardUplink.canTruthPoolAllocFailTotal)
+                             .arg(m_boardUplink.uplinkLargePoolUsedBlocks)
+                             .arg(m_boardUplink.uplinkLargePoolCapacityBlocks)
+                             .arg(m_boardUplink.uplinkLargePoolCanReserveUsedBlocks)
+                             .arg(m_boardUplink.canTruthDescriptorQueueHighWater)
+                             .arg(m_boardUplink.uplinkDescriptorHighWaterTotal)
+                             .arg(m_boardUplink.diagnosticSuppressedTotal)
+                       : QStringLiteral("cleared_bytes %1 enqueue_fail %2 can_segment_enqueue_fail %3 serial_high_water %4 shared_queue_high %5 mcp_budget_hits %6")
                       .arg(m_boardUplink.serialRingClearedBytesTotal)
                       .arg(m_boardUplink.serialEnqueueFailTotal)
                       .arg(m_boardUplink.canSegmentEnqueueFailTotal)
                       .arg(m_boardUplink.serialTxHighWaterBytes)
                       .arg(m_boardUplink.sharedCanQueueHighWater)
-                      .arg(m_boardUplink.mcpDrainBudgetHitTotal)
+                      .arg(m_boardUplink.mcpDrainBudgetHitTotal))
                 : QStringLiteral("BOARD_HEALTH payload is legacy 52B; cannot separate USB backpressure from board CAN counters"),
             m_boardUplink.present &&
                 (m_boardUplink.serialRingClearTotal > 0 ||
                  m_boardUplink.serialRingClearedBytesTotal > 0 ||
-                 m_boardUplink.canSegmentEnqueueFailTotal > 0)),
+                 m_boardUplink.canSegmentEnqueueFailTotal > 0 ||
+                 m_boardUplink.canTruthPoolAllocFailTotal > 0)),
+        row(QStringLiteral("board_events"),
+            QStringLiteral("Board events"),
+            eventLevel,
+            m_mcp2515EventTotal > 0
+                ? QStringLiteral("MCP2515 %1 last 0x%2")
+                      .arg(m_mcp2515EventTotal)
+                      .arg(m_lastBoardEventDetail, 4, 16, QLatin1Char('0')).toUpper()
+                : QStringLiteral("events %1").arg(m_boardEventTotal),
+            boardEventDetailText(),
+            m_boardEventFatalTotal > 0),
         row(QStringLiteral("live_truth"),
             QStringLiteral("Live truth"),
             truthLevel,

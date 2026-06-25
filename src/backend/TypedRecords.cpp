@@ -220,6 +220,17 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
         out.mcpDrainBudgetHitTotal = typedReadU32Le(p + 184);
         out.canSegmentEnqueueFailTotal = typedReadU32Le(p + 188);
     }
+    if (record.payload.size() >= kTypedBoardHealthV5PayloadSize) {
+        out.hasUplinkPoolCounters = true;
+        out.uplinkLargePoolUsedBlocks = typedReadU32Le(p + 192);
+        out.uplinkLargePoolCapacityBlocks = typedReadU32Le(p + 196);
+        out.uplinkLargePoolCanReserveUsedBlocks = typedReadU32Le(p + 200);
+        out.canTruthDescriptorQueueHighWater = typedReadU32Le(p + 204);
+        out.uplinkPoolAllocFailTotal = typedReadU32Le(p + 208);
+        out.canTruthPoolAllocFailTotal = typedReadU32Le(p + 212);
+        out.uplinkDescriptorHighWaterTotal = typedReadU32Le(p + 216);
+        out.diagnosticSuppressedTotal = typedReadU32Le(p + 220);
+    }
     return out;
 }
 

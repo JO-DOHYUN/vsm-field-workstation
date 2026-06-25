@@ -21,6 +21,7 @@
 #include "evidence/BusRoleResolver.h"
 #include "transport/TransportRuntime.h"
 #include "transport/TransportSession.h"
+#include "perf/UiResponsivenessRuntime.h"
 
 #include <QElapsedTimer>
 #include <QHash>
@@ -323,6 +324,7 @@ public:
     bool debugProfilerEnabled() const { return m_debugProfilerEnabled; }
     QString performanceSummary() const { return m_performanceSummary; }
     QVariantList performanceDiagnostics() const { return m_performanceDiagnostics; }
+    QJsonObject uiResponsivenessSnapshot() const { return m_uiResponsiveness.toJson(); }
     QVariantList verificationScenarioCatalog() const;
     bool verificationRunnerActive() const { return m_verificationAttachedMode || (m_verificationProcess && m_verificationProcess->state() != QProcess::NotRunning); }
     QString verificationRunnerStatus() const { return m_verificationRunnerStatus; }
@@ -561,7 +563,7 @@ public:
     Q_INVOKABLE void setDebugProfilerEnabled(bool enabled);
     Q_INVOKABLE void toggleDebugProfiler();
     Q_INVOKABLE void resetPerformanceMetrics();
-    Q_INVOKABLE void runVerificationScenario(const QString& scenarioKey, const QString& portName = QString());
+    Q_INVOKABLE void runVerificationScenario(const QString& scenarioKey, const QString& portName = QString(), const QString& durationKey = QStringLiteral("30s"));
     Q_INVOKABLE void stopVerificationRunner();
     Q_INVOKABLE void startLog();
     Q_INVOKABLE void stopLog();
@@ -804,7 +806,7 @@ private:
     void startDebugGatewayNow(const QString& portName);
     void finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
     void finishVerificationRunnerProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
-    void runAttachedVerificationScenario(const QString& scenarioKey);
+    void runAttachedVerificationScenario(const QString& scenarioKey, const QString& durationKey = QStringLiteral("30s"));
     void startAttachedVerificationProcess(QProcess* process, const QStringList& args);
     void finalizeAttachedVerificationReport();
     void refreshPerformanceDiagnostics(bool force = false);
@@ -885,6 +887,7 @@ private:
     void refreshGraphOverviewSeries();
     QVariantList buildGraphOverviewDetailSeries(double startMs, double endMs) const;
     void resetGraphDetailZoomLock();
+    void rebuildGraphSelectedIdCache();
     void requestGraphRefresh(bool immediate = false);
     void flushGraphRefresh();
     void processTimingAnalysisSlice();
@@ -1129,6 +1132,7 @@ private:
     QVariantList m_graphCatalogCache;
     QVariantList m_graphPresetCache;
     QStringList m_graphSelectedKeys;
+    QSet<quint32> m_graphSelectedIds;
     QString m_graphPresetKey = QStringLiteral("manual");
     QVariantList m_graphSeriesCache;
     QString m_graphSourceSummaryCache = QStringLiteral("선택 그래프 없음");
@@ -1342,6 +1346,7 @@ private:
     QString m_performanceSummary = QStringLiteral("성능 계측 꺼짐");
     QVariantList m_performanceDiagnostics;
     QTimer m_performanceTimer;
+    CanMonitorPerf::UiResponsivenessRuntime m_uiResponsiveness;
     QProcess* m_verificationProcess = nullptr;
     QString m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
     QString m_verificationRunnerArtifactPath;

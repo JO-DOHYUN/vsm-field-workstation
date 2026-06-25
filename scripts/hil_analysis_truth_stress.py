@@ -28,6 +28,7 @@ from hil_vsm_user_route_stress import (
     crc16_ccitt,
     u16,
     u32,
+    ui_responsiveness_report,
     wait_file_stable,
     wait_status,
 )
@@ -415,6 +416,12 @@ def parse_capture_frames(stream_path: pathlib.Path, model_ids: set[int] | None =
         "segment_frames": 0,
         "capture_seq_seen": set(),
         "capture_seq_duplicates": 0,
+        "capture_seq_reorders": 0,
+        "capture_seq_global_reorders": 0,
+        "capture_seq_bus_reorders": 0,
+        "capture_seq_id_reorders": 0,
+        "capture_seq_top_bus_reorders": collections.Counter(),
+        "capture_seq_top_id_reorders": collections.Counter(),
         "health_first": None,
         "health_last": None,
         "capability_seen": False,
@@ -423,17 +430,38 @@ def parse_capture_frames(stream_path: pathlib.Path, model_ids: set[int] | None =
         "frames": [],
     }
     last_seq = None
+    last_capture_seq = None
+    last_capture_seq_by_bus: dict[int, int] = {}
+    last_capture_seq_by_id: dict[tuple[int, int], int] = {}
 
-    def note_capture_seq(value: int | None):
+    def note_capture_seq(value: int | None, bus: int | None = None, can_id: int | None = None):
+        nonlocal last_capture_seq
         if value is None:
             return
         if value in stats["capture_seq_seen"]:
             stats["capture_seq_duplicates"] += 1
         stats["capture_seq_seen"].add(value)
+        if last_capture_seq is not None and value < last_capture_seq:
+            stats["capture_seq_reorders"] += 1
+            stats["capture_seq_global_reorders"] += 1
+        last_capture_seq = value
+        if bus is not None:
+            bus_prev = last_capture_seq_by_bus.get(bus)
+            if bus_prev is not None and value < bus_prev:
+                stats["capture_seq_bus_reorders"] += 1
+                stats["capture_seq_top_bus_reorders"][bus] += 1
+            last_capture_seq_by_bus[bus] = value
+        if bus is not None and can_id is not None:
+            id_key = (bus, can_id)
+            id_prev = last_capture_seq_by_id.get(id_key)
+            if id_prev is not None and value < id_prev:
+                stats["capture_seq_id_reorders"] += 1
+                stats["capture_seq_top_id_reorders"][id_key] += 1
+            last_capture_seq_by_id[id_key] = value
 
     def observe(can_id: int, bus: int, mono_us: int, payload: bytes, capture_seq: int | None):
         stats["can_rx_frames"] += 1
-        note_capture_seq(capture_seq)
+        note_capture_seq(capture_seq, bus, can_id)
         source_marker = payload[6] if len(payload) > 6 else 0
         source_key = f"0x{source_marker:02X}"
         source = stats["source_timeline"].setdefault(
@@ -804,6 +832,18 @@ def main() -> int:
                 "source_timeline": capture["source_timeline"],
                 "capture_seq_gaps": capture["capture_seq_gaps"],
                 "capture_seq_duplicates": capture["capture_seq_duplicates"],
+                "capture_seq_reorders": capture["capture_seq_reorders"],
+                "capture_seq_global_reorders": capture["capture_seq_global_reorders"],
+                "capture_seq_bus_reorders": capture["capture_seq_bus_reorders"],
+                "capture_seq_id_reorders": capture["capture_seq_id_reorders"],
+                "capture_seq_top_bus_reorders": [
+                    {"bus": bus, "count": count}
+                    for bus, count in capture["capture_seq_top_bus_reorders"].most_common(8)
+                ],
+                "capture_seq_top_id_reorders": [
+                    {"bus": bus, "id": f"0x{can_id:X}", "count": count}
+                    for (bus, can_id), count in capture["capture_seq_top_id_reorders"].most_common(12)
+                ],
                 "health_delta": capture["health_delta"],
                 "capability_seen": capture["capability_seen"],
             }
@@ -847,6 +887,13 @@ def main() -> int:
             snapshot_path = run_dir / "app_snapshot.json"
             if snapshot_path.exists():
                 snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+                ui_report, ui_errors = ui_responsiveness_report(snapshot)
+                result["ui_responsiveness"] = ui_report
+                result["errors"].extend(ui_errors)
+                (run_dir / "ui_responsiveness_report.json").write_text(
+                    json.dumps(ui_report, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
                 snapshot_errors, graph_report = compare_snapshot(snapshot, expected)
                 result["errors"].extend(snapshot_errors)
                 result["graph_report"] = graph_report

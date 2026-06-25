@@ -291,7 +291,15 @@ def scenario_command(args: argparse.Namespace, run_dir: pathlib.Path) -> list[st
         cmd += ["--port", args.port]
     if args.app_exe and scenario["script"] in {"hil_vsm_user_route_stress.py", "hil_analysis_truth_stress.py"}:
         cmd += ["--exe", args.app_exe]
-    cmd += scenario.get("args", [])
+    scenario_args = list(scenario.get("args", []))
+    if args.duration_override:
+        for index in range(len(scenario_args) - 1):
+            if scenario_args[index] in {"--duration", "--duration-s"}:
+                scenario_args[index + 1] = str(args.duration_override)
+                break
+        else:
+            scenario_args += ["--duration", str(args.duration_override)]
+    cmd += scenario_args
     scenario_artifact = run_dir / scenario["artifact_subdir"]
     if scenario.get("artifact_arg"):
         cmd += [scenario["artifact_arg"], str(scenario_artifact)]
@@ -425,6 +433,7 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--port", default="")
     run_parser.add_argument("--app-exe", default=default_app_exe())
     run_parser.add_argument("--out-root", default=str(PROJECT_ROOT / "artifacts" / "vsm_verify"))
+    run_parser.add_argument("--duration-override", type=float, default=0.0)
     run_parser.add_argument("--dry-run", action="store_true")
 
     status_parser = sub.add_parser("status")

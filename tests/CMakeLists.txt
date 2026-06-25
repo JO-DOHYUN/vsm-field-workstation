@@ -96,6 +96,56 @@ target_link_libraries(test_typed_transport_foundation PRIVATE
 )
 add_test(NAME typed_transport_foundation COMMAND test_typed_transport_foundation)
 
+add_executable(test_drain_byte_queue
+    test_drain_byte_queue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
+)
+target_include_directories(test_drain_byte_queue PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_drain_byte_queue PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME drain_byte_queue COMMAND test_drain_byte_queue)
+
+add_executable(test_typed_capture_writer_runtime
+    test_typed_capture_writer_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedReplayReader.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
+)
+target_include_directories(test_typed_capture_writer_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_typed_capture_writer_runtime PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME typed_capture_writer_runtime COMMAND test_typed_capture_writer_runtime)
+
+add_executable(test_typed_ingress_parser_only
+    test_typed_ingress_parser_only.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedIngressRuntime.cpp
+)
+target_include_directories(test_typed_ingress_parser_only PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_typed_ingress_parser_only PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME typed_ingress_parser_only COMMAND test_typed_ingress_parser_only)
+
 add_executable(test_evidence_runtime_foundation
     test_evidence_runtime_foundation.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -162,6 +212,7 @@ add_executable(test_transport_runtime_foundation
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
@@ -273,6 +324,7 @@ add_executable(test_serial_worker_typed_ingest
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedReplayReader.cpp
@@ -311,6 +363,7 @@ add_executable(test_recorder_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
@@ -384,6 +437,23 @@ target_link_libraries(test_analysis_runtime_foundation PRIVATE
     Qt6::Test
 )
 add_test(NAME analysis_runtime_foundation COMMAND test_analysis_runtime_foundation)
+
+add_executable(test_analysis_worker_runtime
+    test_analysis_worker_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisWorkerRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+)
+target_include_directories(test_analysis_worker_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_analysis_worker_runtime PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME analysis_worker_runtime COMMAND test_analysis_worker_runtime)
 
 add_executable(test_analysis_runtime_truth_stress
     test_analysis_runtime_truth_stress.cpp
@@ -797,6 +867,30 @@ foreach(_can_monitor_perf_target IN ITEMS
     if (TARGET ${_can_monitor_perf_target})
         target_sources(${_can_monitor_perf_target} PRIVATE
             ${CMAKE_SOURCE_DIR}/src/backend/perf/PerformanceProbeRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/perf/UiResponsivenessRuntime.cpp
+        )
+    endif()
+endforeach()
+
+foreach(_can_monitor_transport_target IN ITEMS
+    test_transport_runtime_foundation
+    test_serial_worker_typed_ingest
+    test_recorder_flow
+    test_app_controller_replay_flow
+    test_app_controller_log_flow
+    test_app_controller_analysis_source_flow
+    test_app_controller_export_snapshot
+    test_qml_shell_smoke
+)
+    if (TARGET ${_can_monitor_transport_target})
+        target_sources(${_can_monitor_transport_target} PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerWriterRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisWorkerRuntime.cpp
         )
     endif()
 endforeach()
@@ -809,6 +903,9 @@ if (WIN32)
     set_tests_properties(performance_probe_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(typed_capture_writer_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(typed_ingress_parser_only PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(evidence_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(control_audit_model PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(control_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
@@ -822,6 +919,7 @@ if (WIN32)
     set_tests_properties(replay_engine PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(analysis_semantics PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(analysis_runtime_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(analysis_worker_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(analysis_runtime_truth_stress PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_segment_analysis_parity PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(raw_ledger_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

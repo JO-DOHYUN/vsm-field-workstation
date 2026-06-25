@@ -697,7 +697,7 @@ private slots:
         QVariant transportCount;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticCount",
                                           Q_RETURN_ARG(QVariant, transportCount)));
-        QCOMPARE(transportCount.toInt(), 9);
+        QCOMPARE(transportCount.toInt(), 13);
 
         QVariant transportSummary;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticSummary",
@@ -714,21 +714,21 @@ private slots:
         QVariant csmUplinkKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, csmUplinkKey),
-                                          Q_ARG(QVariant, QVariant(4)),
+                                          Q_ARG(QVariant, QVariant(7)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(csmUplinkKey.toString(), QStringLiteral("csm_uplink"));
 
         QVariant truthKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, truthKey),
-                                          Q_ARG(QVariant, QVariant(5)),
+                                          Q_ARG(QVariant, QVariant(9)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(truthKey.toString(), QStringLiteral("live_truth"));
 
         QVariant rawLedgerKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, rawLedgerKey),
-                                          Q_ARG(QVariant, QVariant(6)),
+                                          Q_ARG(QVariant, QVariant(10)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(rawLedgerKey.toString(), QStringLiteral("raw_ledger"));
 
@@ -742,7 +742,7 @@ private slots:
         QVariant projectionKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, projectionKey),
-                                          Q_ARG(QVariant, QVariant(7)),
+                                          Q_ARG(QVariant, QVariant(11)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(projectionKey.toString(), QStringLiteral("live_projection"));
         QVERIFY2(g_qmlErrors.isEmpty(), qPrintable(g_qmlErrors.join(QStringLiteral("\n"))));

@@ -95,6 +95,11 @@ private slots:
         QCOMPARE(row1->dlc, quint8(3));
         QCOMPARE(row1->data[0], quint8(0x20));
         QCOMPARE(row1->data[2], quint8(0x22));
+        const auto diag = ledger.diagnostics();
+        QCOMPARE(diag.committedRows, quint64(3));
+        QCOMPARE(diag.cacheRows, 3);
+        QVERIFY(diag.cacheHits >= 3);
+        QCOMPARE(diag.fileReadFailCount, quint64(0));
     }
 
     void tableModelFiltersWithoutDroppingTruth() {
@@ -166,6 +171,46 @@ private slots:
         model.appendTypedRecords(records);
         QCOMPARE(model.totalRows(), quint64(0));
         QCOMPARE(model.count(), 0);
+    }
+
+    void latestRowsStayReadableFromCommittedCache() {
+        CanMonitorTransport::RawLedgerRuntime ledger;
+        QVERIFY(ledger.reset(QStringLiteral("cache")));
+
+        FrameRecordList frames;
+        constexpr int frameCount = 8300;
+        frames.reserve(frameCount);
+        for (int index = 0; index < frameCount; ++index) {
+            frames << makeFrame(1000 + quint64(index), 0x300 + quint32(index % 64), quint8(index % 2), 8, quint8(index));
+        }
+
+        const auto result = ledger.appendFrames(frames);
+        QVERIFY(result.ok);
+        QCOMPARE(result.appended, frameCount);
+        QCOMPARE(ledger.committedRowCount(), quint64(frameCount));
+
+        const auto beforeRead = ledger.diagnostics();
+        QVERIFY(beforeRead.cacheRows <= 8192);
+        QCOMPARE(beforeRead.readFailCount, quint64(0));
+        QCOMPARE(beforeRead.fileReadFailCount, quint64(0));
+
+        const auto latest = ledger.readRow(frameCount - 1);
+        QVERIFY(latest.has_value());
+        QCOMPARE(latest->ledgerSeq, quint64(frameCount - 1));
+        QCOMPARE(latest->canId, quint32(0x300 + ((frameCount - 1) % 64)));
+
+        const auto old = ledger.readRow(0);
+        QVERIFY(old.has_value());
+        QCOMPARE(old->ledgerSeq, quint64(0));
+
+        const auto missing = ledger.readRow(frameCount);
+        QVERIFY(!missing.has_value());
+
+        const auto afterRead = ledger.diagnostics();
+        QVERIFY(afterRead.cacheHits > beforeRead.cacheHits);
+        QVERIFY(afterRead.cacheMisses > beforeRead.cacheMisses);
+        QCOMPARE(afterRead.readFailCount, quint64(1));
+        QCOMPARE(afterRead.fileReadFailCount, quint64(0));
     }
 
     void tableModelMarksUnreadableRowsInsteadOfBlankDlcZero() {

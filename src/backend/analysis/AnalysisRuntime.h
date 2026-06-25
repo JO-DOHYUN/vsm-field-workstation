@@ -69,6 +69,7 @@ public:
     void setConfig(const Config& config);
     Config config() const { return m_config; }
 
+    void noteTruthLoss(quint64 frames);
     void ingestFrame(const FrameRecord& frame, const QString& source);
     void ingestFrames(const FrameRecordList& frames, const QString& source);
 

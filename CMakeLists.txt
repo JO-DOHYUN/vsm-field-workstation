@@ -43,14 +43,26 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/HostTxQueue.cpp
     src/backend/transport/HostTxRuntime.h
     src/backend/transport/HostTxRuntime.cpp
+    src/backend/transport/DrainByteQueue.h
+    src/backend/transport/DrainByteQueue.cpp
     src/backend/transport/LegacyIngressRuntime.h
     src/backend/transport/LegacyIngressRuntime.cpp
     src/backend/transport/LiveProjectionRuntime.h
     src/backend/transport/LiveProjectionRuntime.cpp
+    src/backend/transport/SerialDrainRuntime.h
+    src/backend/transport/SerialDrainRuntime.cpp
+    src/backend/transport/TypedCaptureWriterRuntime.h
+    src/backend/transport/TypedCaptureWriterRuntime.cpp
+    src/backend/transport/TypedCaptureWriterWorkerRuntime.h
+    src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
+    src/backend/transport/TypedEvidencePipelineRuntime.h
+    src/backend/transport/TypedEvidencePipelineRuntime.cpp
     src/backend/transport/LiveTruthRuntime.h
     src/backend/transport/LiveTruthRuntime.cpp
     src/backend/transport/RawLedgerRuntime.h
     src/backend/transport/RawLedgerRuntime.cpp
+    src/backend/transport/RawLedgerWriterRuntime.h
+    src/backend/transport/RawLedgerWriterRuntime.cpp
     src/backend/transport/TransportRuntime.h
     src/backend/transport/TransportRuntime.cpp
     src/backend/transport/TransportSession.h
@@ -87,8 +99,12 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/TimingEvaluator.cpp
     src/backend/analysis/AnalysisRuntime.h
     src/backend/analysis/AnalysisRuntime.cpp
+    src/backend/analysis/AnalysisWorkerRuntime.h
+    src/backend/analysis/AnalysisWorkerRuntime.cpp
     src/backend/perf/PerformanceProbeRuntime.h
     src/backend/perf/PerformanceProbeRuntime.cpp
+    src/backend/perf/UiResponsivenessRuntime.h
+    src/backend/perf/UiResponsivenessRuntime.cpp
     src/backend/LevelState.h
     src/backend/LevelState.cpp
     src/backend/SignalDecoder.h

@@ -69,6 +69,12 @@ void AnalysisRuntime::setConfig(const Config& config) {
     m_status.maxRowsPerSnapshot = m_config.maxRowsPerSnapshot;
 }
 
+void AnalysisRuntime::noteTruthLoss(quint64 frames) {
+    if (frames == 0) return;
+    m_status.truthLoss += frames;
+    m_status.analysisOverrun += frames;
+}
+
 void AnalysisRuntime::ingestFrame(const FrameRecord& frame, const QString& source) {
     ++m_status.acceptedCanRxFrames;
     ++m_status.decodedCanRxFrames;
@@ -570,6 +576,11 @@ QVariantList AnalysisRuntime::makeDiagnostics(const Snapshot& snapshot) const {
         QStringLiteral("capture_seq gap"),
         QString::number(snapshot.status.captureSeqGapEvents),
         QStringLiteral("transport/capture continuity gaps; affected timing intervals are marked contaminated instead of real CAN period errors"));
+    add(QStringLiteral("capture_seq_reorder"),
+        snapshot.status.captureSeqReorderEvents > 0 ? QStringLiteral("WARN") : QStringLiteral("OK"),
+        QStringLiteral("capture_seq reorder"),
+        QString::number(snapshot.status.captureSeqReorderEvents),
+        QStringLiteral("global ordering diagnostic only; gap/duplicate counters remain the truth-loss continuity signals"));
     add(QStringLiteral("transport_contaminated_intervals"),
         snapshot.status.transportContaminatedIntervals > 0 ? QStringLiteral("WARN") : QStringLiteral("OK"),
         QStringLiteral("transport-contaminated timing"),

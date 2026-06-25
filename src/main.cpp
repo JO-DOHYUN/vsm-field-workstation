@@ -215,9 +215,10 @@ std::unique_ptr<QTcpServer> installHilControlServer(AppController* controller, i
                         controller->setDebugProfilerEnabled(request.value(QStringLiteral("enabled")).toBool(true));
                         response.insert(QStringLiteral("accepted"), QStringLiteral("set_debug_profiler"));
                     } else if (command == QStringLiteral("run_verification")) {
-                        const QString scenario = request.value(QStringLiteral("scenario")).toString(QStringLiteral("attached_load_30s"));
+                        const QString scenario = request.value(QStringLiteral("scenario")).toString(QStringLiteral("attached_load"));
                         const QString portName = request.value(QStringLiteral("port")).toString();
-                        controller->runVerificationScenario(scenario, portName);
+                        const QString duration = request.value(QStringLiteral("duration")).toString(QStringLiteral("30s"));
+                        controller->runVerificationScenario(scenario, portName, duration);
                         response.insert(QStringLiteral("accepted"), QStringLiteral("run_verification"));
                     } else if (command == QStringLiteral("stop_verification")) {
                         controller->stopVerificationRunner();

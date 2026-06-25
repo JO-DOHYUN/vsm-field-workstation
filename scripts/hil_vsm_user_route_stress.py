@@ -478,6 +478,37 @@ def wait_file_stable(path: pathlib.Path, timeout_s: float = 10.0, stable_s: floa
     raise TimeoutError(f"file not finalized: {path}")
 
 
+def ui_responsiveness_report(app_state: dict, *, max_delay_fail_ms: int = 1000) -> tuple[dict, list[str]]:
+    ui = app_state.get("ui_responsiveness", {}) if isinstance(app_state, dict) else {}
+
+    def as_int(key: str) -> int:
+        try:
+            return int(ui.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    report = {
+        "ticks": as_int("ticks"),
+        "last_delay_ms": as_int("last_delay_ms"),
+        "max_delay_ms": as_int("max_delay_ms"),
+        "p50_delay_ms": as_int("p50_delay_ms"),
+        "p95_delay_ms": as_int("p95_delay_ms"),
+        "stall_100ms_count": as_int("stall_100ms_count"),
+        "stall_500ms_count": as_int("stall_500ms_count"),
+        "stall_1000ms_count": as_int("stall_1000ms_count"),
+        "recovery_max_ms": as_int("recovery_max_ms"),
+    }
+    errors: list[str] = []
+    if not ui:
+        errors.append("ui responsiveness snapshot missing")
+    if report["stall_1000ms_count"] > 0 or report["max_delay_ms"] >= max_delay_fail_ms:
+        errors.append(
+            f"UI event-loop severe stall: max={report['max_delay_ms']}ms "
+            f"stall1000={report['stall_1000ms_count']}"
+        )
+    return report, errors
+
+
 def wait_tcp_endpoint(host: str, port: int, timeout_s: float, process: subprocess.Popen | None = None) -> None:
     deadline = time.time() + timeout_s
     last_error = ""
@@ -630,6 +661,11 @@ def parse_capture(path: pathlib.Path, args) -> dict:
         "capture_seq_gaps": 0,
         "capture_seq_duplicates": 0,
         "capture_seq_reorders": 0,
+        "capture_seq_global_reorders": 0,
+        "capture_seq_bus_reorders": 0,
+        "capture_seq_id_reorders": 0,
+        "capture_seq_top_bus_reorders": collections.Counter(),
+        "capture_seq_top_id_reorders": collections.Counter(),
         "capture_seq_first": None,
         "capture_seq_last": None,
         "pcan_rx_seqs": set(),
@@ -647,9 +683,11 @@ def parse_capture(path: pathlib.Path, args) -> dict:
     }
     last_seq = None
     last_capture_seq = None
+    last_capture_seq_by_bus: dict[int, int] = {}
+    last_capture_seq_by_id: dict[tuple[int, int], int] = {}
     capture_seq_seen: set[int] = set()
 
-    def note_capture_seq(capture_seq: int | None) -> None:
+    def note_capture_seq(capture_seq: int | None, bus: int | None = None, can_id: int | None = None) -> None:
         nonlocal last_capture_seq
         if capture_seq is None:
             return
@@ -661,12 +699,26 @@ def parse_capture(path: pathlib.Path, args) -> dict:
             capture_seq_seen.add(capture_seq)
         if last_capture_seq is not None and capture_seq < last_capture_seq:
             stats["capture_seq_reorders"] += 1
+            stats["capture_seq_global_reorders"] += 1
         last_capture_seq = capture_seq
+        if bus is not None:
+            bus_prev = last_capture_seq_by_bus.get(bus)
+            if bus_prev is not None and capture_seq < bus_prev:
+                stats["capture_seq_bus_reorders"] += 1
+                stats["capture_seq_top_bus_reorders"][bus] += 1
+            last_capture_seq_by_bus[bus] = capture_seq
+        if bus is not None and can_id is not None:
+            id_key = (bus, can_id)
+            id_prev = last_capture_seq_by_id.get(id_key)
+            if id_prev is not None and capture_seq < id_prev:
+                stats["capture_seq_id_reorders"] += 1
+                stats["capture_seq_top_id_reorders"][id_key] += 1
+            last_capture_seq_by_id[id_key] = capture_seq
         stats["capture_seq_last"] = capture_seq
 
     def observe_can_rx_frame(can_id: int, bus: int, payload_data: bytes, capture_seq: int | None = None) -> None:
         stats["can_rx_frames"] += 1
-        note_capture_seq(capture_seq)
+        note_capture_seq(capture_seq, bus, can_id)
         if args.pcan_base_id <= can_id < args.pcan_base_id + args.id_count:
             decoded = decode_payload(payload_data, args.pcan_source_marker, args.id_count)
             if decoded is None:
@@ -1006,6 +1058,17 @@ def main() -> int:
                 "capture_seq_gaps": stats["capture_seq_gaps"],
                 "capture_seq_duplicates": stats["capture_seq_duplicates"],
                 "capture_seq_reorders": stats["capture_seq_reorders"],
+                "capture_seq_global_reorders": stats["capture_seq_global_reorders"],
+                "capture_seq_bus_reorders": stats["capture_seq_bus_reorders"],
+                "capture_seq_id_reorders": stats["capture_seq_id_reorders"],
+                "capture_seq_top_bus_reorders": [
+                    {"bus": bus, "count": count}
+                    for bus, count in stats["capture_seq_top_bus_reorders"].most_common(8)
+                ],
+                "capture_seq_top_id_reorders": [
+                    {"bus": bus, "id": f"0x{can_id:X}", "count": count}
+                    for (bus, can_id), count in stats["capture_seq_top_id_reorders"].most_common(12)
+                ],
                 "capture_seq_first": stats["capture_seq_first"],
                 "capture_seq_last": stats["capture_seq_last"],
                 "health_delta": stats["health_delta"],
@@ -1018,25 +1081,49 @@ def main() -> int:
             if app_state_path.exists():
                 try:
                     app_state = json.loads(app_state_path.read_text(encoding="utf-8"))
+                    ui_report, ui_errors = ui_responsiveness_report(app_state)
+                    result["ui_responsiveness"] = ui_report
+                    if ui_errors:
+                        result["errors"].extend(ui_errors)
+                    (run_dir / "ui_responsiveness_report.json").write_text(
+                        json.dumps(ui_report, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
                     live_stats = app_state.get("live_stats", {})
                     counts = app_state.get("counts", {})
                     raw_ledger_rows = int(live_stats.get("raw_ledger_rows", counts.get("raw_ledger_rows", 0)) or 0)
                     raw_ledger_visible_rows = int(live_stats.get("raw_ledger_visible_rows", counts.get("raw_ledger_visible_rows", 0)) or 0)
                     raw_ledger_segment_bytes = int(live_stats.get("raw_ledger_segment_bytes", 0) or 0)
+                    raw_ledger_read_fail = int(live_stats.get("raw_ledger_read_fail", 0) or 0)
+                    raw_ledger_file_read_fail = int(live_stats.get("raw_ledger_file_read_fail", 0) or 0)
                     capture_can_rx = int(capture_report.get("can_rx_frames", 0) or 0)
                     ledger_report = {
                         "app_state": str(app_state_path),
                         "raw_ledger_rows": raw_ledger_rows,
                         "raw_ledger_visible_rows": raw_ledger_visible_rows,
                         "raw_ledger_segment_bytes": raw_ledger_segment_bytes,
+                        "raw_ledger_cache_rows": int(live_stats.get("raw_ledger_cache_rows", 0) or 0),
+                        "raw_ledger_cache_hits": int(live_stats.get("raw_ledger_cache_hits", 0) or 0),
+                        "raw_ledger_cache_misses": int(live_stats.get("raw_ledger_cache_misses", 0) or 0),
+                        "raw_ledger_read_fail": raw_ledger_read_fail,
+                        "raw_ledger_file_read_fail": raw_ledger_file_read_fail,
                         "capture_can_rx_records": capture_can_rx,
                         "parity_ok": raw_ledger_rows == capture_can_rx,
-                        "truth_preserved": raw_ledger_rows == capture_can_rx and raw_ledger_visible_rows <= raw_ledger_rows,
+                        "truth_preserved": (
+                            raw_ledger_rows == capture_can_rx
+                            and raw_ledger_visible_rows <= raw_ledger_rows
+                            and raw_ledger_read_fail == 0
+                            and raw_ledger_file_read_fail == 0
+                        ),
                     }
                     result["ledger_report"] = ledger_report
                     (run_dir / "ledger_report.json").write_text(json.dumps(ledger_report, ensure_ascii=False, indent=2), encoding="utf-8")
                     if not ledger_report["parity_ok"]:
                         result["errors"].append("raw ledger / capture CAN_RX parity mismatch")
+                    if raw_ledger_read_fail or raw_ledger_file_read_fail:
+                        result["errors"].append(
+                            f"raw ledger read failures: read={raw_ledger_read_fail} file={raw_ledger_file_read_fail}"
+                        )
                 except Exception as exc:
                     result["errors"].append(f"ledger report failed: {exc}")
             if (capture_dir / "session.meta.json").exists():

@@ -81,7 +81,7 @@ Item {
 
     Connections {
         target: appController.rawFrameTable
-        function onCountChanged() {
+        function onRowsAppended() {
             if (autoFollow && liveList.count > 0)
                 liveList.positionViewAtEnd()
         }

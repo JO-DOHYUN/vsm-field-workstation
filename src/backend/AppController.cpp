@@ -51,6 +51,34 @@ constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 constexpr int kGraphMaxSelectedSeries = 16;
 
+int verificationDurationSeconds(const QString& durationKey) {
+    const QString key = durationKey.trimmed().toLower();
+    if (key == QStringLiteral("5m")) return 5 * 60;
+    if (key == QStringLiteral("10m")) return 10 * 60;
+    if (key == QStringLiteral("1h")) return 60 * 60;
+    if (key == QStringLiteral("manual") || key == QStringLiteral("unlimited")) return 24 * 60 * 60;
+    return 30;
+}
+
+QString verificationDurationLabel(const QString& durationKey) {
+    const QString key = durationKey.trimmed().toLower();
+    if (key == QStringLiteral("5m")) return QStringLiteral("5m");
+    if (key == QStringLiteral("10m")) return QStringLiteral("10m");
+    if (key == QStringLiteral("1h")) return QStringLiteral("1h");
+    if (key == QStringLiteral("manual") || key == QStringLiteral("unlimited")) return QStringLiteral("manual");
+    return QStringLiteral("30s");
+}
+
+bool replaceArgValue(QStringList& args, const QString& option, const QString& value) {
+    for (int index = 0; index + 1 < args.size(); ++index) {
+        if (args.at(index) == option) {
+            args[index + 1] = value;
+            return true;
+        }
+    }
+    return false;
+}
+
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
     if (elapsedUs == 0) return 0;
     const double fps = (double(delta) * 1'000'000.0) / double(elapsedUs);
@@ -2073,6 +2101,10 @@ quint64 AppController::replayAnalysisUs() const {
 
 AppController::AppController(QObject* parent) : QObject(parent) {
     m_uptime.start();
+    connect(&m_uiResponsiveness, &CanMonitorPerf::UiResponsivenessRuntime::snapshotChanged, this, [this]() {
+        refreshPerformanceDiagnostics(false);
+    });
+    m_uiResponsiveness.start(50);
     m_logTargetDirectory = defaultLogDirectory();
     m_timingModel.setRoles({QStringLiteral("key"), QStringLiteral("idText"), QStringLiteral("name"), QStringLiteral("severity"), QStringLiteral("severityColor"), QStringLiteral("expectedMsText"), QStringLiteral("lastGapMsText"), QStringLiteral("ageMsText"), QStringLiteral("source"), QStringLiteral("reason"), QStringLiteral("metricText"), QStringLiteral("gaugePct"), QStringLiteral("eventCount"), QStringLiteral("history")});
     m_valueModel.setRoles({QStringLiteral("key"), QStringLiteral("idText"), QStringLiteral("name"), QStringLiteral("severity"), QStringLiteral("severityColor"), QStringLiteral("source"), QStringLiteral("bus"), QStringLiteral("dataHex"), QStringLiteral("gapText"), QStringLiteral("ageText"), QStringLiteral("reason"), QStringLiteral("previewText"), QStringLiteral("summaryText"), QStringLiteral("summaryRich"), QStringLiteral("valueMetricText"), QStringLiteral("valueGaugePct")});
@@ -2258,21 +2290,58 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_rawFrameTable.appendFrames(frames);
         requestLiveStatsRefresh(false);
     });
-    connect(m_worker, &SerialWorker::rawTypedRecordsReceived, this, [this](const TypedRecordList& records) {
-        if (records.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_append_typed", records.size(), 4000);
+    connect(m_worker, &SerialWorker::rawLedgerReset, this, [this](bool ok, const QString& path, const QString& error) {
+        m_rawFrameTable.resetLedgerState(path, ok ? QString() : error);
+        requestLiveStatsRefresh(true);
+    });
+    connect(m_worker, &SerialWorker::rawLedgerBatchCommitted, this,
+            [this](const FrameRecordList& frames,
+                   quint64 firstSeq,
+                   quint64 lastSeq,
+                   quint64 totalRows,
+                   quint64 segmentBytes,
+                   const QString& path) {
+        if (frames.isEmpty()) return;
+        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_commit", frames.size(), 1500);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        m_rawFrameTable.appendTypedRecords(records);
+        m_rawFrameTable.applyCommittedFrames(frames, firstSeq, lastSeq, totalRows, segmentBytes, path);
         requestLiveStatsRefresh(false);
+    });
+    connect(m_worker, &SerialWorker::rawLedgerWriterStatusChanged, this,
+            [this](quint64 queueBytes,
+                   quint64 maxQueueBytes,
+                   quint64 overrunBytes,
+                   quint64 writeMaxUs,
+                   quint64 writeFailures,
+                   const QString& lastError) {
+        m_rawFrameTable.updateWriterStatus(queueBytes,
+                                           maxQueueBytes,
+                                           overrunBytes,
+                                           writeMaxUs,
+                                           writeFailures,
+                                           lastError);
+        requestLiveStatsRefresh(overrunBytes > 0 || writeFailures > 0);
     });
     connect(m_worker, &SerialWorker::truthFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.truth_frames_ingest", frames.size(), 5000);
+        CanMonitorPerf::ScopedProbe probe("app.truth_display_state", frames.size(), 2500);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
         const QString liveSource = QStringLiteral("live");
+        const bool graphIngestActive = m_graphPageActive && !m_graphSelectedKeys.isEmpty() && !m_graphSelectedIds.isEmpty();
         for (const FrameRecord& frame : frames) {
             ensureTimeAnchorForFrame(liveSource, frame.tExtUs);
-            ingestFrame(frame, liveSource);
+            if (frame.tExtUs > m_liveLatestUs) m_liveLatestUs = frame.tExtUs;
+            const AnalysisStateKey stateKey = analysisStateKeyForFrame(frame);
+            IdState& state = m_liveStates[stateKey];
+            state.seen = true;
+            state.lastFrame = frame;
+            state.lastSource = liveSource;
+            state.lastLocalSeenMs = qint64(frame.tExtUs / 1000ULL);
+            state.lastBoardSeenUs = frame.tExtUs;
+            if (m_hasSelectedValueId && m_selectedValueKey == stateKey) m_valueDetailsDirty = true;
+            if (graphIngestActive && m_graphSelectedIds.contains(frame.canId)) {
+                appendGraphSamples(frame, liveSource);
+            }
         }
         requestLiveStatsRefresh(false);
     });
@@ -2363,6 +2432,10 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                 }
             } else if (recordType == TypedRecordType::BoardEvent) {
                 const auto boardEvent = decodeTypedBoardEvent(record);
+                if (boardEvent) {
+                    m_transportSession.noteBoardEvent(boardEvent->code, boardEvent->detail, boardEvent->counter, boardEvent->monoUs);
+                    requestLiveStatsRefresh(false);
+                }
                 if (boardEvent && (boardEvent->code == 12 || boardEvent->code == 17)) {
                     const QString detailHex = QStringLiteral("0x%1")
                         .arg(boardEvent->detail, 4, 16, QLatin1Char('0'))
@@ -2437,6 +2510,15 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                     m_lastTypedHealthUplinkCounters.sharedCanQueueHighWater = health->sharedCanQueueHighWater;
                     m_lastTypedHealthUplinkCounters.mcpDrainBudgetHitTotal = health->mcpDrainBudgetHitTotal;
                     m_lastTypedHealthUplinkCounters.canSegmentEnqueueFailTotal = health->canSegmentEnqueueFailTotal;
+                    m_lastTypedHealthUplinkCounters.hasPoolCounters = health->hasUplinkPoolCounters;
+                    m_lastTypedHealthUplinkCounters.uplinkLargePoolUsedBlocks = health->uplinkLargePoolUsedBlocks;
+                    m_lastTypedHealthUplinkCounters.uplinkLargePoolCapacityBlocks = health->uplinkLargePoolCapacityBlocks;
+                    m_lastTypedHealthUplinkCounters.uplinkLargePoolCanReserveUsedBlocks = health->uplinkLargePoolCanReserveUsedBlocks;
+                    m_lastTypedHealthUplinkCounters.canTruthDescriptorQueueHighWater = health->canTruthDescriptorQueueHighWater;
+                    m_lastTypedHealthUplinkCounters.uplinkPoolAllocFailTotal = health->uplinkPoolAllocFailTotal;
+                    m_lastTypedHealthUplinkCounters.canTruthPoolAllocFailTotal = health->canTruthPoolAllocFailTotal;
+                    m_lastTypedHealthUplinkCounters.uplinkDescriptorHighWaterTotal = health->uplinkDescriptorHighWaterTotal;
+                    m_lastTypedHealthUplinkCounters.diagnosticSuppressedTotal = health->diagnosticSuppressedTotal;
                 }
                 m_lastLiveStatsWallMs = QDateTime::currentMSecsSinceEpoch();
                 ensureTimeAnchorForFrame(QStringLiteral("live"), health->monoUs);
@@ -2547,10 +2629,10 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         requestDerivedSummaryRefresh(false);
     });
     connect(m_worker, &SerialWorker::hostTxQueueChanged, this, [this](quint64 queuedFrames,
-                                                                       quint64 queuedBytes,
-                                                                       quint64 enqueuedFrames,
-                                                                       quint64 writtenFrames,
-                                                                       quint64 droppedFrames) {
+                                                                        quint64 queuedBytes,
+                                                                        quint64 enqueuedFrames,
+                                                                        quint64 writtenFrames,
+                                                                        quint64 droppedFrames) {
         m_transportSession.updateHostTxQueue(queuedFrames, queuedBytes, enqueuedFrames, writtenFrames, droppedFrames);
         const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
         const bool notifyDue = droppedFrames > 0
@@ -2561,6 +2643,62 @@ AppController::AppController(QObject* parent) : QObject(parent) {
             updateTransportDiagnostics();
             emit transportDiagnosticsChanged();
         }
+    });
+    connect(m_worker, &SerialWorker::drainStatusChanged, this, [this](quint64 bytesTotal,
+                                                                       quint64 readyReadCount,
+                                                                       quint64 readyReadMaxUs,
+                                                                       quint64 drainBurstMaxBytes,
+                                                                       quint64 rawQueueUsedBytes,
+                                                                       quint64 rawQueueMaxUsedBytes,
+                                                                       quint64 rawQueueCapacityBytes,
+                                                                       quint64 rawQueueOverrunBytes,
+                                                                       quint64 rawQueueContentionCount,
+                                                                       quint64 parseBacklogBytes,
+                                                                       quint64 parserBatchMaxMs,
+                                                                       quint64 captureWriterQueueBytes,
+                                                                       quint64 captureWriterMaxQueueBytes,
+                                                                       quint64 captureWriterOverrunBytes,
+                                                                       quint64 captureWriteMaxMs) {
+        m_transportSession.updateDrainPipeline(bytesTotal,
+                                               readyReadCount,
+                                               readyReadMaxUs,
+                                               drainBurstMaxBytes,
+                                               rawQueueUsedBytes,
+                                               rawQueueMaxUsedBytes,
+                                               rawQueueCapacityBytes,
+                                               rawQueueOverrunBytes,
+                                               rawQueueContentionCount,
+                                               parseBacklogBytes,
+                                               parserBatchMaxMs,
+                                               captureWriterQueueBytes,
+                                               captureWriterMaxQueueBytes,
+                                               captureWriterOverrunBytes,
+                                               captureWriteMaxMs);
+        updateTransportDiagnostics();
+        emit transportDiagnosticsChanged();
+    });
+    connect(m_worker, &SerialWorker::analysisQueueStatusChanged, this, [this](quint64 queuedFrames,
+                                                                              quint64 maxQueuedFrames,
+                                                                              quint64 capacityFrames,
+                                                                              quint64 enqueuedFrames,
+                                                                              quint64 processedFrames,
+                                                                              quint64 overrunFrames,
+                                                                              quint64 pumpCount,
+                                                                              quint64 pumpMaxMs,
+                                                                              quint64 snapshotMaxMs,
+                                                                              quint64 truthLoss) {
+        m_transportSession.updateAnalysisQueue(queuedFrames,
+                                               maxQueuedFrames,
+                                               capacityFrames,
+                                               enqueuedFrames,
+                                               processedFrames,
+                                               overrunFrames,
+                                               pumpCount,
+                                               pumpMaxMs,
+                                               snapshotMaxMs,
+                                               truthLoss);
+        updateTransportDiagnostics();
+        emit transportDiagnosticsChanged();
     });
     connect(m_worker, &SerialWorker::typedStorageStateChanged, this, [this](bool active, const QString& path) {
         m_logTypedSession = true;
@@ -5382,9 +5520,21 @@ void AppController::acceptLiveAnalysisRuntimeSnapshot(const QString& level,
     m_lastAnalysisRuntimeSnapshotWallMs = QDateTime::currentMSecsSinceEpoch();
 
     if (!replayAnalysisActive()) {
-        refreshTimingRowsFromAnalysisSnapshot();
-        refreshValueRowsFromAnalysisSnapshot();
-        refreshAlarmRowsFromAnalysisSnapshot();
+        m_timingRowsDirty = true;
+        m_valueRowsDirty = true;
+        m_alarmRowsDirty = true;
+        if (timingScopeActive() && !m_timingViewHeld &&
+            projectionDue(m_lastTimingProjectionWallMs, timingProjectionIntervalMs())) {
+            refreshTimingRowsFromAnalysisSnapshot();
+        }
+        if (valueScopeActive() && !m_valueViewHeld &&
+            projectionDue(m_lastValueProjectionWallMs, valueProjectionIntervalMs())) {
+            refreshValueRowsFromAnalysisSnapshot();
+        }
+        if (alarmScopeActive() && !m_alarmViewHeld &&
+            projectionDue(m_lastAlarmProjectionWallMs, alarmProjectionIntervalMs())) {
+            refreshAlarmRowsFromAnalysisSnapshot();
+        }
         requestDerivedSummaryRefresh(false);
     }
     emit analysisRuntimeChanged();
@@ -6807,6 +6957,7 @@ void AppController::rebuildGraphCatalog() {
     if (!presetStillValid) m_graphPresetKey = QStringLiteral("manual");
 
     m_graphSelectedKeys = validSelected;
+    rebuildGraphSelectedIdCache();
 
     QVector<QVariantMap> graphCatalogRows;
     m_graphCatalogCache.clear();
@@ -7000,6 +7151,14 @@ QVector<GraphBucketPoint> AppController::sliceGraphBucketCache(const QString& so
 void AppController::resetGraphDetailZoomLock() {
     m_graphDetailZoomLockValid = false;
     m_graphDetailZoomLockKey.clear();
+}
+
+void AppController::rebuildGraphSelectedIdCache() {
+    m_graphSelectedIds.clear();
+    for (const QString& key : m_graphSelectedKeys) {
+        const auto it = m_graphSignals.constFind(key);
+        if (it != m_graphSignals.cend()) m_graphSelectedIds.insert(it.value().id);
+    }
 }
 
 void AppController::appendGraphSamples(const FrameRecord& fr, const QString& source) {
@@ -8015,6 +8174,7 @@ void AppController::setGraphSelectedKeys(const QStringList& keys) {
     if (filtered == m_graphSelectedKeys && m_graphPresetKey == QStringLiteral("manual")) return;
     m_graphSelectedKeys = filtered;
     m_graphPresetKey = QStringLiteral("manual");
+    rebuildGraphSelectedIdCache();
     resetGraphDetailZoomLock();
     rebuildGraphCatalog();
     if (activeAnalysisSourceKey() == QStringLiteral("replay")) rebuildReplayGraphHistoryWindow();
@@ -8027,6 +8187,7 @@ void AppController::setGraphPresetKey(const QString& key) {
     if (normalized.isEmpty() || normalized == QStringLiteral("manual")) {
         if (m_graphPresetKey == QStringLiteral("manual")) return;
         m_graphPresetKey = QStringLiteral("manual");
+        rebuildGraphSelectedIdCache();
         resetGraphDetailZoomLock();
         rebuildGraphCatalog();
         if (activeAnalysisSourceKey() == QStringLiteral("replay")) rebuildReplayGraphHistoryWindow();
@@ -8038,6 +8199,7 @@ void AppController::setGraphPresetKey(const QString& key) {
         if (preset.key != normalized) continue;
         m_graphPresetKey = preset.key;
         m_graphSelectedKeys = preset.seriesKeys;
+        rebuildGraphSelectedIdCache();
         resetGraphDetailZoomLock();
         rebuildGraphCatalog();
         if (activeAnalysisSourceKey() == QStringLiteral("replay")) rebuildReplayGraphHistoryWindow();
@@ -8283,7 +8445,9 @@ QVariantList AppController::verificationScenarioCatalog() const {
         map.insert(QStringLiteral("route"), key.startsWith(QStringLiteral("attached_"))
                    ? QStringLiteral("현재 실행 중인 VSM에 외부 Python 송신기를 붙임")
                    : QStringLiteral("외부 Python 실행기가 별도 VSM/user-route를 실행"));
-        map.insert(QStringLiteral("python"), QStringLiteral("py -3 scripts/vsm_verify.py run --scenario %1").arg(key.startsWith(QStringLiteral("attached_")) ? QStringLiteral("<attached sender>") : key));
+        map.insert(QStringLiteral("python"), key.startsWith(QStringLiteral("attached_"))
+                   ? QStringLiteral("현재 앱 로그 + sender duration 선택")
+                   : QStringLiteral("py -3 scripts/vsm_verify.py run --scenario %1").arg(key));
         map.insert(QStringLiteral("artifactRoot"), QStringLiteral("artifacts/vsm_verify"));
         map.insert(QStringLiteral("safety"), key.startsWith(QStringLiteral("attached_")) || key.contains(QStringLiteral("load")) || key.contains(QStringLiteral("truth"))
                    ? QStringLiteral("차량 실차 연결 중 실행 금지: PCAN/Kvaser 송신 부하를 발생시킴")
@@ -8307,70 +8471,38 @@ QVariantList AppController::verificationScenarioCatalog() const {
         return map;
     };
     return QVariantList{
-        row(QStringLiteral("attached_pcan_mcp_load_30s"),
-            QStringLiteral("현재 앱 MCP/PCAN 30s"),
-            QStringLiteral("새 VSM 창 없이 현재 COM7/로그/성능 경로에서 MCP에 물린 PCAN만 1000fps 송신 검증"),
+        row(QStringLiteral("attached_load"),
+            QStringLiteral("현재 앱 부하 Dual"),
+            QStringLiteral("현재 연결/로그/성능 경로에서 PCAN+Kvaser 1000+1000fps 송신 검증"),
             false),
-        row(QStringLiteral("attached_kvaser_load_30s"),
-            QStringLiteral("현재 앱 Kvaser 30s"),
-            QStringLiteral("새 VSM 창 없이 현재 COM/로그/성능 경로에서 Kvaser만 1000fps 송신 검증"),
+        row(QStringLiteral("attached_pcan_mcp_load"),
+            QStringLiteral("현재 앱 MCP/PCAN"),
+            QStringLiteral("MCP에 물린 PCAN 단일 1000fps 송신 검증"),
             false),
-        row(QStringLiteral("attached_pcan_mcp_truth_30s"),
-            QStringLiteral("현재 앱 MCP Truth 30s"),
-            QStringLiteral("MCP/PCAN 단일 버스에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
+        row(QStringLiteral("attached_kvaser_load"),
+            QStringLiteral("현재 앱 Kvaser"),
+            QStringLiteral("Kvaser 단일 1000fps 송신 검증"),
             false),
-        row(QStringLiteral("attached_kvaser_truth_30s"),
-            QStringLiteral("현재 앱 Kvaser Truth 30s"),
-            QStringLiteral("Kvaser 단일 버스에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
+        row(QStringLiteral("attached_analysis_truth"),
+            QStringLiteral("현재 앱 Truth Dual"),
+            QStringLiteral("fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷 검증"),
             false),
-        row(QStringLiteral("attached_full_pcan_mcp_30s"),
-            QStringLiteral("현재 앱 MCP Full 30s"),
-            QStringLiteral("MCP/PCAN 단일 버스에서 160개 모델 ID와 noise를 섞어 주기/값/경보/그래프 풀부하 검증"),
+        row(QStringLiteral("attached_pcan_mcp_truth"),
+            QStringLiteral("현재 앱 MCP Truth"),
+            QStringLiteral("MCP/PCAN 단일 fixture 모델 truth 검증"),
             false),
-        row(QStringLiteral("attached_full_kvaser_30s"),
-            QStringLiteral("현재 앱 Kvaser Full 30s"),
-            QStringLiteral("Kvaser 단일 버스에서 160개 모델 ID와 noise를 섞어 주기/값/경보/그래프 풀부하 검증"),
+        row(QStringLiteral("attached_kvaser_truth"),
+            QStringLiteral("현재 앱 Kvaser Truth"),
+            QStringLiteral("Kvaser 단일 fixture 모델 truth 검증"),
             false),
-        row(QStringLiteral("attached_full_pcan_mcp_60s"),
-            QStringLiteral("현재 앱 MCP Full 60s"),
-            QStringLiteral("MCP/PCAN 단일 버스 2000fps 60초 풀부하 endurance 검증"),
+        row(QStringLiteral("attached_full_load"),
+            QStringLiteral("현재 앱 Full Dual"),
+            QStringLiteral("PCAN+Kvaser 1000+1000fps 풀부하 truth 검증"),
             false),
-        row(QStringLiteral("attached_load_30s"),
-            QStringLiteral("현재 앱 부하 30s"),
-            QStringLiteral("새 VSM 창을 띄우지 않고 현재 연결/로그/성능 계측 경로에서 PCAN+Kvaser 1000fps 송신 검증"),
+        row(QStringLiteral("attached_full_pcan_mcp"),
+            QStringLiteral("현재 앱 MCP Full"),
+            QStringLiteral("MCP/PCAN 단일 풀부하 truth 검증"),
             false),
-        row(QStringLiteral("attached_analysis_truth_30s"),
-            QStringLiteral("현재 앱 Truth 30s"),
-            QStringLiteral("현재 앱에서 fixture 모델, 주기/값/경보/그래프, 로그, 성능 스냅샷을 함께 검증"),
-            false),
-        row(QStringLiteral("attached_full_load_30s"),
-            QStringLiteral("현재 앱 Full Dual 30s"),
-            QStringLiteral("현재 앱에서 PCAN+Kvaser 1000+1000fps 풀부하 truth 검증"),
-            false),
-        row(QStringLiteral("user_route_30s"),
-            QStringLiteral("독립 HIL 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하는 CI/독립형 user-route 검증"),
-            true),
-        row(QStringLiteral("user_route_kvaser_30s"),
-            QStringLiteral("독립 Kvaser HIL 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser만 1000fps로 user-route 검증"),
-            true),
-        row(QStringLiteral("analysis_truth_30s"),
-            QStringLiteral("독립 Truth HIL 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하는 fixture + noise user-route 검증"),
-            true),
-        row(QStringLiteral("analysis_truth_kvaser_30s"),
-            QStringLiteral("독립 Kvaser Truth 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser 단일 버스로 fixture + noise 검증"),
-            true),
-        row(QStringLiteral("full_analysis_truth_30s"),
-            QStringLiteral("독립 Full Truth HIL 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하는 풀부하 주기/값/경보/그래프 user-route 검증"),
-            true),
-        row(QStringLiteral("full_analysis_truth_kvaser_30s"),
-            QStringLiteral("독립 Kvaser Full Truth 30s"),
-            QStringLiteral("별도 VSM exe를 새로 실행하고 Kvaser 단일 버스로 풀부하 truth 검증"),
-            true),
         row(QStringLiteral("control_smoke"),
             QStringLiteral("Control smoke"),
             QStringLiteral("제어 명령/ACK/CAN_TX_RAW 분리 경로 smoke"),
@@ -8407,18 +8539,22 @@ void AppController::toggleDebugProfiler() {
 
 void AppController::resetPerformanceMetrics() {
     CanMonitorPerf::PerformanceProbeRuntime::reset();
+    m_uiResponsiveness.reset();
     refreshPerformanceDiagnostics(true);
     setStatus(m_debugProfilerEnabled ? QStringLiteral("성능 계측 초기화") : QStringLiteral("성능 계측은 꺼져 있음"));
 }
 
 void AppController::refreshPerformanceDiagnostics(bool force) {
     Q_UNUSED(force);
-    m_performanceSummary = CanMonitorPerf::PerformanceProbeRuntime::summary();
-    m_performanceDiagnostics = CanMonitorPerf::PerformanceProbeRuntime::rows(80);
+    const QString probeSummary = CanMonitorPerf::PerformanceProbeRuntime::summary();
+    m_performanceSummary = QStringLiteral("%1 | %2").arg(m_uiResponsiveness.summary(), probeSummary);
+    m_performanceDiagnostics = m_uiResponsiveness.rows();
+    const QVariantList probeRows = CanMonitorPerf::PerformanceProbeRuntime::rows(80);
+    for (const QVariant& row : probeRows) m_performanceDiagnostics.push_back(row);
     emit performanceDiagnosticsChanged();
 }
 
-void AppController::runVerificationScenario(const QString& scenarioKey, const QString& portName) {
+void AppController::runVerificationScenario(const QString& scenarioKey, const QString& portName, const QString& durationKey) {
     const QString scenario = scenarioKey.trimmed();
     if (scenario.isEmpty()) {
         setStatus(QStringLiteral("검증 시나리오를 선택하세요"));
@@ -8428,7 +8564,8 @@ void AppController::runVerificationScenario(const QString& scenarioKey, const QS
         setStatus(QStringLiteral("검증 실행기가 이미 동작 중"));
         return;
     }
-    if (scenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
+    if (scenario.startsWith(QStringLiteral("attached_")) ||
+        scenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
         scenario == QStringLiteral("attached_kvaser_load_30s") ||
         scenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
         scenario == QStringLiteral("attached_kvaser_truth_30s") ||
@@ -8438,7 +8575,7 @@ void AppController::runVerificationScenario(const QString& scenarioKey, const QS
         scenario == QStringLiteral("attached_load_30s") ||
         scenario == QStringLiteral("attached_analysis_truth_30s") ||
         scenario == QStringLiteral("attached_full_load_30s")) {
-        runAttachedVerificationScenario(scenario);
+        runAttachedVerificationScenario(scenario, durationKey);
         return;
     }
 
@@ -8499,6 +8636,8 @@ void AppController::runVerificationScenario(const QString& scenarioKey, const QS
         QStringLiteral("--app-exe"), QCoreApplication::applicationFilePath(),
         QStringLiteral("--out-root"), outRoot,
     };
+    args << QStringLiteral("--duration-override")
+         << QString::number(verificationDurationSeconds(durationKey));
     if (!portName.trimmed().isEmpty()) {
         args << QStringLiteral("--port") << portName.trimmed();
     }
@@ -8519,7 +8658,7 @@ void AppController::runVerificationScenario(const QString& scenarioKey, const QS
     }
 }
 
-void AppController::runAttachedVerificationScenario(const QString& scenarioKey) {
+void AppController::runAttachedVerificationScenario(const QString& scenarioKey, const QString& durationKey) {
     if (!m_connected) {
         m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 실패 · 먼저 COM을 연결하세요");
         m_verificationRunnerArtifactPath.clear();
@@ -8547,8 +8686,17 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
         return;
     }
 
+    const QString durationLabel = verificationDurationLabel(durationKey);
+    const int durationSeconds = verificationDurationSeconds(durationKey);
+    QString normalizedScenario = scenarioKey;
+    if (normalizedScenario.endsWith(QStringLiteral("_30s"))) {
+        normalizedScenario.chop(4);
+    } else if (normalizedScenario == QStringLiteral("attached_full_pcan_mcp_60s")) {
+        normalizedScenario = QStringLiteral("attached_full_pcan_mcp");
+    }
+
     const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
-    const QString runId = QStringLiteral("%1_%2").arg(scenarioKey, stamp);
+    const QString runId = QStringLiteral("%1_%2_%3").arg(normalizedScenario, durationLabel, stamp);
     const QString outRoot = QDir(workDir).filePath(QStringLiteral("artifacts/vsm_verify"));
     const QString runDir = QDir(outRoot).filePath(runId);
     QDir().mkpath(runDir);
@@ -8557,7 +8705,7 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
     m_verificationAttachedSenderOk = false;
     m_verificationAttachedSenderExitCode = -1;
     m_verificationAttachedFinalizeAttempts = 0;
-    m_verificationAttachedScenario = scenarioKey;
+    m_verificationAttachedScenario = normalizedScenario;
     m_verificationAttachedLogName = runId;
     m_verificationAttachedSnapshotPath = QDir(runDir).filePath(QStringLiteral("app_snapshot.json"));
     m_verificationPreviousLogTargetName = m_logTargetName;
@@ -8568,21 +8716,19 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
     resetPerformanceMetrics();
     resetAllAnalysisFilters();
 
-    const bool fullScenario = scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
-                              scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s") ||
-                              scenarioKey == QStringLiteral("attached_full_kvaser_30s") ||
-                              scenarioKey == QStringLiteral("attached_full_load_30s");
+    const bool fullScenario = normalizedScenario == QStringLiteral("attached_full_pcan_mcp") ||
+                              normalizedScenario == QStringLiteral("attached_full_kvaser") ||
+                              normalizedScenario == QStringLiteral("attached_full_load");
     const bool analysisScenario = fullScenario ||
-                                  scenarioKey == QStringLiteral("attached_analysis_truth_30s") ||
-                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s") ||
-                                  scenarioKey == QStringLiteral("attached_kvaser_truth_30s");
-    const bool pcanOnlyScenario = scenarioKey == QStringLiteral("attached_pcan_mcp_load_30s") ||
-                                  scenarioKey == QStringLiteral("attached_pcan_mcp_truth_30s") ||
-                                  scenarioKey == QStringLiteral("attached_full_pcan_mcp_30s") ||
-                                  scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s");
-    const bool kvaserOnlyScenario = scenarioKey == QStringLiteral("attached_kvaser_load_30s") ||
-                                    scenarioKey == QStringLiteral("attached_kvaser_truth_30s") ||
-                                    scenarioKey == QStringLiteral("attached_full_kvaser_30s");
+                                  normalizedScenario == QStringLiteral("attached_analysis_truth") ||
+                                  normalizedScenario == QStringLiteral("attached_pcan_mcp_truth") ||
+                                  normalizedScenario == QStringLiteral("attached_kvaser_truth");
+    const bool pcanOnlyScenario = normalizedScenario == QStringLiteral("attached_pcan_mcp_load") ||
+                                  normalizedScenario == QStringLiteral("attached_pcan_mcp_truth") ||
+                                  normalizedScenario == QStringLiteral("attached_full_pcan_mcp");
+    const bool kvaserOnlyScenario = normalizedScenario == QStringLiteral("attached_kvaser_load") ||
+                                    normalizedScenario == QStringLiteral("attached_kvaser_truth") ||
+                                    normalizedScenario == QStringLiteral("attached_full_kvaser");
 
     if (analysisScenario) {
         const QString fixturePath = QDir(workDir).filePath(fullScenario
@@ -8649,9 +8795,7 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
     });
 
     QString senderScenario;
-    if (scenarioKey == QStringLiteral("attached_full_pcan_mcp_60s")) {
-        senderScenario = QStringLiteral("full_pcan_mcp_load_60s");
-    } else if (fullScenario && pcanOnlyScenario) {
+    if (fullScenario && pcanOnlyScenario) {
         senderScenario = QStringLiteral("full_pcan_mcp_load_30s");
     } else if (fullScenario && kvaserOnlyScenario) {
         senderScenario = QStringLiteral("full_kvaser_load_30s");
@@ -8670,13 +8814,14 @@ void AppController::runAttachedVerificationScenario(const QString& scenarioKey) 
     } else {
         senderScenario = QStringLiteral("can_load_30s");
     }
-    const QStringList args{
+    QStringList args{
         QStringLiteral("-3"),
         scriptPath,
         QStringLiteral("run"),
         QStringLiteral("--scenario"), senderScenario,
         QStringLiteral("--out-root"), m_verificationRunnerArtifactPath,
     };
+    args << QStringLiteral("--duration-override") << QString::number(durationSeconds);
 
     m_verificationProcess = process;
     m_verificationRunnerStatus = QStringLiteral("현재 앱 검증 준비 · 로그 시작 대기");
@@ -8704,13 +8849,12 @@ void AppController::startAttachedVerificationProcess(QProcess* process, const QS
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         file.write(QStringLiteral("py %1\n").arg(args.join(QChar(' '))).toUtf8());
     }
-    const bool pcanOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_load_30s") ||
-                                  m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
-                                  m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
-                                  m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s");
-    const bool kvaserOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_kvaser_load_30s") ||
-                                    m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth_30s") ||
-                                    m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser_30s");
+    const bool pcanOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_load") ||
+                                  m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth") ||
+                                  m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp");
+    const bool kvaserOnlyScenario = m_verificationAttachedScenario == QStringLiteral("attached_kvaser_load") ||
+                                    m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth") ||
+                                    m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser");
     m_verificationRunnerStatus = pcanOnlyScenario
         ? QStringLiteral("현재 앱 검증 중 · MCP/PCAN 송신 시작")
         : (kvaserOnlyScenario
@@ -8822,14 +8966,13 @@ void AppController::finalizeAttachedVerificationReport() {
         }
     }
 
-    const bool fullScenario = m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_30s") ||
-                              m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp_60s") ||
-                              m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser_30s") ||
-                              m_verificationAttachedScenario == QStringLiteral("attached_full_load_30s");
+    const bool fullScenario = m_verificationAttachedScenario == QStringLiteral("attached_full_pcan_mcp") ||
+                              m_verificationAttachedScenario == QStringLiteral("attached_full_kvaser") ||
+                              m_verificationAttachedScenario == QStringLiteral("attached_full_load");
     const bool truthValidationRequired = fullScenario ||
-                                         m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth_30s") ||
-                                         m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth_30s") ||
-                                         m_verificationAttachedScenario == QStringLiteral("attached_analysis_truth_30s");
+                                         m_verificationAttachedScenario == QStringLiteral("attached_pcan_mcp_truth") ||
+                                         m_verificationAttachedScenario == QStringLiteral("attached_kvaser_truth") ||
+                                         m_verificationAttachedScenario == QStringLiteral("attached_analysis_truth");
     int truthValidationExit = truthValidationRequired ? -1 : 0;
     QString truthValidationResultPath;
     const QString validationScript = QFileInfo::exists(QDir(workDir).filePath(QStringLiteral("scripts/validate_attached_truth_run.py")))
@@ -8922,6 +9065,9 @@ void AppController::startLog() {
         setStatus(QStringLiteral("이전 로그를 먼저 저장하거나 폐기하세요"));
         return;
     }
+
+    m_uiResponsiveness.reset();
+    refreshPerformanceDiagnostics(true);
 
     const QString stamp = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
     if (m_transportModeKey == QStringLiteral("typed")) {
@@ -9537,8 +9683,14 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     liveStats.insert(QStringLiteral("raw_ledger_visible_rows"), m_rawFrameTable.count());
     liveStats.insert(QStringLiteral("raw_ledger_segment_bytes"), QString::number(m_rawFrameTable.segmentBytes()));
     liveStats.insert(QStringLiteral("raw_ledger_latest_seq"), QString::number(m_rawFrameTable.latestSeq()));
+    liveStats.insert(QStringLiteral("raw_ledger_cache_rows"), m_rawFrameTable.ledgerCacheRows());
+    liveStats.insert(QStringLiteral("raw_ledger_cache_hits"), QString::number(m_rawFrameTable.ledgerCacheHits()));
+    liveStats.insert(QStringLiteral("raw_ledger_cache_misses"), QString::number(m_rawFrameTable.ledgerCacheMisses()));
+    liveStats.insert(QStringLiteral("raw_ledger_read_fail"), QString::number(m_rawFrameTable.ledgerReadFailCount()));
+    liveStats.insert(QStringLiteral("raw_ledger_file_read_fail"), QString::number(m_rawFrameTable.ledgerFileReadFailCount()));
     root.insert(QStringLiteral("live_stats"), liveStats);
     root.insert(QStringLiteral("performance_snapshot"), CanMonitorPerf::PerformanceProbeRuntime::snapshot(80));
+    root.insert(QStringLiteral("ui_responsiveness"), m_uiResponsiveness.toJson());
 
     QJsonObject analysisRuntime;
     analysisRuntime.insert(QStringLiteral("active_source"), activeAnalysisSourceKey());
@@ -9819,6 +9971,11 @@ void AppController::clearFrames() {
     m_recentFrames.clear();
     m_liveFrames.clear();
     m_rawFrameTable.clear();
+    if (m_worker) {
+        QMetaObject::invokeMethod(m_worker, [worker = m_worker]() {
+            worker->resetRawLedger(QStringLiteral("live"));
+        }, Qt::QueuedConnection);
+    }
     m_replayFrames.clear();
     clearGraphHistory();
     requestGraphRefresh(true);

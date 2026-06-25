@@ -301,8 +301,11 @@ private slots:
         QVERIFY(controller.controlOperatorSummary().contains(QStringLiteral("CAN_TX_RAW 미확인")));
         QVERIFY(controller.transportDiagnosticsSummary().contains(QStringLiteral("transport")));
         const QVariantList transportRows = controller.transportDiagnostics();
-        QCOMPARE(transportRows.size(), 9);
-        QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
+        QCOMPARE(transportRows.size(), 13);
+        QCOMPARE(transportRows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
+        QCOMPARE(transportRows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
+        QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
+        QCOMPARE(transportRows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
         QVERIFY(controller.controlActionVerdict().contains(QStringLiteral("COM 연결 없음")));
         QCOMPARE(controller.controlOperatorChecklist().size(), 8);
         QCOMPARE(controller.controlPolicyChecklist().size(), 1);

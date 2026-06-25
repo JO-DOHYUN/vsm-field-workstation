@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components" as Components
@@ -59,7 +59,7 @@ Item {
                         Layout.fillWidth: true
                         uiScale: root.uiScale
                         Components.SafeText {
-                            text: "설정"
+                            text: "?ㅼ젙"
                             color: "#243447"
                             font.bold: true
                             uiScale: root.uiScale
@@ -105,10 +105,10 @@ Item {
                     Components.FlowToolbar {
                         Layout.fillWidth: true
                         uiScale: root.uiScale
-                        Components.StatusBadge { text: "조치 " + appController.operatorActionLevel; kind: root.levelKind(appController.operatorActionLevel); uiScale: root.uiScale }
+                        Components.StatusBadge { text: "議곗튂 " + appController.operatorActionLevel; kind: root.levelKind(appController.operatorActionLevel); uiScale: root.uiScale }
                         Components.SafeText {
                             width: Math.max(Math.round(280 * root.uiScale), root.width - Math.round(170 * root.uiScale))
-                            text: appController.operatorHeadline + " · " + appController.operatorActionText
+                            text: appController.operatorHeadline + " 쨌 " + appController.operatorActionText
                             color: "#243447"
                             uiScale: root.uiScale
                             basePixelSize: Math.round(10.8 * root.uiScale)
@@ -117,7 +117,7 @@ Item {
 
                     Components.SafeText {
                         Layout.fillWidth: true
-                        text: appController.primaryIssueId !== "" ? (appController.primaryIssueId + " · " + appController.primaryIssueSummary) : appController.primaryIssueSummary
+                        text: appController.primaryIssueId !== "" ? (appController.primaryIssueId + " 쨌 " + appController.primaryIssueSummary) : appController.primaryIssueSummary
                         color: "#607080"
                         uiScale: root.uiScale
                         basePixelSize: Math.round(10.6 * root.uiScale)
@@ -133,8 +133,8 @@ Item {
 
                 Components.InfoCard {
                     Layout.fillWidth: true
-                    title: "모델"
-                    value: appController.modelActive ? appController.modelName : "모델 해제"
+                    title: "紐⑤뜽"
+                    value: appController.modelActive ? appController.modelName : "紐⑤뜽 ?댁젣"
                     note: appController.modelDiagnosticsSummary
                     badgeText: appController.modelActive ? "MODEL" : "OFF"
                     kind: appController.modelActive ? root.levelKind(appController.modelDiagnosticsLevel) : "warn"
@@ -153,7 +153,7 @@ Item {
                 }
                 Components.InfoCard {
                     Layout.fillWidth: true
-                    title: "저장 위치"
+                    title: "????꾩튂"
                     value: "project replay_data"
                     note: appController.defaultLogDirectory
                     badgeText: "PATH"
@@ -163,7 +163,7 @@ Item {
                 }
                 Components.InfoCard {
                     Layout.fillWidth: true
-                    title: "라이브 / 재생"
+                    title: "?쇱씠釉?/ ?ъ깮"
                     value: appController.analysisSourceText
                     note: appController.activeViewStateSummary
                     badgeText: appController.replayAnalysisActive ? "REPLAY" : (appController.connected ? "LIVE" : "OFF")
@@ -173,7 +173,7 @@ Item {
                 }
                 Components.InfoCard {
                     Layout.fillWidth: true
-                    title: "버스"
+                    title: "踰꾩뒪"
                     value: appController.busHealthLevel
                     note: appController.busHealthText
                     badgeText: "BUS"
@@ -183,9 +183,9 @@ Item {
                 }
                 Components.InfoCard {
                     Layout.fillWidth: true
-                    title: "필터"
+                    title: "?꾪꽣"
                     value: appController.activeViewStateSummary
-                    note: "라이브 " + (appController.liveFrameView.idFilter === "" ? "전체" : appController.liveFrameView.idFilter) + " · 재생 " + (appController.replayFrameView.idFilter === "" ? "전체" : appController.replayFrameView.idFilter)
+                    note: "?쇱씠釉?" + (appController.liveFrameView.idFilter === "" ? "?꾩껜" : appController.liveFrameView.idFilter) + " 쨌 ?ъ깮 " + (appController.replayFrameView.idFilter === "" ? "?꾩껜" : appController.replayFrameView.idFilter)
                     badgeText: "FILTER"
                     kind: "info"
                     preferredHeight: Math.round(92 * root.uiScale)
@@ -208,8 +208,8 @@ Item {
                     Components.FlowToolbar {
                         Layout.fillWidth: true
                         uiScale: root.uiScale
-                        Components.SafeText { text: "경로 / 세션"; uiScale: root.uiScale; basePixelSize: Math.round(13 * root.uiScale); font.bold: true; color: "#243447"; width: Math.round(120 * root.uiScale) }
-                        Components.StatusBadge { text: "업타임 " + appController.sessionUptimeText; kind: "info"; uiScale: root.uiScale }
+                        Components.SafeText { text: "寃쎈줈 / ?몄뀡"; uiScale: root.uiScale; basePixelSize: Math.round(13 * root.uiScale); font.bold: true; color: "#243447"; width: Math.round(120 * root.uiScale) }
+                        Components.StatusBadge { text: "?낇???" + appController.sessionUptimeText; kind: "info"; uiScale: root.uiScale }
                     }
 
                     GridLayout {
@@ -218,7 +218,7 @@ Item {
                         rowSpacing: Math.round(6 * root.uiScale)
                         columnSpacing: Math.round(12 * root.uiScale)
 
-                        Components.SafeText { text: "모델 파일"; color: "#52606d"; font.bold: true; uiScale: root.uiScale; basePixelSize: Math.round(10.8 * root.uiScale) }
+                        Components.SafeText { text: "紐⑤뜽 ?뚯씪"; color: "#52606d"; font.bold: true; uiScale: root.uiScale; basePixelSize: Math.round(10.8 * root.uiScale) }
                         Components.SafeText { text: appController.modelPath !== "" ? appController.modelPath : appController.modelSourceSummary; color: "#243447"; uiScale: root.uiScale; basePixelSize: Math.round(10.8 * root.uiScale); Layout.fillWidth: true }
 
                         Components.SafeText { text: "로그 폴더"; color: "#52606d"; font.bold: true; uiScale: root.uiScale; basePixelSize: Math.round(10.8 * root.uiScale) }
@@ -295,6 +295,19 @@ Item {
                             valueRole: "key"
                         }
                         ComboBox {
+                            id: verifyDuration
+                            width: Math.round(104 * root.uiScale)
+                            textRole: "title"
+                            valueRole: "key"
+                            model: ListModel {
+                                ListElement { title: "30s"; key: "30s" }
+                                ListElement { title: "5m"; key: "5m" }
+                                ListElement { title: "10m"; key: "10m" }
+                                ListElement { title: "1h"; key: "1h" }
+                                ListElement { title: "manual"; key: "manual" }
+                            }
+                        }
+                        ComboBox {
                             id: verifyPort
                             width: Math.round(110 * root.uiScale)
                             editable: true
@@ -312,7 +325,7 @@ Item {
                             uiScale: root.uiScale
                             maxButtonWidth: Math.round(92 * root.uiScale)
                             enabled: !appController.verificationRunnerActive
-                            onClicked: appController.runVerificationScenario(verifyScenario.currentValue, verifyPort.editText)
+                            onClicked: appController.runVerificationScenario(verifyScenario.currentValue, verifyPort.editText, verifyDuration.currentValue)
                         }
                         Components.SafeButton {
                             text: "검증 중지"
@@ -325,7 +338,7 @@ Item {
 
                     Components.SafeText {
                         Layout.fillWidth: true
-                        text: appController.verificationRunnerStatus + (appController.verificationRunnerArtifactPath !== "" ? (" · " + appController.verificationRunnerArtifactPath) : "")
+                        text: appController.verificationRunnerStatus + (appController.verificationRunnerArtifactPath !== "" ? (" | " + appController.verificationRunnerArtifactPath) : "")
                         color: appController.verificationRunnerActive ? "#9a5b00" : "#52606d"
                         uiScale: root.uiScale
                         basePixelSize: Math.round(10.6 * root.uiScale)
@@ -343,11 +356,11 @@ Item {
                             anchors.margins: Math.round(7 * root.uiScale)
                             spacing: Math.round(3 * root.uiScale)
                             Components.SafeText { Layout.fillWidth: true; text: "검증 경로: " + root.verifyScenarioField("route"); color: "#243447"; uiScale: root.uiScale; basePixelSize: Math.round(10.4 * root.uiScale) }
-                            Components.SafeText { Layout.fillWidth: true; text: "부하/모델: " + root.verifyScenarioField("load") + " · " + root.verifyScenarioField("model"); color: "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
+                            Components.SafeText { Layout.fillWidth: true; text: "부하/모델: " + root.verifyScenarioField("load") + " | " + root.verifyScenarioField("model"); color: "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
                             Components.SafeText { Layout.fillWidth: true; text: "검증 항목: " + root.verifyScenarioField("stress"); color: "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
                             Components.SafeText { Layout.fillWidth: true; text: "판정 기준: " + root.verifyScenarioField("acceptance"); color: "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
-                            Components.SafeText { Layout.fillWidth: true; text: "주의: " + root.verifyScenarioField("safety") + " · 산출물: " + root.verifyScenarioField("artifactRoot"); color: "#9a3412"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
-                            Components.SafeText { Layout.fillWidth: true; text: "명령: " + root.verifyScenarioField("python"); color: "#607080"; uiScale: root.uiScale; basePixelSize: Math.round(10.0 * root.uiScale) }
+                            Components.SafeText { Layout.fillWidth: true; text: "주의: " + root.verifyScenarioField("safety") + " | 산출물 " + root.verifyScenarioField("artifactRoot"); color: "#9a3412"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
+                            Components.SafeText { Layout.fillWidth: true; text: "명령: " + root.verifyScenarioField("python") + " | 기간 " + verifyDuration.currentText; color: "#607080"; uiScale: root.uiScale; basePixelSize: Math.round(10.0 * root.uiScale) }
                         }
                     }
 
@@ -388,10 +401,10 @@ Item {
                     anchors.margins: Math.round(10 * root.uiScale)
                     spacing: Math.round(8 * root.uiScale)
 
-                    Label { text: "상세 상태"; color: "#243447"; font.bold: true }
-                    Label { Layout.fillWidth: true; text: "모델: " + appController.modelVersion + " / " + appController.modelSchema + " · " + appController.modelVendor; color: "#52606d"; wrapMode: Text.WordWrap }
-                    Label { Layout.fillWidth: true; text: "분석: " + appController.analysisContextText; color: "#52606d"; wrapMode: Text.WordWrap }
-                    Label { Layout.fillWidth: true; text: "최근: " + appController.operatorRecentSummary; color: "#52606d"; wrapMode: Text.WordWrap }
+                    Label { text: "?곸꽭 ?곹깭"; color: "#243447"; font.bold: true }
+                    Label { Layout.fillWidth: true; text: "紐⑤뜽: " + appController.modelVersion + " / " + appController.modelSchema + " 쨌 " + appController.modelVendor; color: "#52606d"; wrapMode: Text.WordWrap }
+                    Label { Layout.fillWidth: true; text: "遺꾩꽍: " + appController.analysisContextText; color: "#52606d"; wrapMode: Text.WordWrap }
+                    Label { Layout.fillWidth: true; text: "理쒓렐: " + appController.operatorRecentSummary; color: "#52606d"; wrapMode: Text.WordWrap }
 
                     Repeater {
                         model: appController.operatorRecentEvents
@@ -401,7 +414,7 @@ Item {
                             spacing: Math.round(6 * root.uiScale)
                             Components.StatusBadge { text: modelData.category; kind: modelData.level === "ERR" ? "bad" : (modelData.level === "WARN" ? "warn" : "info"); uiScale: root.uiScale }
                             Label { text: modelData.summary; color: "#243447"; elide: Text.ElideRight; Layout.fillWidth: true }
-                            Label { text: modelData.ageText + " 전"; color: "#607080"; font.pixelSize: Math.round(10.6 * root.uiScale) }
+                            Label { text: modelData.ageText + " ms"; color: "#607080"; font.pixelSize: Math.round(10.6 * root.uiScale) }
                         }
                     }
                 }
