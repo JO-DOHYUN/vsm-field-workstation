@@ -1872,7 +1872,43 @@ QJsonObject AppController::drainEventTraceObject() {
     CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedProjectionStatus_receive"), m_drainEventTelemetry.typedProjectionStatusReceive);
     CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTruthStatus_receive"), m_drainEventTelemetry.typedTruthStatusReceive);
     CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTransportStatus_receive"), m_drainEventTelemetry.typedTransportStatusReceive);
+    const QJsonObject coreView = m_coreViewClient.statusJson();
+    for (auto it = coreView.constBegin(); it != coreView.constEnd(); ++it) {
+        out.insert(it.key(), it.value());
+    }
     return out;
+}
+
+void AppController::dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request) {
+    if (!request.valid || !m_worker) return;
+    QMetaObject::invokeMethod(m_worker,
+                              [worker = QPointer<SerialWorker>(m_worker), request]() {
+                                  if (worker) {
+                                      worker->requestCoreView(request.viewName, request.sinceSeq, request.limit, request.requestId);
+                                  }
+                              },
+                              Qt::QueuedConnection);
+}
+
+void AppController::handleCoreViewChanged(const QJsonObject& change) {
+    auto request = m_coreViewClient.noteViewChanged(change);
+    if (request) {
+        dispatchCoreViewRequest(*request);
+    }
+    m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+    requestTransportDiagnosticsRefresh(false);
+}
+
+void AppController::handleCoreViewSnapshotReady(quint64 requestId,
+                                                bool changed,
+                                                const QJsonObject& snapshot,
+                                                const QJsonObject& change) {
+    auto result = m_coreViewClient.applySnapshot(requestId, changed, snapshot, change);
+    if (result.followup) {
+        dispatchCoreViewRequest(*result.followup);
+    }
+    m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+    requestTransportDiagnosticsRefresh(false);
 }
 
 namespace {
@@ -2355,6 +2391,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_evidenceRuntime.setSerialOpen(ok);
         m_transportSession.setConnected(ok);
         if (ok) {
+            m_coreViewClient.reset();
             clearPendingRawLedgerUiCommit();
             m_rawFrameTable.clear();
             startLiveRuntimeTraceSession(makeLiveRuntimeTraceDirectory(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"))),
@@ -2364,6 +2401,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         updateTransportDiagnostics();
         if (ok) m_evidenceRuntime.advanceWallTimeMs(quint64(QDateTime::currentMSecsSinceEpoch()));
         if (!ok) {
+            m_coreViewClient.reset();
             stopLiveRuntimeTraceSession(QStringLiteral("serial_disconnected"));
             m_controlRuntime.setArmed(false);
             m_controlRuntime.setTestRunning(false);
@@ -2479,6 +2517,15 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_workerDrainEventTrace = trace;
         m_transportSession.updateDrainEventTrace(drainEventTraceObject());
         requestTransportDiagnosticsRefresh(false);
+    });
+    connect(m_worker, &SerialWorker::coreViewChanged, this, [this](const QJsonObject& change) {
+        handleCoreViewChanged(change);
+    });
+    connect(m_worker, &SerialWorker::coreViewSnapshotReady, this, [this](quint64 requestId,
+                                                                          bool changed,
+                                                                          const QJsonObject& snapshot,
+                                                                          const QJsonObject& change) {
+        handleCoreViewSnapshotReady(requestId, changed, snapshot, change);
     });
     connect(m_worker, &SerialWorker::rawFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;

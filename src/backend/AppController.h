@@ -17,6 +17,7 @@
 #include "ControlCommandEncoder.h"
 #include "control/ControlAuditModel.h"
 #include "control/ControlRuntime.h"
+#include "core/CoreViewClientRuntime.h"
 #include "evidence/EvidenceRuntime.h"
 #include "evidence/BusRoleResolver.h"
 #include "transport/LivePathTelemetry.h"
@@ -980,6 +981,9 @@ private:
     void appendPendingLiveFrames(const FrameRecordList& frames);
     QJsonObject livePathTraceObject();
     QJsonObject drainEventTraceObject();
+    void handleCoreViewChanged(const QJsonObject& change);
+    void handleCoreViewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
+    void dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request);
     int liveFlushChunkForBacklog(qint64 backlog) const;
     int liveFlushBudgetForBacklog(qint64 backlog) const;
     void compactPendingLiveFrames();
@@ -1216,6 +1220,7 @@ private:
     int m_liveProjectionLastFlushMs = 0;
     CanMonitorTransport::LivePathTelemetry m_livePathTelemetry;
     CanMonitorTransport::DrainEventTelemetry m_drainEventTelemetry;
+    CanMonitorCore::CoreViewClientRuntime m_coreViewClient;
     QJsonObject m_workerLivePathTrace;
     QJsonObject m_workerDrainEventTrace;
     qint64 m_lastLiveRuntimeLogWallMs = 0;

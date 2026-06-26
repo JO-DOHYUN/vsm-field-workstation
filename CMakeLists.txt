@@ -38,6 +38,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/core/CoreViewTypes.cpp
     src/backend/core/CoreMaterializedViewStore.h
     src/backend/core/CoreMaterializedViewStore.cpp
+    src/backend/core/CoreViewClientRuntime.h
+    src/backend/core/CoreViewClientRuntime.cpp
     src/backend/evidence/BoardConnectionState.h
     src/backend/evidence/BoardConnectionState.cpp
     src/backend/evidence/EvidenceRuntime.h
@@ -182,6 +184,32 @@ qt_add_qml_module(can_monitor_qml_reboot
         qml/components/TableSurface.qml
         qml/components/SummaryStrip.qml
 )
+
+qt_add_executable(vsm_capture_core
+    src/capture_core_main.cpp
+    src/backend/BuildMetadata.h
+    src/backend/BuildMetadata.cpp
+    src/backend/core/CoreViewTypes.h
+    src/backend/core/CoreViewTypes.cpp
+    src/backend/core/CoreMaterializedViewStore.h
+    src/backend/core/CoreMaterializedViewStore.cpp
+)
+set_target_properties(vsm_capture_core PROPERTIES
+    OUTPUT_NAME "vsm-capture-core"
+)
+target_include_directories(vsm_capture_core PRIVATE src src/backend)
+target_compile_definitions(vsm_capture_core
+    PRIVATE
+        CAN_MONITOR_APP_NAME="${CAN_MONITOR_APP_NAME}"
+        CAN_MONITOR_APP_ID="${CAN_MONITOR_APP_ID}"
+        CAN_MONITOR_ORG_NAME="${CAN_MONITOR_ORG_NAME}"
+        CAN_MONITOR_ORG_DOMAIN="${CAN_MONITOR_ORG_DOMAIN}"
+        CAN_MONITOR_VERSION="${PROJECT_VERSION}"
+        CAN_MONITOR_BASELINE_ID="${CAN_MONITOR_BASELINE_ID}"
+        CAN_MONITOR_BUILD_TIMESTAMP_UTC="${CAN_MONITOR_BUILD_TIMESTAMP_UTC}"
+        CAN_MONITOR_BUILD_TYPE="$<CONFIG>"
+)
+target_link_libraries(vsm_capture_core PRIVATE Qt6::Core)
 
 
 qt_add_resources(can_monitor_qml_reboot "can_monitor_data"
