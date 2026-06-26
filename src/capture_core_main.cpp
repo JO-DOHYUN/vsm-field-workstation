@@ -1,6 +1,6 @@
 #include "backend/BuildMetadata.h"
+#include "backend/core/CaptureCoreProcessRuntime.h"
 #include "backend/core/CoreMaterializedViewStore.h"
-#include "backend/core/CoreIpcServerRuntime.h"
 
 #include <QCoreApplication>
 #include <QCommandLineParser>
@@ -44,21 +44,6 @@ int runSelfTest() {
     return ok ? 0 : 2;
 }
 
-void seedInitialViews(CanMonitorCore::CoreMaterializedViewStore& store) {
-    store.updateView(CanMonitorCore::CoreViewName::CoreHealth,
-                     QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
-                                 {QStringLiteral("state"), QStringLiteral("ready")},
-                                 {QStringLiteral("build"), buildInfoJson()}},
-                     CanMonitorCore::CoreViewSeverity::Ok,
-                     QJsonObject{{QStringLiteral("state"), QStringLiteral("ready")}});
-    store.updateView(CanMonitorCore::CoreViewName::TransportSummary,
-                     QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")},
-                                 {QStringLiteral("serial_owner"), QStringLiteral("core")},
-                                 {QStringLiteral("capture_active"), false}},
-                     CanMonitorCore::CoreViewSeverity::Ok,
-                     QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")}});
-}
-
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -79,9 +64,17 @@ int main(int argc, char* argv[]) {
     const QCommandLineOption serverOption(QStringLiteral("server"),
                                           QStringLiteral("Run the local IPC server with the given name."),
                                           QStringLiteral("name"));
+    const QCommandLineOption portOption(QStringLiteral("port"),
+                                        QStringLiteral("Open the serial port from the capture core process."),
+                                        QStringLiteral("port"));
+    const QCommandLineOption gatewayOption(QStringLiteral("gateway"),
+                                           QStringLiteral("Open a debug gateway TCP endpoint from the capture core process."),
+                                           QStringLiteral("endpoint"));
     parser.addOption(selfTestOption);
     parser.addOption(readyOption);
     parser.addOption(serverOption);
+    parser.addOption(portOption);
+    parser.addOption(gatewayOption);
     parser.process(app);
 
     if (parser.isSet(selfTestOption)) {
@@ -95,12 +88,10 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     if (parser.isSet(serverOption)) {
-        CanMonitorCore::CoreMaterializedViewStore store;
-        seedInitialViews(store);
-        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        CanMonitorCore::CaptureCoreProcessRuntime runtime;
         QString error;
         const QString serverName = parser.value(serverOption);
-        if (!server.listen(serverName, &error)) {
+        if (!runtime.startIpc(serverName, &error)) {
             writeJsonLine(QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
                                       {QStringLiteral("mode"), QStringLiteral("server")},
                                       {QStringLiteral("ok"), false},
@@ -112,13 +103,18 @@ int main(int argc, char* argv[]) {
                                   {QStringLiteral("ok"), true},
                                   {QStringLiteral("server_name"), serverName},
                                   {QStringLiteral("build"), buildInfoJson()}});
+        if (parser.isSet(portOption)) {
+            runtime.startSerial(parser.value(portOption));
+        } else if (parser.isSet(gatewayOption)) {
+            runtime.startGatewayTcp(parser.value(gatewayOption));
+        }
         return app.exec();
     }
 
     writeJsonLine(QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
                               {QStringLiteral("mode"), QStringLiteral("idle")},
                               {QStringLiteral("ok"), true},
-                              {QStringLiteral("note"), QStringLiteral("IPC/serial ownership is the next migration slice.")},
+                              {QStringLiteral("note"), QStringLiteral("Use --server <name> with optional --port or --gateway to run the core data-plane owner.")},
                               {QStringLiteral("build"), buildInfoJson()}});
     return 0;
 }

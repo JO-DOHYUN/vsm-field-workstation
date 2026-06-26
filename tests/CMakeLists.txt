@@ -123,6 +123,50 @@ target_link_libraries(test_core_ipc_runtime PRIVATE
 )
 add_test(NAME core_ipc_runtime COMMAND test_core_ipc_runtime)
 
+add_executable(test_capture_core_process_runtime
+    test_capture_core_process_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/BuildMetadata.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcServerRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CaptureCoreProcessRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxQueue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedIngressRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/CaptureCoreRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
+)
+target_include_directories(test_capture_core_process_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_compile_definitions(test_capture_core_process_runtime PRIVATE
+    CAN_MONITOR_APP_NAME="CAN Monitor Reboot"
+    CAN_MONITOR_APP_ID="CAN_Monitor_Reboot"
+    CAN_MONITOR_ORG_NAME="CAN Monitor Reboot"
+    CAN_MONITOR_ORG_DOMAIN="local.canmonitorreboot"
+    CAN_MONITOR_VERSION="0.9.0"
+    CAN_MONITOR_BASELINE_ID="turn81_full_buildfix2"
+    CAN_MONITOR_BUILD_TIMESTAMP_UTC="test"
+    CAN_MONITOR_BUILD_TYPE="Test"
+)
+target_link_libraries(test_capture_core_process_runtime PRIVATE
+    Qt6::Core
+    Qt6::SerialPort
+    Qt6::Network
+    Qt6::Test
+)
+add_test(NAME capture_core_process_runtime COMMAND test_capture_core_process_runtime)
+
 add_executable(test_file_persistence
     test_file_persistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -1004,6 +1048,7 @@ if (WIN32)
     set_tests_properties(core_materialized_view_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(core_view_client_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(core_ipc_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(capture_core_process_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

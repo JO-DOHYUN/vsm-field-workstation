@@ -38,6 +38,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/core/CoreViewTypes.cpp
     src/backend/core/CoreMaterializedViewStore.h
     src/backend/core/CoreMaterializedViewStore.cpp
+    src/backend/core/CaptureCoreProcessRuntime.h
+    src/backend/core/CaptureCoreProcessRuntime.cpp
     src/backend/core/CoreViewClientRuntime.h
     src/backend/core/CoreViewClientRuntime.cpp
     src/backend/core/CoreIpcClientRuntime.h
@@ -197,8 +199,37 @@ qt_add_executable(vsm_capture_core
     src/backend/core/CoreViewTypes.cpp
     src/backend/core/CoreMaterializedViewStore.h
     src/backend/core/CoreMaterializedViewStore.cpp
+    src/backend/core/CaptureCoreProcessRuntime.h
+    src/backend/core/CaptureCoreProcessRuntime.cpp
     src/backend/core/CoreIpcServerRuntime.h
     src/backend/core/CoreIpcServerRuntime.cpp
+    src/backend/TypedRecords.h
+    src/backend/TypedRecords.cpp
+    src/backend/TypedTransportParser.h
+    src/backend/TypedTransportParser.cpp
+    src/backend/transport/HostTxQueue.h
+    src/backend/transport/HostTxQueue.cpp
+    src/backend/transport/HostTxRuntime.h
+    src/backend/transport/HostTxRuntime.cpp
+    src/backend/transport/DrainByteQueue.h
+    src/backend/transport/DrainByteQueue.cpp
+    src/backend/transport/TypedRecordHandoffQueue.h
+    src/backend/transport/TypedRecordHandoffQueue.cpp
+    src/backend/transport/LivePathTelemetry.h
+    src/backend/transport/LiveProjectionRuntime.h
+    src/backend/transport/LiveProjectionRuntime.cpp
+    src/backend/transport/LiveTruthRuntime.h
+    src/backend/transport/LiveTruthRuntime.cpp
+    src/backend/transport/SerialDrainRuntime.h
+    src/backend/transport/SerialDrainRuntime.cpp
+    src/backend/transport/TypedIngressRuntime.h
+    src/backend/transport/TypedIngressRuntime.cpp
+    src/backend/transport/TypedEvidencePipelineRuntime.h
+    src/backend/transport/TypedEvidencePipelineRuntime.cpp
+    src/backend/transport/CaptureCoreRuntime.h
+    src/backend/transport/CaptureCoreRuntime.cpp
+    src/backend/transport/TypedEvidencePipelineWorkerRuntime.h
+    src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
 )
 set_target_properties(vsm_capture_core PROPERTIES
     OUTPUT_NAME "vsm-capture-core"
@@ -215,7 +246,7 @@ target_compile_definitions(vsm_capture_core
         CAN_MONITOR_BUILD_TIMESTAMP_UTC="${CAN_MONITOR_BUILD_TIMESTAMP_UTC}"
         CAN_MONITOR_BUILD_TYPE="$<CONFIG>"
 )
-target_link_libraries(vsm_capture_core PRIVATE Qt6::Core Qt6::Network)
+target_link_libraries(vsm_capture_core PRIVATE Qt6::Core Qt6::SerialPort Qt6::Network)
 
 
 qt_add_resources(can_monitor_qml_reboot "can_monitor_data"
