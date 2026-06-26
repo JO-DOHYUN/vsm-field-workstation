@@ -28,7 +28,37 @@ Use this skill when the task can affect long-run memory, queue backpressure, raw
 5. `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
 
 ## Architecture Target
-The live path must converge to this structure:
+The live path must converge to the Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane architecture in
+`docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`.
+
+Logical target:
+
+```text
+Core-owned Data Plane
+  SerialDrainRuntime
+    -> bounded raw ingress queue
+    -> ByteSlabPool / FrameRef parser
+    -> CaptureCoreRuntime
+         -> CaptureWriterRuntime
+         -> RawLedgerRuntime
+         -> AnalysisWorkerRuntime
+         -> MaterializedViewStore
+
+View Query Plane
+  CoreClientRuntime
+    -> ViewChanged only
+    -> GetView(view_name, since_seq, limit)
+    -> AppController snapshot facade
+    -> QML
+
+Optional Debug Tap Plane
+  debug/gateway/tap
+    -> default OFF
+    -> non-blocking
+    -> fixed cap and drop counters
+```
+
+Current transition structure:
 
 ```text
 SerialDrainRuntime
@@ -44,6 +74,8 @@ SerialDrainRuntime
 ```
 
 `TypedRecord` remains allowed for replay/import/offline tools, but not as the live production hot-path fanout object.
+`capture.stream` and `capture.index` are the only authoritative production truth. Raw ledger, latest state, analysis
+snapshots, graph buckets, and transport summaries are derived materialized views.
 
 ## Implementation Rules
 - Replace per-frame owning objects with `TypedFrameRef`, `CanRxLite`, and critical evidence lite DTOs.
@@ -52,6 +84,9 @@ SerialDrainRuntime
 - Keep `SerialDrainRuntime::readyRead` read-only and return quickly.
 - Keep writer and analysis dispatch bounded; if full, mark capture/analysis invalid explicitly.
 - Use single-flight projection snapshots for UI. If a snapshot is pending, replace/coalesce latest data instead of enqueueing another full event.
+- Prefer `ViewChanged` + bounded `GetView(...)` query over push-streaming full snapshots to the UI.
+- Materialized view queries must return already-built bounded views; they must not perform full capture scans in response to UI demand.
+- Debug/gateway/tap paths must be default-off and must not run in the normal live production path.
 - Add telemetry before claiming improvement.
 - Do not hide memory growth by reducing evidence fidelity.
 
@@ -80,4 +115,7 @@ SerialDrainRuntime
 - Writer queue is bounded but a pre-writer handoff queue is not.
 - Raw ledger returns large committed frame lists to UI faster than UI can apply them.
 - Graph active mode appends raw points without a hard memory cap.
+- UI consumes raw/typed stream directly instead of querying derived views.
+- A UI view query performs full replay/capture scan on demand.
+- Debug gateway/profiler writer code runs in normal live production mode.
 - A test passes for 30s but no 10m/1h memory evidence exists.

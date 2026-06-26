@@ -28,7 +28,7 @@ Root에는 임시 계획서, handoff, 실패 분석 초안, 긴 prompt를 두지
 - `packaging/`: release notice, SBOM, installer hook.
 
 ## Docs
-- `docs/architecture/`: product constitution, runtime split, capture-core memory architecture, protocol/control architecture.
+- `docs/architecture/`: product constitution, runtime split, capture-core memory architecture, core data/view/tap architecture, protocol/control architecture.
 - `docs/interfaces/`: external format and hardware/software data contracts.
 - `docs/ai_harness/`: Codex workflow, build verification policy, regression matrix.
 - `docs/runbooks/`: build, release, HIL, debug gateway, memory verification, field validation procedures.
@@ -69,6 +69,7 @@ Generated capture/log/binary files are not tracked except intentional README/pla
 
 ## Capture-Core Memory Work Placement
 - 설계 기준: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
+- 장기 process/data boundary 기준: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
 - 검증 기준: `docs/runbooks/VSM_CAPTURE_CORE_MEMORY_VERIFY_KO.md`
 - 하네스 결정: `history/decisions/2026-06-25-capture-core-memory-harness-remodel.md`
 - 기존 root 임시 계획서는 root에 두지 말고 위 문서로 흡수한다.

@@ -75,6 +75,7 @@ Minimum completion evidence:
 - If hardware/HIL is available, run `docs/runbooks/VSM_CAPTURE_CORE_MEMORY_VERIFY_KO.md` matrix at least through 10m, and 1h before field-final claim.
 
 Never claim capture-core memory completion if `TypedRecordList` remains the main live fanout object, if full typed batches can accumulate in Qt queued events outside telemetry, or if private memory grows linearly in a 10m/1h run.
+Never claim long-run VSM architecture completion if UI receives raw/typed stream directly, if a `GetView`/view query performs full capture scan on demand, or if debug/gateway/tap writer paths execute in normal live mode.
 
 ## Reporting Rule
 
@@ -92,6 +93,7 @@ Never claim capture-core memory completion if `TypedRecordList` remains the main
 - 표시량 감소는 허용하지만 truth 계산 입력 유실은 허용하지 않는다. analysis queue overflow는 `truth_loss` 또는 `analysis_overrun`으로 명확히 보고해야 한다.
 - 표시 지연, recent raw row 생략, graph bucket 축약은 UI에 명시해야 하며, 이 상태를 parser/storage/CAN success로 혼동해 보고하지 않는다.
 - QML/UI는 raw stream consumer가 아니라 snapshot/diff renderer다. QML binding이 timing/value/alarm 계산이나 raw frame fanout을 유발하면 실패로 본다.
+- UI는 Core-owned Data Plane의 query consumer다. `ViewChanged`는 cheap notification이어야 하며, heavy materialized view는 bounded `GetView(view_name, since_seq, limit)` 응답으로만 이동해야 한다.
 - Live 고부하 경로에서 `LiveProjectionRuntime`/`LiveTruthRuntime` coalesced display rows를 timing/value/alarm truth 입력으로 다시 쓰면 실패다. truth 입력은 `AnalysisRuntime` 또는 그 후속 runtime이 전량 소비해야 한다.
 - Successful commands are summarized by command and result only. Do not paste include traces, deploy copy logs, or full passing test output.
 - On failure, report the failing command, the first actionable compiler/test error, and the next smallest recovery step. Filter MSVC include noise before reporting.

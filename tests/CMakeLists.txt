@@ -75,6 +75,21 @@ target_link_libraries(test_live_runtime_trace PRIVATE
 )
 add_test(NAME live_runtime_trace COMMAND test_live_runtime_trace)
 
+add_executable(test_core_materialized_view_store
+    test_core_materialized_view_store.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
+)
+target_include_directories(test_core_materialized_view_store PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_core_materialized_view_store PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME core_materialized_view_store COMMAND test_core_materialized_view_store)
+
 add_executable(test_file_persistence
     test_file_persistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -950,6 +965,7 @@ if (WIN32)
     set_tests_properties(ui_state_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(performance_probe_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(live_runtime_trace PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(core_materialized_view_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

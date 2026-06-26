@@ -76,3 +76,4 @@ VSM 장시간 high-load 멈춤/메모리 폭증은 단순 UI 렌더링 문제가
 - 폴더 가이드: [[docs/PROJECT_FOLDER_GUIDE_KO]]
 - build 검증 정책: [[docs/ai_harness/BUILD_VERIFY_POLICY_KO]]
 - 이번 결정: [[history/decisions/2026-06-25-capture-core-memory-harness-remodel]]
+- 2026-06-26 추가 결정: VSM 장기 live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다. [[docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO]], [[history/decisions/2026-06-26-core-data-view-tap-architecture]]

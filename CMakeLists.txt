@@ -33,6 +33,11 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/FilePersistence.cpp
     src/backend/TypedRecords.h
     src/backend/TypedRecords.cpp
+    src/backend/core/CaptureCoreDataPlane.h
+    src/backend/core/CoreViewTypes.h
+    src/backend/core/CoreViewTypes.cpp
+    src/backend/core/CoreMaterializedViewStore.h
+    src/backend/core/CoreMaterializedViewStore.cpp
     src/backend/evidence/BoardConnectionState.h
     src/backend/evidence/BoardConnectionState.cpp
     src/backend/evidence/EvidenceRuntime.h

@@ -12,6 +12,7 @@ description: Use when modifying recent graph, full-range overview graph, detail 
 - Recent-window graph and full-range overview graph are separate tools.
 - Full-range overview remains fixed while replay moves only cursor/selection overlays.
 - Detail graph rebuilds from selected interval; it is not just a cropped overview bitmap.
+- Long-run graph data is a bounded Core materialized view or replay-derived snapshot, not a raw live stream consumer.
 
 ## Workflow
 1. Read `BRIEF.md`.
@@ -26,3 +27,4 @@ description: Use when modifying recent graph, full-range overview graph, detail 
 - overlay swallowing graph content
 - full overview rebuilding continuously during replay
 - side signal list disappearing during layout fixes
+- graph hot path appends unbounded raw points outside Core/view-store caps

@@ -18,6 +18,7 @@ description: Use only when modifying AGENTS.md, .codex configuration, skill boun
 - Split reusable workflows into narrowly described skills.
 - Record reason, expected gain, and rollback rule in `history/decisions/`.
 - Do not redesign the whole tree unless the user explicitly asks for harness restructuring.
+- For VSM long-run live architecture changes, keep `AGENTS.md`, `INDEX.md`, `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`, and the affected skill boundaries aligned.
 
 ## Output
 - changed harness files

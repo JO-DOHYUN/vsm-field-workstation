@@ -10,6 +10,7 @@ description: Use when modifying replay load/play/pause/seek, issue navigation, l
 - replay cursor, seek, speed, pause, issue focus, and analysis source must not overwrite live state.
 - timing issues and value/alarm meaning remain separate.
 - legacy 20-byte replay semantics remain compatible while typed replay is added side-by-side.
+- Replay can rebuild views from capture truth, but live UI must not become the raw typed stream owner.
 
 ## Workflow
 1. Read `BRIEF.md`.
@@ -23,3 +24,4 @@ description: Use when modifying replay load/play/pause/seek, issue navigation, l
 - pause/hold hides source identity
 - issue navigation rebuilds unrelated graph truth
 - typed replay replaces legacy replay instead of coexisting
+- replay/view query path performs unbounded full scans in response to live UI polling

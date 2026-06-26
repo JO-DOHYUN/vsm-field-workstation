@@ -18,6 +18,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 - UI projection/drop/sampling may reduce displayed raw rows only; truth analysis must consume every accepted `CAN_RX_RAW` or report `truth_loss`.
 - Live truth state keys must include bus identity, at minimum `bus + canId + ext + rtr`.
 - Debug gateway capture is opt-in and external to the normal app hot loop; it can preserve raw serial evidence, but it does not replace VSM final capture validation.
+- `capture.stream/index` is the authoritative typed evidence truth; UI/raw tail/graph/analysis rows are bounded derived views.
 
 ## Workflow
 1. Read `BRIEF.md`, `docs/architecture/PROJECT_CONSTITUTION_KO.md`, and `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`.
@@ -35,3 +36,4 @@ description: Use when working on board typed stream parsing, typed capture stora
 - analysis input queue grows without a hard bound or overflow diagnostic
 - display drop is reported as parser/storage/CSM CAN drop
 - debug gateway raw capture is used to claim PASS when VSM `capture.stream` is missing, stale, or corrupt
+- UI consumes raw typed evidence directly instead of querying Core materialized views

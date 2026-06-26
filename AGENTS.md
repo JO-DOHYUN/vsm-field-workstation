@@ -37,6 +37,8 @@
 - 검증하지 않은 build/run/replay/graph/deploy/HIL 성공은 단정하지 않는다.
 - 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary, telemetry, tests, exit condition을 같은 slice에 포함한다.
 - live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라 capture-core ownership 문제로 먼저 의심한다.
+- VSM long-run live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다.
+- `capture.stream/index`만 authoritative truth이며 UI/graph/raw tail/analysis rows는 bounded materialized view로 다룬다.
 
 ## 4. 작업 라우팅
 - capture-core memory/hot path/slab/bounded queue/projection snapshot: `.agents/skills/capture-core-memory/SKILL.md`
@@ -52,6 +54,7 @@
 - VSM-CSM 통합 원칙: `docs/architecture/PROJECT_CONSTITUTION_KO.md`
 - typed stream/protocol: `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`, `shared/protocol/typed_stream_v1.md`
 - capture-core memory architecture: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
+- core data/view/tap architecture: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
 - control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
 - build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
 
