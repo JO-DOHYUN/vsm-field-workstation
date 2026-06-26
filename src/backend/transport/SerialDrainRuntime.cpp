@@ -1,5 +1,6 @@
 #include "transport/SerialDrainRuntime.h"
 
+#include <QDateTime>
 #include <QLoggingCategory>
 
 #include <algorithm>
@@ -27,6 +28,8 @@ void SerialDrainRuntime::startSerial(const QString& portName) {
     m_readyReadMaxUs = 0;
     m_drainBurstMaxBytes = 0;
     m_lastReportedOverrunBytes = 0;
+    m_bytesAvailablePending = false;
+    m_eventTelemetry = DrainEventTelemetry{};
     m_statusClock.invalidate();
 
     m_serial = new QSerialPort(this);
@@ -82,6 +85,13 @@ void SerialDrainRuntime::startGatewayTcp(const QString& endpoint) {
     }
 
     m_queue->reset();
+    m_bytesTotal = 0;
+    m_readyReadCount = 0;
+    m_readyReadMaxUs = 0;
+    m_drainBurstMaxBytes = 0;
+    m_lastReportedOverrunBytes = 0;
+    m_bytesAvailablePending = false;
+    m_eventTelemetry = DrainEventTelemetry{};
     m_tcp = new QTcpSocket(this);
     connect(m_tcp, &QTcpSocket::readyRead, this, &SerialDrainRuntime::onReadyRead);
     connect(m_tcp, &QTcpSocket::bytesWritten, this, &SerialDrainRuntime::onBytesWritten);
@@ -108,6 +118,8 @@ void SerialDrainRuntime::startGatewayTcp(const QString& endpoint) {
 
 void SerialDrainRuntime::stop() {
     clearHostTxQueue(QStringLiteral("disconnect"));
+    m_bytesAvailablePending = false;
+    m_eventTelemetry.drainPumpScheduledFlag = false;
     if (m_serial) {
         if (m_serial->isOpen()) {
             m_serial->clear(QSerialPort::AllDirections);
@@ -138,6 +150,13 @@ void SerialDrainRuntime::sendHostFrame(const QByteArray& frame, const QString& s
     drainHostTxQueue();
 }
 
+void SerialDrainRuntime::acknowledgeBytesAvailable() {
+    m_bytesAvailablePending = false;
+    if (m_queue && m_queue->snapshot().usedBytes > 0) {
+        emitBytesAvailableCoalesced();
+    }
+}
+
 void SerialDrainRuntime::onReadyRead() {
     QIODevice* device = activeDevice();
     if (!device) return;
@@ -145,11 +164,14 @@ void SerialDrainRuntime::onReadyRead() {
     QElapsedTimer timer;
     timer.start();
     quint64 burstBytes = 0;
+    int readLoops = 0;
     ++m_readyReadCount;
+    ++m_eventTelemetry.readyReadCalls;
 
     for (int pass = 0; pass < kReadyReadMaxDrainLoops; ++pass) {
         QByteArray chunk = device->read(kDrainReadChunkBytes);
         if (chunk.isEmpty()) break;
+        ++readLoops;
         burstBytes += quint64(chunk.size());
         m_bytesTotal += quint64(chunk.size());
         if (!m_queue->push(std::move(chunk))) {
@@ -164,8 +186,12 @@ void SerialDrainRuntime::onReadyRead() {
     }
 
     m_drainBurstMaxBytes = std::max(m_drainBurstMaxBytes, burstBytes);
+    m_eventTelemetry.readBurstBytesLast = burstBytes;
+    m_eventTelemetry.readBurstBytesMax = std::max(m_eventTelemetry.readBurstBytesMax, burstBytes);
+    m_eventTelemetry.readLoopsLast = quint64(readLoops);
+    m_eventTelemetry.readLoopsMax = std::max<quint64>(m_eventTelemetry.readLoopsMax, quint64(readLoops));
     m_readyReadMaxUs = std::max<quint64>(m_readyReadMaxUs, quint64(timer.nsecsElapsed() / 1000));
-    if (burstBytes > 0) emit bytesAvailable();
+    if (burstBytes > 0) emitBytesAvailableCoalesced();
     emitDrainStatus(false);
 }
 
@@ -239,6 +265,10 @@ void SerialDrainRuntime::emitDrainStatus(bool force) {
     if (!force && m_statusClock.isValid() && m_statusClock.elapsed() < kDrainStatusIntervalMs) return;
     m_statusClock.restart();
     const auto snapshot = m_queue->snapshot();
+    m_eventTelemetry.drainQueueUsedBytes = snapshot.usedBytes;
+    m_eventTelemetry.drainQueueMaxUsedBytes = snapshot.maxUsedBytes;
+    m_eventTelemetry.drainQueueCapacityBytes = snapshot.capacityBytes;
+    m_eventTelemetry.drainQueueOverrunBytes = snapshot.overrunBytes;
     emit drainStatusChanged(m_bytesTotal,
                             m_readyReadCount,
                             m_readyReadMaxUs,
@@ -248,6 +278,15 @@ void SerialDrainRuntime::emitDrainStatus(bool force) {
                             snapshot.capacityBytes,
                             snapshot.overrunBytes,
                             snapshot.contentionCount);
+    emit drainEventTraceChanged(m_eventTelemetry.toJson(QDateTime::currentMSecsSinceEpoch()));
+}
+
+void SerialDrainRuntime::emitBytesAvailableCoalesced() {
+    if (m_bytesAvailablePending) return;
+    m_bytesAvailablePending = true;
+    ++m_eventTelemetry.bytesAvailableEmits;
+    m_eventTelemetry.drainPumpScheduledFlag = true;
+    emit bytesAvailable();
 }
 
 } // namespace CanMonitorTransport

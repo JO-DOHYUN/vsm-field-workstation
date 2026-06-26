@@ -697,7 +697,7 @@ private slots:
         QVariant transportCount;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticCount",
                                           Q_RETURN_ARG(QVariant, transportCount)));
-        QCOMPARE(transportCount.toInt(), 13);
+        QCOMPARE(transportCount.toInt(), 15);
 
         QVariant transportSummary;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticSummary",
@@ -745,6 +745,20 @@ private slots:
                                           Q_ARG(QVariant, QVariant(11)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(projectionKey.toString(), QStringLiteral("live_projection"));
+
+        QVariant liveTraceKey;
+        QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
+                                          Q_RETURN_ARG(QVariant, liveTraceKey),
+                                          Q_ARG(QVariant, QVariant(13)),
+                                          Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
+        QCOMPARE(liveTraceKey.toString(), QStringLiteral("live_path_trace"));
+
+        QVariant drainTraceKey;
+        QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
+                                          Q_RETURN_ARG(QVariant, drainTraceKey),
+                                          Q_ARG(QVariant, QVariant(14)),
+                                          Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
+        QCOMPARE(drainTraceKey.toString(), QStringLiteral("drain_event_trace"));
         QVERIFY2(g_qmlErrors.isEmpty(), qPrintable(g_qmlErrors.join(QStringLiteral("\n"))));
     }
 };

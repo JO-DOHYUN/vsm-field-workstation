@@ -2,8 +2,10 @@
 
 #include "transport/DrainByteQueue.h"
 #include "transport/HostTxRuntime.h"
+#include "transport/LivePathTelemetry.h"
 
 #include <QElapsedTimer>
+#include <QJsonObject>
 #include <QObject>
 #include <QSerialPort>
 #include <QSharedPointer>
@@ -22,6 +24,7 @@ public slots:
     void stop();
     void sendHostFrame(const QByteArray& frame, const QString& summary);
     void drainHostTxQueue();
+    void acknowledgeBytesAvailable();
 
 signals:
     void stateChanged(bool connected, const QString& message);
@@ -38,6 +41,7 @@ signals:
                             quint64 rawQueueCapacityBytes,
                             quint64 rawQueueOverrunBytes,
                             quint64 rawQueueContentionCount);
+    void drainEventTraceChanged(const QJsonObject& trace);
 
 private slots:
     void onReadyRead();
@@ -52,6 +56,7 @@ private:
     void emitHostTxQueueStatus(const HostTxRuntime::Status& status);
     void clearHostTxQueue(const QString& reason);
     void emitDrainStatus(bool force = false);
+    void emitBytesAvailableCoalesced();
 
     QSharedPointer<DrainByteQueue> m_queue;
     QSerialPort* m_serial = nullptr;
@@ -63,6 +68,8 @@ private:
     quint64 m_readyReadMaxUs = 0;
     quint64 m_drainBurstMaxBytes = 0;
     quint64 m_lastReportedOverrunBytes = 0;
+    DrainEventTelemetry m_eventTelemetry;
+    bool m_bytesAvailablePending = false;
 };
 
 } // namespace CanMonitorTransport

@@ -11,6 +11,13 @@ namespace CanMonitorTransport {
 
 class CaptureCoreRuntime {
 public:
+    struct Options {
+        bool captureRecords = false;
+        bool emitCanRxFrames = false;
+        bool emitProjectionFrames = true;
+        bool emitTruthFrames = false;
+    };
+
     struct Result {
         bool capabilityFirstSeen = false;
         qint64 capabilityElapsedMs = -1;
@@ -41,6 +48,8 @@ public:
     explicit CaptureCoreRuntime(QSharedPointer<TypedRecordHandoffQueue> captureQueue = {});
 
     void setCaptureQueue(QSharedPointer<TypedRecordHandoffQueue> queue);
+    void setOptions(const Options& options);
+    Options options() const { return m_options; }
     void reset();
 
     Result ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
@@ -49,6 +58,7 @@ public:
     TypedIngressRuntime::HandshakeWatchdogState evaluateHandshake(qint64 elapsedMs, qint64 timeoutMs) const;
     QJsonObject makeCaptureDiagnostics() const;
     TypedEvidencePipelineRuntime::Status status() const { return m_pipeline.status(); }
+    LiveProjectionRuntime::Status projectionStatus() const { return m_liveProjection.status(); }
 
     FrameRecordList flushTruth(bool force);
     LiveTruthRuntime::Status truthStatus() const { return m_liveTruth.status(); }
@@ -61,6 +71,7 @@ private:
     LiveProjectionRuntime m_liveProjection;
     LiveTruthRuntime m_liveTruth;
     QSharedPointer<TypedRecordHandoffQueue> m_captureQueue;
+    Options m_options;
 };
 
 } // namespace CanMonitorTransport

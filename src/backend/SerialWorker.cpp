@@ -3,6 +3,7 @@
 #include "AppLogging.h"
 #include "perf/PerformanceProbeRuntime.h"
 
+#include <QDateTime>
 #include <QIODevice>
 #include <QMetaObject>
 #include <QPointer>
@@ -71,6 +72,37 @@ void forEachCanRxFrame(const TypedRecord& record, Fn&& fn) {
     }
 }
 
+void mergeTrace(QJsonObject& target, const QJsonObject& source) {
+    for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
+        target.insert(it.key(), it.value());
+    }
+}
+
+QJsonObject serialLiveTraceJson(CanMonitorTransport::LivePathTelemetry& telemetry, qint64 nowMs) {
+    QJsonObject out;
+    CanMonitorTransport::insertCounter(out, QStringLiteral("projected_signal_received"), telemetry.projectedSignalReceived);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("projected_frames_received"), telemetry.projectedFramesReceived);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("projection_queue_keys"), telemetry.projectionQueueKeys);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("projection_flush_count"), telemetry.projectionFlushCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("frames_received_emit"), telemetry.framesReceivedEmit);
+    out.insert(QStringLiteral("frames_received_emit_per_sec"),
+               telemetry.rates.ratePerSec(QStringLiteral("frames_received_emit"), telemetry.framesReceivedEmit, nowMs));
+    CanMonitorTransport::insertCounter(out, QStringLiteral("frames_received_frames"), telemetry.framesReceivedFrames);
+    return out;
+}
+
+QJsonObject serialDrainTraceJson(CanMonitorTransport::DrainEventTelemetry& telemetry, qint64 nowMs) {
+    QJsonObject out;
+    CanMonitorTransport::insertCounter(out, QStringLiteral("scheduleDrainPump_calls"), telemetry.scheduleDrainPumpCalls);
+    out.insert(QStringLiteral("scheduleDrainPump_per_sec"),
+               telemetry.rates.ratePerSec(QStringLiteral("scheduleDrainPump_calls"), telemetry.scheduleDrainPumpCalls, nowMs));
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typed_worker_invoke_requests"), telemetry.typedWorkerInvokeRequests);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typed_worker_invoke_suppressed"), telemetry.typedWorkerInvokeSuppressed);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("drain_status_received"), telemetry.drainStatusReceived);
+    out.insert(QStringLiteral("drain_pump_scheduled_flag"), telemetry.drainPumpScheduledFlag);
+    return out;
+}
+
 }
 
 SerialWorker::SerialWorker(QObject* parent)
@@ -96,6 +128,10 @@ void SerialWorker::start(const QString& portName) {
     const QString endpoint = portName.trimmed();
     m_legacyIngress.resetStreamState();
     resetProjectionQueue();
+    m_drainEventTelemetry = CanMonitorTransport::DrainEventTelemetry{};
+    m_drainRuntimeEventTrace = {};
+    m_pipelineLivePathTrace = {};
+    m_pipelineDrainEventTrace = {};
     ensureRawLedgerRuntime();
     resetRawLedger(QStringLiteral("live"));
     ensureDrainRuntime();
@@ -167,15 +203,39 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
         QMetaObject::invokeMethod(m_captureWriterWorker, [this, sessionDir, metadata, &update]() {
             update = m_captureWriterWorker->startStorageSync(sessionDir, metadata);
         }, Qt::BlockingQueuedConnection);
+        m_typedCaptureEnabled = update.ok;
+        if (m_typedPipelineWorker) {
+            QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                      [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker), enabled = m_typedCaptureEnabled]() {
+                                          if (worker) worker->setCaptureEnabled(enabled);
+                                      },
+                                      Qt::BlockingQueuedConnection);
+        }
         emitTypedStorageUpdate(update);
         return update.ok;
     }
 
+    m_typedCaptureEnabled = false;
+    if (m_typedPipelineWorker) {
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker)]() {
+                                      if (worker) worker->setCaptureEnabled(false);
+                                  },
+                                  Qt::BlockingQueuedConnection);
+    }
     flushCaptureWriterHandoffSync();
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
-    const QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
+    QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
         ? m_typedPipeline.makeCaptureDiagnostics()
         : m_pipelineCaptureDiagnostics;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    QJsonObject liveTrace = m_pipelineLivePathTrace;
+    mergeTrace(liveTrace, serialLiveTraceJson(m_livePathTelemetry, nowMs));
+    QJsonObject drainTrace = m_drainRuntimeEventTrace;
+    mergeTrace(drainTrace, m_pipelineDrainEventTrace);
+    mergeTrace(drainTrace, serialDrainTraceJson(m_drainEventTelemetry, nowMs));
+    diagnostics.insert(QStringLiteral("live_path_trace"), liveTrace);
+    diagnostics.insert(QStringLiteral("drain_event_trace"), drainTrace);
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, sessionDir, diagnostics, &update]() {
         update = m_captureWriterWorker->stopStorageSync(sessionDir, diagnostics);
     }, Qt::BlockingQueuedConnection);
@@ -376,7 +436,14 @@ void SerialWorker::processIncomingBytes(const QByteArray& bytes) {
 }
 
 void SerialWorker::scheduleDrainPump() {
+    ++m_drainEventTelemetry.scheduleDrainPumpCalls;
+    if (m_drainPumpScheduled) {
+        if (m_transportMode == TransportMode::TypedEvidence) ++m_drainEventTelemetry.typedWorkerInvokeSuppressed;
+        return;
+    }
+    m_drainPumpScheduled = true;
     if (m_transportMode == TransportMode::TypedEvidence && m_typedPipelineWorker) {
+        ++m_drainEventTelemetry.typedWorkerInvokeRequests;
         const qint64 handshakeElapsedMs = m_typedHandshakeClock.isValid() ? m_typedHandshakeClock.elapsed() : -1;
         QMetaObject::invokeMethod(m_typedPipelineWorker,
                                   [worker = m_typedPipelineWorker, handshakeElapsedMs]() {
@@ -385,8 +452,6 @@ void SerialWorker::scheduleDrainPump() {
                                   Qt::QueuedConnection);
         return;
     }
-    if (m_drainPumpScheduled) return;
-    m_drainPumpScheduled = true;
     QMetaObject::invokeMethod(this, &SerialWorker::processDrainQueue, Qt::QueuedConnection);
 }
 
@@ -397,6 +462,11 @@ void SerialWorker::processDrainQueue() {
     QVector<CanMonitorTransport::DrainByteQueue::Block> blocks = m_drainQueue->popAll(kDrainProcessMaxBytes);
     if (blocks.isEmpty()) {
         emitDrainPipelineStatus();
+        if (m_drainRuntime) {
+            QMetaObject::invokeMethod(m_drainRuntime,
+                                      &CanMonitorTransport::SerialDrainRuntime::acknowledgeBytesAvailable,
+                                      Qt::QueuedConnection);
+        }
         return;
     }
     QByteArray legacyBytes;
@@ -408,12 +478,20 @@ void SerialWorker::processDrainQueue() {
         processLegacyBytes(legacyBytes);
         emitDrainPipelineStatus();
         if (m_drainQueue->snapshot().usedBytes > 0) scheduleDrainPump();
+        if (m_drainRuntime) {
+            QMetaObject::invokeMethod(m_drainRuntime,
+                                      &CanMonitorTransport::SerialDrainRuntime::acknowledgeBytesAvailable,
+                                      Qt::QueuedConnection);
+        }
         return;
     }
 
     CanMonitorPerf::ScopedProbe probe("serial.drain_pipeline_blocks_legacy_fallback", blocks.size(), 3000);
     const qint64 handshakeElapsedMs = m_typedHandshakeClock.isValid() ? m_typedHandshakeClock.elapsed() : -1;
-    const auto result = m_typedPipeline.ingestBlocks(blocks, handshakeElapsedMs, snapshotBefore.usedBytes);
+    const auto result = m_typedPipeline.ingestBlocks(blocks,
+                                                     handshakeElapsedMs,
+                                                     snapshotBefore.usedBytes,
+                                                     m_typedCaptureEnabled);
     if (result.capabilityFirstSeen) {
         qCInfo(logTransport).noquote()
             << "Typed CAPABILITY received after"
@@ -430,6 +508,11 @@ void SerialWorker::processDrainQueue() {
     emitDrainPipelineStatus();
     if (m_drainQueue->snapshot().usedBytes > 0) {
         scheduleDrainPump();
+    }
+    if (m_drainRuntime) {
+        QMetaObject::invokeMethod(m_drainRuntime,
+                                  &CanMonitorTransport::SerialDrainRuntime::acknowledgeBytesAvailable,
+                                  Qt::QueuedConnection);
     }
 }
 
@@ -457,7 +540,8 @@ void SerialWorker::processTypedBytes(const QByteArray& bytes) {
     block.bytes = bytes;
     const auto result = m_typedPipeline.ingestBlocks(QVector<CanMonitorTransport::DrainByteQueue::Block>{block},
                                                      handshakeElapsedMs,
-                                                     0);
+                                                     0,
+                                                     m_typedCaptureEnabled);
     if (result.capabilityFirstSeen) {
         qCInfo(logTransport).noquote()
             << "Typed CAPABILITY received after"
@@ -499,7 +583,7 @@ void SerialWorker::handleTypedRecordBatch(const TypedRecordList& batch) {
             canRxFrames.push_back(frame);
         });
     }
-    queueCaptureWriterRecords(batch);
+    if (m_typedCaptureEnabled) queueCaptureWriterRecords(batch);
     queueAnalysisFrames(canRxFrames);
     queueRawLedgerFrames(canRxFrames);
     queueTruthFrames(batch);
@@ -520,6 +604,8 @@ quint64 SerialWorker::projectionKeyForFrame(const FrameRecord& frame) {
 void SerialWorker::queueProjectedFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     CanMonitorPerf::ScopedProbe probe("projection.queue_frames", m_pendingProjectionFramesByKey.size(), 1000);
+    ++m_livePathTelemetry.projectedSignalReceived;
+    m_livePathTelemetry.projectedFramesReceived += quint64(frames.size());
 
     for (const FrameRecord& frame : frames) {
         const quint64 key = projectionKeyForFrame(frame);
@@ -535,6 +621,7 @@ void SerialWorker::queueProjectedFrames(const FrameRecordList& frames) {
         }
         m_pendingProjectionFramesByKey.insert(key, frame);
     }
+    m_livePathTelemetry.projectionQueueKeys = quint64(std::max<qsizetype>(0, m_pendingProjectionFramesByKey.size()));
 
     if (m_projectionFlushTimerId == 0) {
         m_projectionFlushTimerId = startTimer(kUiProjectionFlushIntervalMs, Qt::CoarseTimer);
@@ -560,6 +647,8 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
         frames.push_back(it.value());
     }
     m_pendingProjectionFramesByKey.clear();
+    m_livePathTelemetry.projectionQueueKeys = 0;
+    ++m_livePathTelemetry.projectionFlushCount;
 
     std::sort(frames.begin(), frames.end(), [](const FrameRecord& a, const FrameRecord& b) {
         if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
@@ -572,7 +661,11 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
         frames.erase(frames.begin(), frames.begin() + dropCount);
     }
 
-    if (!frames.isEmpty()) emit framesReceived(frames);
+    if (!frames.isEmpty()) {
+        ++m_livePathTelemetry.framesReceivedEmit;
+        m_livePathTelemetry.framesReceivedFrames += quint64(frames.size());
+        emit framesReceived(frames);
+    }
     m_projectionFlushClock.restart();
     emitProjectionStatus(m_liveProjection.status());
 }
@@ -845,6 +938,7 @@ void SerialWorker::resetProjectionQueue() {
     m_projectionQueueSampledFrames = 0;
     m_projectionQueueDroppedFrames = 0;
     m_lastProjectionStatus = {};
+    m_livePathTelemetry = CanMonitorTransport::LivePathTelemetry{};
 }
 
 void SerialWorker::emitLegacyLoggingUpdate(const CanMonitorTransport::LegacyIngressRuntime::LoggingUpdate& update) {
@@ -963,6 +1057,13 @@ void SerialWorker::ensureDrainRuntime() {
     connect(m_drainRuntime, &CanMonitorTransport::SerialDrainRuntime::hostFrameWriteResult, this, &SerialWorker::hostFrameWriteResult, Qt::QueuedConnection);
     connect(m_drainRuntime, &CanMonitorTransport::SerialDrainRuntime::hostTxQueueChanged, this, &SerialWorker::hostTxQueueChanged, Qt::QueuedConnection);
     connect(m_drainRuntime,
+            &CanMonitorTransport::SerialDrainRuntime::drainEventTraceChanged,
+            this,
+            [this](const QJsonObject& trace) {
+                m_drainRuntimeEventTrace = trace;
+            },
+            Qt::QueuedConnection);
+    connect(m_drainRuntime,
             &CanMonitorTransport::SerialDrainRuntime::drainStatusChanged,
             this,
             [this](quint64 bytesTotal,
@@ -974,6 +1075,7 @@ void SerialWorker::ensureDrainRuntime() {
                    quint64 rawQueueCapacityBytes,
                    quint64 rawQueueOverrunBytes,
                    quint64 rawQueueContentionCount) {
+                ++m_drainEventTelemetry.drainStatusReceived;
                 m_drainBytesTotal = bytesTotal;
                 m_drainReadyReadCount = readyReadCount;
                 m_drainReadyReadMaxUs = readyReadMaxUs;
@@ -1000,6 +1102,10 @@ void SerialWorker::shutdownDrainRuntime() {
     m_drainRuntime = nullptr;
     m_connected = false;
     m_drainPumpScheduled = false;
+    m_drainEventTelemetry = CanMonitorTransport::DrainEventTelemetry{};
+    m_drainRuntimeEventTrace = {};
+    m_pipelineLivePathTrace = {};
+    m_pipelineDrainEventTrace = {};
 }
 
 void SerialWorker::ensureTypedPipelineRuntime() {
@@ -1009,6 +1115,15 @@ void SerialWorker::ensureTypedPipelineRuntime() {
     m_typedPipelineWorker = new CanMonitorTransport::TypedEvidencePipelineWorkerRuntime(m_drainQueue, m_captureRecordQueue);
     m_typedPipelineWorker->moveToThread(&m_typedPipelineThread);
     connect(&m_typedPipelineThread, &QThread::finished, m_typedPipelineWorker, &QObject::deleteLater);
+    const bool captureEnabled = m_typedCaptureEnabled;
+    QMetaObject::invokeMethod(m_typedPipelineWorker,
+                              [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker), captureEnabled]() {
+                                  if (worker) {
+                                      worker->setCaptureEnabled(captureEnabled);
+                                      worker->setSecondaryFanoutEnabled(false);
+                                  }
+                              },
+                              Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::capabilityFirstSeen,
             this,
@@ -1039,7 +1154,14 @@ void SerialWorker::ensureTypedPipelineRuntime() {
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::projectedFramesReady,
             this,
-            &SerialWorker::queueProjectedFrames,
+            [this](const FrameRecordList& frames) {
+                queueProjectedFrames(frames);
+                if (m_typedPipelineWorker) {
+                    QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                              &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::acknowledgeProjectionSnapshot,
+                                              Qt::QueuedConnection);
+                }
+            },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::truthFramesReady,
@@ -1124,6 +1246,26 @@ void SerialWorker::ensureTypedPipelineRuntime() {
             this,
             [this](const QJsonObject& diagnostics) {
                 m_pipelineCaptureDiagnostics = diagnostics;
+            },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::pipelineTraceChanged,
+            this,
+            [this](const QJsonObject& livePathTrace, const QJsonObject& drainEventTrace) {
+                m_pipelineLivePathTrace = livePathTrace;
+                m_pipelineDrainEventTrace = drainEventTrace;
+            },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::pumpCycleFinished,
+            this,
+            [this]() {
+                m_drainPumpScheduled = false;
+                if (m_drainRuntime) {
+                    QMetaObject::invokeMethod(m_drainRuntime,
+                                              &CanMonitorTransport::SerialDrainRuntime::acknowledgeBytesAvailable,
+                                              Qt::QueuedConnection);
+                }
             },
             Qt::QueuedConnection);
     m_typedPipelineThread.start(QThread::HighPriority);
@@ -1343,11 +1485,27 @@ void SerialWorker::shutdownRawLedgerRuntime() {
 
 CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate SerialWorker::finalizeCaptureWriterIfActive() {
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
+    m_typedCaptureEnabled = false;
+    if (m_typedPipelineWorker) {
+        QMetaObject::invokeMethod(m_typedPipelineWorker,
+                                  [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker)]() {
+                                      if (worker) worker->setCaptureEnabled(false);
+                                  },
+                                  Qt::BlockingQueuedConnection);
+    }
     if (!m_captureWriterWorker) return update;
     flushCaptureWriterHandoffSync();
-    const QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
+    QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
         ? m_typedPipeline.makeCaptureDiagnostics()
         : m_pipelineCaptureDiagnostics;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    QJsonObject liveTrace = m_pipelineLivePathTrace;
+    mergeTrace(liveTrace, serialLiveTraceJson(m_livePathTelemetry, nowMs));
+    QJsonObject drainTrace = m_drainRuntimeEventTrace;
+    mergeTrace(drainTrace, m_pipelineDrainEventTrace);
+    mergeTrace(drainTrace, serialDrainTraceJson(m_drainEventTelemetry, nowMs));
+    diagnostics.insert(QStringLiteral("live_path_trace"), liveTrace);
+    diagnostics.insert(QStringLiteral("drain_event_trace"), drainTrace);
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, diagnostics, &update]() {
         update = m_captureWriterWorker->finalizeStorageIfActiveSync(diagnostics);
     }, Qt::BlockingQueuedConnection);
@@ -1384,6 +1542,13 @@ void SerialWorker::emitDrainPipelineStatus(bool force) {
     const quint64 captureWriterOverrunBytes = std::max({m_captureWriterOverrunBytes,
                                                         m_captureWriterHandoffOverrunBytes,
                                                         captureHandoff.overrunBytes});
+    m_drainEventTelemetry.drainPumpScheduledFlag = m_drainPumpScheduled;
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    QJsonObject liveTrace = m_pipelineLivePathTrace;
+    mergeTrace(liveTrace, serialLiveTraceJson(m_livePathTelemetry, nowMs));
+    QJsonObject drainTrace = m_drainRuntimeEventTrace;
+    mergeTrace(drainTrace, m_pipelineDrainEventTrace);
+    mergeTrace(drainTrace, serialDrainTraceJson(m_drainEventTelemetry, nowMs));
     emit drainStatusChanged(m_drainBytesTotal,
                             m_drainReadyReadCount,
                             m_drainReadyReadMaxUs,
@@ -1399,6 +1564,8 @@ void SerialWorker::emitDrainPipelineStatus(bool force) {
                             captureWriterMaxQueueBytes,
                             captureWriterOverrunBytes,
                             m_captureWriteMaxMs);
+    emit livePathTraceChanged(liveTrace);
+    emit drainEventTraceChanged(drainTrace);
 }
 
 QIODevice* SerialWorker::activeDevice() const {

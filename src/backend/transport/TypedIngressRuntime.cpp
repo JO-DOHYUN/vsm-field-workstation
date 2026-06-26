@@ -12,12 +12,18 @@ void TypedIngressRuntime::resetStreamState() {
     m_statusTimer.invalidate();
 }
 
-TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& bytes, qint64 handshakeElapsedMs) {
-    IngestResult result = ingestEach(bytes, handshakeElapsedMs, [&result](TypedRecord&& record) {
+TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& bytes,
+                                                              qint64 handshakeElapsedMs,
+                                                              bool includeFrameBytes) {
+    IngestResult result = ingestEach(bytes, handshakeElapsedMs, includeFrameBytes, [&result, includeFrameBytes](TypedRecord&& record) {
         static constexpr int kTypedLiveEmitBatchSize = 64;
         if (result.recordBatches.isEmpty() || result.recordBatches.last().size() >= kTypedLiveEmitBatchSize) {
             result.recordBatches.push_back(TypedRecordList{});
             result.recordBatches.last().reserve(kTypedLiveEmitBatchSize);
+        }
+        if (includeFrameBytes) {
+            result.recordBatches.last().push_back(std::move(record));
+            return;
         }
         TypedRecord liveRecord;
         liveRecord.header = record.header;
@@ -29,6 +35,7 @@ TypedIngressRuntime::IngestResult TypedIngressRuntime::ingest(const QByteArray& 
 
 TypedIngressRuntime::IngestResult TypedIngressRuntime::ingestEach(const QByteArray& bytes,
                                                                   qint64 handshakeElapsedMs,
+                                                                  bool includeFrameBytes,
                                                                   const std::function<void(TypedRecord&&)>& onRecord) {
     IngestResult result;
     if (bytes.isEmpty()) {
@@ -41,7 +48,7 @@ TypedIngressRuntime::IngestResult TypedIngressRuntime::ingestEach(const QByteArr
     m_parser.append(bytes);
 
     while (true) {
-        auto record = m_parser.takeOne(false);
+        auto record = m_parser.takeOne(includeFrameBytes);
         if (!record) break;
         if (!m_capabilitySeenSinceOpen && record->isType(TypedRecordType::Capability)) {
             m_capabilitySeenSinceOpen = true;

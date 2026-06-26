@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QJsonObject>
 #include <QVariantList>
 #include <QString>
 #include <QtGlobal>
@@ -104,6 +105,8 @@ public:
                              quint64 pumpMaxMs,
                              quint64 snapshotMaxMs,
                              quint64 truthLoss);
+    void updateLivePathTrace(const QJsonObject& trace);
+    void updateDrainEventTrace(const QJsonObject& trace);
     void noteBoardEvent(quint16 code, quint16 detail, quint32 counter, quint64 monoUs);
 
     QString level() const;
@@ -202,6 +205,8 @@ private:
     quint32 m_lastBoardEventCounter = 0;
     quint64 m_lastBoardEventMonoUs = 0;
     QHash<quint16, quint64> m_mcp2515Details;
+    QJsonObject m_livePathTrace;
+    QJsonObject m_drainEventTrace;
 };
 
 } // namespace CanMonitorTransport

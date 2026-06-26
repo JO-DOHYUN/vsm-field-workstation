@@ -1,10 +1,78 @@
 #include "transport/TransportSession.h"
 
 #include <algorithm>
+#include <cmath>
+#include <QJsonDocument>
+#include <QJsonValue>
 #include <QStringList>
 #include <QVariantMap>
 
 namespace CanMonitorTransport {
+
+namespace {
+
+QString traceText(const QJsonObject& trace, const QString& key, const QString& fallback = QStringLiteral("0")) {
+    const QJsonValue value = trace.value(key);
+    if (value.isUndefined() || value.isNull()) return fallback;
+    if (value.isString()) return value.toString();
+    if (value.isBool()) return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    if (value.isDouble()) {
+        const double number = value.toDouble();
+        if (std::isfinite(number) && std::floor(number) == number) {
+            return QString::number(qulonglong(number));
+        }
+        return QString::number(number, 'f', 1);
+    }
+    return QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact));
+}
+
+quint64 traceCounter(const QJsonObject& trace, const QString& key) {
+    const QJsonValue value = trace.value(key);
+    if (value.isString()) return value.toString().toULongLong();
+    if (value.isDouble() && value.toDouble() > 0.0) return quint64(value.toDouble());
+    return 0;
+}
+
+bool traceFlag(const QJsonObject& trace, const QString& key) {
+    const QJsonValue value = trace.value(key);
+    if (value.isBool()) return value.toBool();
+    if (value.isString()) {
+        const QString text = value.toString().trimmed().toLower();
+        return text == QStringLiteral("true") || text == QStringLiteral("1");
+    }
+    return value.isDouble() && value.toDouble() != 0.0;
+}
+
+QString liveTraceLevel(const QJsonObject& trace) {
+    const quint64 parsed = traceCounter(trace, QStringLiteral("parsed_can_rx"));
+    const quint64 snapshotEmitted = traceCounter(trace, QStringLiteral("snapshot_emitted"));
+    const quint64 snapshotAck = traceCounter(trace, QStringLiteral("snapshot_ack"));
+    const quint64 serialEmit = traceCounter(trace, QStringLiteral("frames_received_emit"));
+    const quint64 appCalls = traceCounter(trace, QStringLiteral("framesReceived_calls"));
+    const quint64 appendLive = traceCounter(trace, QStringLiteral("append_live_batch_frames"));
+    const quint64 modelRows = traceCounter(trace, QStringLiteral("live_model_rows"));
+    const bool paused = traceFlag(trace, QStringLiteral("m_liveUiPaused"));
+    const bool panelActive = traceFlag(trace, QStringLiteral("m_livePanelActive"));
+
+    if (parsed > 0 && snapshotEmitted == 0) return QStringLiteral("WARN");
+    if (snapshotEmitted > 0 && snapshotAck == 0) return QStringLiteral("WARN");
+    if (serialEmit > 0 && appCalls == 0) return QStringLiteral("WARN");
+    if (appCalls > 0 && appendLive == 0 && !paused && panelActive) return QStringLiteral("WARN");
+    if (appendLive > 0 && modelRows == 0) return QStringLiteral("WARN");
+    return QStringLiteral("OK");
+}
+
+QString drainTraceLevel(const QJsonObject& trace) {
+    if (traceCounter(trace, QStringLiteral("drain_queue_overrun_bytes")) > 0) return QStringLiteral("ERR");
+    const quint64 readyRead = traceCounter(trace, QStringLiteral("readyRead_calls"));
+    const quint64 pump = traceCounter(trace, QStringLiteral("pump_calls"));
+    const quint64 scheduleIgnored = traceCounter(trace, QStringLiteral("schedulePump_ignored_already_scheduled"));
+    if (readyRead > 0 && pump == 0) return QStringLiteral("WARN");
+    if (scheduleIgnored > pump && scheduleIgnored > 1024) return QStringLiteral("WARN");
+    return QStringLiteral("OK");
+}
+
+} // namespace
 
 void TransportSession::reset() {
     m_connected = false;
@@ -89,6 +157,8 @@ void TransportSession::reset() {
     m_lastBoardEventCounter = 0;
     m_lastBoardEventMonoUs = 0;
     m_mcp2515Details.clear();
+    m_livePathTrace = {};
+    m_drainEventTrace = {};
 }
 
 void TransportSession::setConnected(bool connected) {
@@ -263,6 +333,14 @@ void TransportSession::updateAnalysisQueue(quint64 queuedFrames,
     m_analysisPumpMaxMs = pumpMaxMs;
     m_analysisSnapshotMaxMs = snapshotMaxMs;
     m_analysisTruthLoss = truthLoss;
+}
+
+void TransportSession::updateLivePathTrace(const QJsonObject& trace) {
+    m_livePathTrace = trace;
+}
+
+void TransportSession::updateDrainEventTrace(const QJsonObject& trace) {
+    m_drainEventTrace = trace;
 }
 
 void TransportSession::noteBoardEvent(quint16 code, quint16 detail, quint32 counter, quint64 monoUs) {
@@ -450,6 +528,8 @@ QVariantList TransportSession::rows() const {
     const QString rawLedgerLevel = m_rawLedgerDroppedDisplayRows > 0 ? QStringLiteral("WARN") : QStringLiteral("OK");
     const QString uplinkLevel = boardUplinkLevel();
     const QString eventLevel = boardEventLevel();
+    const QString liveTraceRowLevel = liveTraceLevel(m_livePathTrace);
+    const QString drainTraceRowLevel = drainTraceLevel(m_drainEventTrace);
     const QString analysisQueueLevel = m_analysisOverrunFrames > 0 || m_analysisTruthLoss > 0 ? QStringLiteral("ERR")
         : (m_analysisCapacityFrames > 0 && m_analysisMaxQueuedFrames > (m_analysisCapacityFrames * 3 / 4) ? QStringLiteral("WARN") : QStringLiteral("OK"));
 
@@ -620,7 +700,63 @@ QVariantList TransportSession::rows() const {
             liveLevel(),
             liveStateText(),
             QStringLiteral("frame_age %1 stats_age %2").arg(m_liveFrameAgeMs).arg(m_liveStatsAgeMs),
-            false)
+            false),
+        row(QStringLiteral("live_path_trace"),
+            QStringLiteral("Live path trace"),
+            liveTraceRowLevel,
+            QStringLiteral("parsed %1 snapshot %2/%3f serial_emit %4/%5f app_recv %6 pending %7 model %8")
+                .arg(traceText(m_livePathTrace, QStringLiteral("parsed_can_rx")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_emitted")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_emitted_frames")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("frames_received_emit")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("frames_received_frames")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("framesReceived_calls")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("pending_live_rows")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("live_model_rows"))),
+            QStringLiteral("ack %1 inflight %2 coalesced %3 dropped %4 projected_rx %5 queue_keys %6 flush %7 app_frames %8 view_q %9 view_flush %10 append %11/%12 paused_drop %13 panel_drop %14 timers live:%15 view:%16")
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_ack")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_inflight"), QStringLiteral("false")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_coalesced")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("snapshot_dropped")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("projected_frames_received")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("projection_queue_keys")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("projection_flush_count")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("framesReceived_frames")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("queue_live_view_frames")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("live_view_flush_calls")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("append_live_batch_calls")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("append_live_batch_frames")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("live_view_paused_drops")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("live_view_panel_drops")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("liveFlushTimerActive"), QStringLiteral("false")))
+                .arg(traceText(m_livePathTrace, QStringLiteral("liveViewFlushTimerActive"), QStringLiteral("false"))),
+            liveTraceRowLevel == QStringLiteral("ERR")),
+        row(QStringLiteral("drain_event_trace"),
+            QStringLiteral("Drain event trace"),
+            drainTraceRowLevel,
+            QStringLiteral("readyRead/s %1 emit/s %2 schedule/s %3 pump/s %4 outSig/s %5")
+                .arg(traceText(m_drainEventTrace, QStringLiteral("readyRead_per_sec")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("bytes_available_emit_per_sec")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("scheduleDrainPump_per_sec")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("pump_per_sec")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("output_signal_per_sec"))),
+            QStringLiteral("ready %1 emit %2 schedule %3 invoke %4 suppressed %5 pump %6 ignored %7 blocks %8 bytes %9 status %10 diag %11 rawQ %12/%13 max %14 overrun %15")
+                .arg(traceText(m_drainEventTrace, QStringLiteral("readyRead_calls")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("bytes_available_emits")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("scheduleDrainPump_calls")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("typed_worker_invoke_requests")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("typed_worker_invoke_suppressed")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("pump_calls")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("schedulePump_ignored_already_scheduled")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("pump_blocks")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("pump_bytes")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("status_signal_count")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("diagnostics_signal_count")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_used_bytes")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_capacity_bytes")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_max_used_bytes")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_overrun_bytes"))),
+            drainTraceRowLevel == QStringLiteral("ERR"))
     };
 }
 

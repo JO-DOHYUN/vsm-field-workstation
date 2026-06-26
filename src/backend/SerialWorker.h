@@ -6,6 +6,7 @@
 #include "transport/DrainByteQueue.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LegacyIngressRuntime.h"
+#include "transport/LivePathTelemetry.h"
 #include "transport/LiveProjectionRuntime.h"
 #include "transport/LiveTruthRuntime.h"
 #include "transport/RawLedgerWriterRuntime.h"
@@ -131,6 +132,8 @@ signals:
                             quint64 captureWriterMaxQueueBytes,
                             quint64 captureWriterOverrunBytes,
                             quint64 captureWriteMaxMs);
+    void livePathTraceChanged(const QJsonObject& trace);
+    void drainEventTraceChanged(const QJsonObject& trace);
     void analysisQueueStatusChanged(quint64 queuedFrames,
                                     quint64 maxQueuedFrames,
                                     quint64 capacityFrames,
@@ -261,12 +264,18 @@ private:
     quint64 m_pendingCaptureWriterMaxBytes = 0;
     quint64 m_captureWriterHandoffOverrunBytes = 0;
     quint64 m_analysisHandoffOverrunFrames = 0;
+    CanMonitorTransport::LivePathTelemetry m_livePathTelemetry;
+    CanMonitorTransport::DrainEventTelemetry m_drainEventTelemetry;
+    QJsonObject m_drainRuntimeEventTrace;
+    QJsonObject m_pipelineLivePathTrace;
+    QJsonObject m_pipelineDrainEventTrace;
     bool m_drainPumpScheduled = false;
     bool m_captureWriterDispatchScheduled = false;
     bool m_captureWriterDispatchInFlight = false;
     bool m_rawLedgerDispatchInFlight = false;
     bool m_analysisDispatchScheduled = false;
     bool m_analysisDispatchInFlight = false;
+    bool m_typedCaptureEnabled = false;
     bool m_connected = false;
     QElapsedTimer m_typedHandshakeClock;
     int m_typedHandshakeTimerId = 0;

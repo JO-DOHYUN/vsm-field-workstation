@@ -23,10 +23,12 @@ public:
     void reset();
     TypedIngressRuntime::IngestResult ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
                                                    qint64 handshakeElapsedMs,
-                                                   quint64 parseBacklogBytes);
+                                                   quint64 parseBacklogBytes,
+                                                   bool includeFrameBytes = false);
     TypedIngressRuntime::IngestResult ingestBlocksEach(const QVector<DrainByteQueue::Block>& blocks,
                                                        qint64 handshakeElapsedMs,
                                                        quint64 parseBacklogBytes,
+                                                       bool includeFrameBytes,
                                                        const std::function<void(TypedRecord&&)>& onRecord);
     TypedIngressRuntime::HandshakeWatchdogState evaluateHandshake(qint64 elapsedMs, qint64 timeoutMs) const;
     QJsonObject makeCaptureDiagnostics() const;

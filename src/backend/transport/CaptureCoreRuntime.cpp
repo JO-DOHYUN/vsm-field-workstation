@@ -43,6 +43,10 @@ void CaptureCoreRuntime::setCaptureQueue(QSharedPointer<TypedRecordHandoffQueue>
     m_captureQueue = std::move(queue);
 }
 
+void CaptureCoreRuntime::setOptions(const Options& options) {
+    m_options = options;
+}
+
 void CaptureCoreRuntime::reset() {
     m_pipeline.reset();
     m_liveProjection.reset();
@@ -65,6 +69,7 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
     auto result = m_pipeline.ingestBlocksEach(blocks,
                                               handshakeElapsedMs,
                                               parseBacklogBytes,
+                                              m_options.captureRecords,
                                               [&localBatch, &flushLocalBatch](TypedRecord&& record) {
                                                   localBatch.push_back(std::move(record));
                                                   if (localBatch.size() >= kCoreLocalBatchSize) flushLocalBatch();
@@ -82,15 +87,17 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
 void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
     if (batch.isEmpty()) return;
 
-    for (const TypedRecord& record : batch) {
-        appendCanRxFrames(record, result.canRxFrames);
+    if (m_options.emitCanRxFrames) {
+        for (const TypedRecord& record : batch) {
+            appendCanRxFrames(record, result.canRxFrames);
+        }
     }
 
     const auto projection = m_liveProjection.ingest(batch);
     if (!projection.criticalRecords.isEmpty()) {
         result.criticalRecords += projection.criticalRecords;
     }
-    if (!projection.projectedFrames.isEmpty()) {
+    if (m_options.emitProjectionFrames && !projection.projectedFrames.isEmpty()) {
         result.projectedFrames += projection.projectedFrames;
     }
     if (projection.statusDue) {
@@ -98,16 +105,18 @@ void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
         result.projectionStatus = projection.status;
     }
 
-    const auto truth = m_liveTruth.ingest(batch);
-    if (!truth.frames.isEmpty()) {
-        result.truthFrames += truth.frames;
-    }
-    if (truth.statusDue) {
-        result.truthStatusDue = true;
-        result.truthStatus = truth.status;
+    if (m_options.emitTruthFrames) {
+        const auto truth = m_liveTruth.ingest(batch);
+        if (!truth.frames.isEmpty()) {
+            result.truthFrames += truth.frames;
+        }
+        if (truth.statusDue) {
+            result.truthStatusDue = true;
+            result.truthStatus = truth.status;
+        }
     }
 
-    if (m_captureQueue) {
+    if (m_options.captureRecords && m_captureQueue) {
         auto push = m_captureQueue->push(std::move(batch));
         result.captureDrainNeeded = result.captureDrainNeeded || push.shouldScheduleDrain;
         if (!push.accepted && push.records > 0) {

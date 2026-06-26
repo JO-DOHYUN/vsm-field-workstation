@@ -1791,6 +1791,45 @@ qint64 AppController::pendingLiveFrameCount() const {
     return qint64(m_pendingLiveFrames.size()) - qint64(m_pendingLiveFrameOffset);
 }
 
+QJsonObject AppController::livePathTraceObject() {
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
+    m_livePathTelemetry.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
+    m_livePathTelemetry.liveFlushTimerActive = m_liveFlushTimer.isActive();
+    m_livePathTelemetry.liveViewFlushTimerActive = m_liveViewFlushTimer.isActive();
+    m_livePathTelemetry.livePanelActive = m_livePanelActive;
+    m_livePathTelemetry.liveUiPaused = m_liveUiPaused;
+
+    QJsonObject out = m_workerLivePathTrace;
+    CanMonitorTransport::insertCounter(out, QStringLiteral("framesReceived_calls"), m_livePathTelemetry.appFramesReceivedCalls);
+    out.insert(QStringLiteral("framesReceived_calls_per_sec"),
+               m_livePathTelemetry.rates.ratePerSec(QStringLiteral("framesReceived_calls"),
+                                                    m_livePathTelemetry.appFramesReceivedCalls,
+                                                    nowMs));
+    CanMonitorTransport::insertCounter(out, QStringLiteral("framesReceived_frames"), m_livePathTelemetry.appFramesReceivedFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("append_pending_frames"), m_livePathTelemetry.appendPendingFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("pending_live_rows"), m_livePathTelemetry.pendingLiveRows);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_flush_calls"), m_livePathTelemetry.liveFlushCalls);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_flush_processed"), m_livePathTelemetry.liveFlushProcessed);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("queue_live_view_calls"), m_livePathTelemetry.queueLiveViewCalls);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("queue_live_view_frames"), m_livePathTelemetry.queueLiveViewFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_paused_drops"), m_livePathTelemetry.liveViewPausedDrops);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_panel_drops"), m_livePathTelemetry.liveViewPanelDrops);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_flush_calls"), m_livePathTelemetry.liveViewFlushCalls);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("append_live_batch_calls"), m_livePathTelemetry.appendLiveBatchCalls);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("append_live_batch_frames"), m_livePathTelemetry.appendLiveBatchFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_model_rows"), m_livePathTelemetry.liveModelRows);
+    out.insert(QStringLiteral("liveFlushTimerActive"), m_livePathTelemetry.liveFlushTimerActive);
+    out.insert(QStringLiteral("liveViewFlushTimerActive"), m_livePathTelemetry.liveViewFlushTimerActive);
+    out.insert(QStringLiteral("m_livePanelActive"), m_livePathTelemetry.livePanelActive);
+    out.insert(QStringLiteral("m_liveUiPaused"), m_livePathTelemetry.liveUiPaused);
+    return out;
+}
+
+QJsonObject AppController::drainEventTraceObject() {
+    return m_workerDrainEventTrace;
+}
+
 namespace {
 quint64 liveProjectionFrameKey(const FrameRecord& frame) {
     quint64 key = (quint64(frame.bus) << 56);
@@ -1799,10 +1838,12 @@ quint64 liveProjectionFrameKey(const FrameRecord& frame) {
     key |= quint64(frame.canId & 0x1FFFFFFFU);
     return key;
 }
+
 }
 
 void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
+    m_livePathTelemetry.appendPendingFrames += quint64(frames.size());
     if (m_pendingLiveFrameOffset > 0 &&
         (m_pendingLiveFrameOffset >= 4096 || (m_pendingLiveFrameOffset * 2) >= m_pendingLiveFrames.size())) {
         compactPendingLiveFrames();
@@ -1825,6 +1866,7 @@ void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
         coalescePendingLiveFramesToLatest();
     }
     m_liveProjectionMaxBacklog = std::max(m_liveProjectionMaxBacklog, int(pendingLiveFrameCount()));
+    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
 }
 
 int AppController::liveFlushChunkForBacklog(qint64 backlog) const {
@@ -1883,10 +1925,12 @@ void AppController::coalescePendingLiveFramesToLatest() {
 }
 
 void AppController::flushPendingLiveFrames() {
+    ++m_livePathTelemetry.liveFlushCalls;
     if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) coalescePendingLiveFramesToLatest();
     const qint64 backlogBefore = pendingLiveFrameCount();
     if (backlogBefore <= 0) {
         compactPendingLiveFrames();
+        m_livePathTelemetry.pendingLiveRows = 0;
         return;
     }
 
@@ -1908,6 +1952,7 @@ void AppController::flushPendingLiveFrames() {
 
     const int sourceEndOffset = m_pendingLiveFrameOffset;
     const int processedCount = std::max(0, sourceEndOffset - sourceStartOffset);
+    m_livePathTelemetry.liveFlushProcessed += quint64(processedCount);
     const int elapsedMs = int(budget.elapsed());
     m_liveProjectionLastFlushMs = elapsedMs;
     if (m_pendingLiveFrameOffset < m_pendingLiveFrames.size() &&
@@ -1935,6 +1980,7 @@ void AppController::flushPendingLiveFrames() {
     compactPendingLiveFrames();
 
     const qint64 backlogAfter = pendingLiveFrameCount();
+    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, backlogAfter));
     if (backlogAfter > 0) m_liveFlushTimer.start(backlogAfter > kLiveProjectionSoftBacklog ? 24 : 16);
 }
 
@@ -1942,7 +1988,11 @@ void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStr
     if (frames.isEmpty() || timeTexts.isEmpty()) return;
 
     const int count = std::min(int(frames.size()), int(timeTexts.size()));
+    ++m_livePathTelemetry.queueLiveViewCalls;
+    m_livePathTelemetry.queueLiveViewFrames += quint64(count);
     if (m_liveUiPaused || !m_livePanelActive) {
+        if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += quint64(count);
+        if (!m_livePanelActive) m_livePathTelemetry.liveViewPanelDrops += quint64(count);
         m_liveSampledViewDrops += quint64(count);
         return;
     }
@@ -1981,8 +2031,12 @@ void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStr
 
 void AppController::flushQueuedLiveViewBatch() {
     CanMonitorPerf::ScopedProbe probe("app.live_view_flush", m_pendingLiveViewFrames.size(), 3000);
+    ++m_livePathTelemetry.liveViewFlushCalls;
     if (m_pendingLiveViewFrames.isEmpty()) return;
     if (m_liveUiPaused || !m_livePanelActive) {
+        const quint64 dropped = quint64(m_pendingLiveViewFrames.size());
+        if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += dropped;
+        if (!m_livePanelActive) m_livePathTelemetry.liveViewPanelDrops += dropped;
         m_pendingLiveViewFrames.clear();
         m_pendingLiveViewTimeTexts.clear();
         return;
@@ -1992,7 +2046,11 @@ void AppController::flushQueuedLiveViewBatch() {
     QStringList timeTexts;
     batch.swap(m_pendingLiveViewFrames);
     timeTexts.swap(m_pendingLiveViewTimeTexts);
+    CanMonitorPerf::ScopedProbe appendProbe("frame_model.append_live_batch", batch.size(), 3000);
+    ++m_livePathTelemetry.appendLiveBatchCalls;
+    m_livePathTelemetry.appendLiveBatchFrames += quint64(batch.size());
     m_liveFrames.appendLiveBatch(batch, timeTexts);
+    m_livePathTelemetry.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
 }
 
 void AppController::processReplayRebuildStep() {
@@ -2324,17 +2382,34 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
     connect(m_worker, &SerialWorker::framesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.projection_frames_received", frames.size(), 3000);
+        ++m_livePathTelemetry.appFramesReceivedCalls;
+        m_livePathTelemetry.appFramesReceivedFrames += quint64(frames.size());
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        CanMonitorPerf::ScopedProbe probe("app.projection_frames_received", frames.size(), 3000);
         appendPendingLiveFrames(frames);
         if (!m_liveFlushTimer.isActive()) {
             m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
         }
     });
+    connect(m_worker, &SerialWorker::livePathTraceChanged, this, [this](const QJsonObject& trace) {
+        m_workerLivePathTrace = trace;
+        m_transportSession.updateLivePathTrace(livePathTraceObject());
+        emit transportDiagnosticsChanged();
+    });
+    connect(m_worker, &SerialWorker::drainEventTraceChanged, this, [this](const QJsonObject& trace) {
+        m_workerDrainEventTrace = trace;
+        m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+        emit transportDiagnosticsChanged();
+    });
     connect(m_worker, &SerialWorker::rawFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.raw_frames_append", frames.size(), 3000);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_transportModeKey == QStringLiteral("typed")) {
+            m_liveProjectionDroppedFrames += quint64(frames.size());
+            requestLiveStatsRefresh(false);
+            return;
+        }
+        CanMonitorPerf::ScopedProbe probe("app.raw_frames_append", frames.size(), 3000);
         m_rawFrameTable.appendFrames(frames);
         requestLiveStatsRefresh(false);
     });
@@ -2372,8 +2447,13 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
     connect(m_worker, &SerialWorker::truthFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.truth_display_state", frames.size(), 2500);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_transportModeKey == QStringLiteral("typed")) {
+            m_liveProjectionDroppedFrames += quint64(frames.size());
+            requestLiveStatsRefresh(false);
+            return;
+        }
+        CanMonitorPerf::ScopedProbe probe("app.truth_display_state", frames.size(), 2500);
         const QString liveSource = QStringLiteral("live");
         const bool graphIngestActive = m_graphPageActive && !m_graphSelectedKeys.isEmpty() && !m_graphSelectedIds.isEmpty();
         if (m_liveBaseFrameUs == 0 && !frames.isEmpty()) {
@@ -6112,6 +6192,8 @@ void AppController::updateTransportDiagnostics() {
                                          m_liveProjectionMaxBacklog,
                                          m_liveProjectionFlushBudgetHits,
                                          m_liveProjectionLastFlushMs);
+    m_transportSession.updateLivePathTrace(livePathTraceObject());
+    m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     m_transportSession.updateRawLedger(m_rawFrameTable.totalRows(),
                                        quint64(std::max(0, m_rawFrameTable.count())),
                                        m_rawFrameTable.segmentBytes(),
@@ -9160,6 +9242,8 @@ void AppController::finalizeAttachedVerificationReport() {
     result.insert(QStringLiteral("truth_validation_exit_code"), truthValidationExit);
     result.insert(QStringLiteral("truth_validation_result"), truthValidationResultPath);
     result.insert(QStringLiteral("performance_summary"), m_performanceSummary);
+    result.insert(QStringLiteral("live_path_trace"), livePathTraceObject());
+    result.insert(QStringLiteral("drain_event_trace"), drainEventTraceObject());
     QFile resultFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("attached_result.json")));
     if (resultFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         resultFile.write(QJsonDocument(result).toJson(QJsonDocument::Indented));
@@ -9298,6 +9382,10 @@ void AppController::resetTypedEvidenceState() {
     m_liveProjectionFlushBudgetHits = 0;
     m_liveProjectionMaxBacklog = 0;
     m_liveProjectionLastFlushMs = 0;
+    m_livePathTelemetry = CanMonitorTransport::LivePathTelemetry{};
+    m_drainEventTelemetry = CanMonitorTransport::DrainEventTelemetry{};
+    m_workerLivePathTrace = {};
+    m_workerDrainEventTrace = {};
     m_lastLiveRuntimeLogWallMs = 0;
     m_lastRoutineControlWriteNotifyWallMs = 0;
     m_lastHostTxQueueNotifyWallMs = 0;
@@ -9756,6 +9844,7 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     refreshValueRows();
     refreshAlarmRows();
     requestGraphRefresh(true);
+    updateTransportDiagnostics();
 
     QJsonObject root;
     root.insert(QStringLiteral("saved_at"), QDateTime::currentDateTime().toString(Qt::ISODate));
@@ -9793,6 +9882,10 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     root.insert(QStringLiteral("session_file_path"), sessionFilePath());
     root.insert(QStringLiteral("default_log_directory"), defaultLogDirectory());
     root.insert(QStringLiteral("default_snapshot_directory"), defaultSnapshotDirectory());
+    root.insert(QStringLiteral("transport_diagnostics_summary"), transportDiagnosticsSummary());
+    root.insert(QStringLiteral("transport_diagnostics"), QJsonArray::fromVariantList(transportDiagnostics()));
+    root.insert(QStringLiteral("live_path_trace"), livePathTraceObject());
+    root.insert(QStringLiteral("drain_event_trace"), drainEventTraceObject());
 
     QJsonObject liveStats;
     liveStats.insert(QStringLiteral("rx_fps"), liveRxFps());
@@ -10096,6 +10189,10 @@ void AppController::clearFrames() {
     m_liveProjectionFlushBudgetHits = 0;
     m_liveProjectionMaxBacklog = 0;
     m_liveProjectionLastFlushMs = 0;
+    m_livePathTelemetry = CanMonitorTransport::LivePathTelemetry{};
+    m_drainEventTelemetry = CanMonitorTransport::DrainEventTelemetry{};
+    m_workerLivePathTrace = {};
+    m_workerDrainEventTrace = {};
     m_lastLiveRuntimeLogWallMs = 0;
     m_lastRoutineControlWriteNotifyWallMs = 0;
     m_lastHostTxQueueNotifyWallMs = 0;

@@ -187,6 +187,7 @@ private slots:
 
         QSignalSpy storageStateSpy(&worker, &SerialWorker::typedStorageStateChanged);
         QSignalSpy storageProgressSpy(&worker, &SerialWorker::typedStorageProgress);
+        QSignalSpy errorSpy(&worker, &SerialWorker::errorOccurred);
 
         QJsonObject meta;
         meta.insert(QStringLiteral("test"), true);
@@ -196,7 +197,9 @@ private slots:
         const QByteArray frame2 = makeTypedFrame(TypedRecordType::CanTxRaw, 2, makeCanPayload(2000, 1));
         worker.ingestBytesForTest(frame1 + frame2);
 
-        QVERIFY(worker.setTypedStorage(false, sessionDir, QJsonObject{}));
+        const bool stopped = worker.setTypedStorage(false, sessionDir, QJsonObject{});
+        const QString stopError = errorSpy.isEmpty() ? QString() : errorSpy.takeLast().at(0).toString();
+        QVERIFY2(stopped, qPrintable(stopError));
         QVERIFY(storageStateSpy.size() >= 2);
         QVERIFY(storageProgressSpy.size() >= 2);
 

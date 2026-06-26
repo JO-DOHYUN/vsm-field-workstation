@@ -8,6 +8,7 @@
 #include <QtTest/QtTest>
 
 #include <algorithm>
+#include <QJsonObject>
 
 namespace {
 void appendU32(QByteArray& out, quint32 value) {
@@ -286,8 +287,30 @@ private slots:
         session.updateRawLedger(100, 80, 4096, 0, 99);
         session.updateDrainPipeline(8192, 4, 100, 4096, 0, 2048, 16 * 1024 * 1024, 0, 0, 0, 1, 0, 1024, 0, 2);
         session.updateAnalysisQueue(0, 12, 131072, 100, 100, 0, 3, 1, 2, 0);
+        QJsonObject liveTrace;
+        liveTrace.insert(QStringLiteral("parsed_can_rx"), QStringLiteral("100"));
+        liveTrace.insert(QStringLiteral("snapshot_emitted"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("snapshot_emitted_frames"), QStringLiteral("12"));
+        liveTrace.insert(QStringLiteral("snapshot_ack"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("frames_received_emit"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("frames_received_frames"), QStringLiteral("12"));
+        liveTrace.insert(QStringLiteral("framesReceived_calls"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("pending_live_rows"), QStringLiteral("0"));
+        liveTrace.insert(QStringLiteral("append_live_batch_frames"), QStringLiteral("4"));
+        liveTrace.insert(QStringLiteral("live_model_rows"), QStringLiteral("4"));
+        session.updateLivePathTrace(liveTrace);
+        QJsonObject drainTrace;
+        drainTrace.insert(QStringLiteral("readyRead_per_sec"), 120.0);
+        drainTrace.insert(QStringLiteral("bytes_available_emit_per_sec"), 60.0);
+        drainTrace.insert(QStringLiteral("scheduleDrainPump_per_sec"), 60.0);
+        drainTrace.insert(QStringLiteral("pump_per_sec"), 30.0);
+        drainTrace.insert(QStringLiteral("output_signal_per_sec"), 10.0);
+        drainTrace.insert(QStringLiteral("readyRead_calls"), QStringLiteral("120"));
+        drainTrace.insert(QStringLiteral("pump_calls"), QStringLiteral("30"));
+        drainTrace.insert(QStringLiteral("drain_queue_overrun_bytes"), QStringLiteral("0"));
+        session.updateDrainEventTrace(drainTrace);
         const QVariantList rows = session.rows();
-        QCOMPARE(rows.size(), 13);
+        QCOMPARE(rows.size(), 15);
         QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_storage"));
         QCOMPARE(rows.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("typed_parser"));
         QCOMPARE(rows.at(1).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("ERR"));
@@ -338,6 +361,10 @@ private slots:
         QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
         QVERIFY(rows.at(11).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));
         QCOMPARE(rows.at(12).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
+        QCOMPARE(rows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
+        QVERIFY(rows.at(13).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("parsed 100")));
+        QCOMPARE(rows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("readyRead/s 120")));
     }
 
     void transportRuntimeOwnsWorkerThreadAndQueuesModeChanges() {

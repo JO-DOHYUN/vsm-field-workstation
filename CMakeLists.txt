@@ -49,6 +49,7 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/transport/TypedRecordHandoffQueue.cpp
     src/backend/transport/LegacyIngressRuntime.h
     src/backend/transport/LegacyIngressRuntime.cpp
+    src/backend/transport/LivePathTelemetry.h
     src/backend/transport/LiveProjectionRuntime.h
     src/backend/transport/LiveProjectionRuntime.cpp
     src/backend/transport/SerialDrainRuntime.h

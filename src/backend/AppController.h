@@ -19,6 +19,7 @@
 #include "control/ControlRuntime.h"
 #include "evidence/EvidenceRuntime.h"
 #include "evidence/BusRoleResolver.h"
+#include "transport/LivePathTelemetry.h"
 #include "transport/TransportRuntime.h"
 #include "transport/TransportSession.h"
 #include "perf/UiResponsivenessRuntime.h"
@@ -957,6 +958,8 @@ private:
     void noteBusAlarmEvent(const QString& source);
     qint64 pendingLiveFrameCount() const;
     void appendPendingLiveFrames(const FrameRecordList& frames);
+    QJsonObject livePathTraceObject();
+    QJsonObject drainEventTraceObject();
     int liveFlushChunkForBacklog(qint64 backlog) const;
     int liveFlushBudgetForBacklog(qint64 backlog) const;
     void compactPendingLiveFrames();
@@ -1191,6 +1194,10 @@ private:
     quint64 m_liveProjectionFlushBudgetHits = 0;
     int m_liveProjectionMaxBacklog = 0;
     int m_liveProjectionLastFlushMs = 0;
+    CanMonitorTransport::LivePathTelemetry m_livePathTelemetry;
+    CanMonitorTransport::DrainEventTelemetry m_drainEventTelemetry;
+    QJsonObject m_workerLivePathTrace;
+    QJsonObject m_workerDrainEventTrace;
     qint64 m_lastLiveRuntimeLogWallMs = 0;
     qint64 m_lastLiveFrameWallMs = -1;
     qint64 m_lastLiveStatsWallMs = -1;

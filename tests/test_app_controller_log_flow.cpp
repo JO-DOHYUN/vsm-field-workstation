@@ -73,6 +73,17 @@ QString writeModelFixture(const QString& rootPath) {
     return path;
 }
 
+FrameRecord makeLiveFrame(quint32 canId = 0x321, quint64 tExtUs = 20'000, quint8 bus = 0) {
+    FrameRecord frame;
+    frame.canId = canId;
+    frame.bus = bus;
+    frame.dlc = 2;
+    frame.tExtUs = tExtUs;
+    frame.data[0] = 0x10;
+    frame.data[1] = 0x20;
+    return frame;
+}
+
 } // namespace
 
 class AppControllerLogFlowTest : public QObject {
@@ -301,11 +312,13 @@ private slots:
         QVERIFY(controller.controlOperatorSummary().contains(QStringLiteral("CAN_TX_RAW 미확인")));
         QVERIFY(controller.transportDiagnosticsSummary().contains(QStringLiteral("transport")));
         const QVariantList transportRows = controller.transportDiagnostics();
-        QCOMPARE(transportRows.size(), 13);
+        QCOMPARE(transportRows.size(), 15);
         QCOMPARE(transportRows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
         QCOMPARE(transportRows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
         QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
         QCOMPARE(transportRows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
+        QCOMPARE(transportRows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
+        QCOMPARE(transportRows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
         QVERIFY(controller.controlActionVerdict().contains(QStringLiteral("COM 연결 없음")));
         QCOMPARE(controller.controlOperatorChecklist().size(), 8);
         QCOMPARE(controller.controlPolicyChecklist().size(), 1);
@@ -384,6 +397,59 @@ private slots:
         QVERIFY(controller.controlLastFaultSummary().contains(QStringLiteral("not sent")));
         QCOMPARE(checklistMap(QStringLiteral("fault")).value(QStringLiteral("level")).toString(), QStringLiteral("error"));
         QCOMPARE(checklistMap(QStringLiteral("fault")).value(QStringLiteral("blocking")).toBool(), true);
+    }
+
+    void livePathTelemetryTracksModelAppend() {
+        AppController controller;
+        controller.clearModel();
+        controller.m_transportModeKey = QStringLiteral("typed");
+
+        FrameRecordList frames;
+        frames.push_back(makeLiveFrame());
+        controller.appendPendingLiveFrames(frames);
+        controller.flushPendingLiveFrames();
+        controller.flushQueuedLiveViewBatch();
+
+        QCOMPARE(controller.liveFrames()->rowCount(), 1);
+        const QJsonObject trace = controller.livePathTraceObject();
+        QCOMPARE(trace.value(QStringLiteral("append_live_batch_frames")).toString().toULongLong(), quint64(1));
+        QCOMPARE(trace.value(QStringLiteral("live_model_rows")).toString().toULongLong(), quint64(1));
+    }
+
+    void livePathTelemetryCountsPausedDrops() {
+        AppController controller;
+        controller.clearModel();
+        controller.m_transportModeKey = QStringLiteral("typed");
+        controller.setLiveUiPaused(true);
+
+        FrameRecordList frames;
+        frames.push_back(makeLiveFrame());
+        controller.appendPendingLiveFrames(frames);
+        controller.flushPendingLiveFrames();
+        controller.flushQueuedLiveViewBatch();
+
+        QCOMPARE(controller.liveFrames()->rowCount(), 0);
+        const QJsonObject trace = controller.livePathTraceObject();
+        QVERIFY(trace.value(QStringLiteral("live_view_paused_drops")).toString().toULongLong() >= quint64(1));
+        QCOMPARE(trace.value(QStringLiteral("append_live_batch_frames")).toString().toULongLong(), quint64(0));
+    }
+
+    void livePathTelemetryCountsInactivePanelDrops() {
+        AppController controller;
+        controller.clearModel();
+        controller.m_transportModeKey = QStringLiteral("typed");
+        controller.m_livePanelActive = false;
+
+        FrameRecordList frames;
+        frames.push_back(makeLiveFrame());
+        controller.appendPendingLiveFrames(frames);
+        controller.flushPendingLiveFrames();
+        controller.flushQueuedLiveViewBatch();
+
+        QCOMPARE(controller.liveFrames()->rowCount(), 0);
+        const QJsonObject trace = controller.livePathTraceObject();
+        QVERIFY(trace.value(QStringLiteral("live_view_panel_drops")).toString().toULongLong() >= quint64(1));
+        QCOMPARE(trace.value(QStringLiteral("append_live_batch_frames")).toString().toULongLong(), quint64(0));
     }
 
     void finalizePendingLogSaveCopiesArtifactsAndClearsPendingState() {

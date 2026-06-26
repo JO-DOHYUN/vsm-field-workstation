@@ -11,11 +11,12 @@ void TypedEvidencePipelineRuntime::reset() {
 
 TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
                                                                              qint64 handshakeElapsedMs,
-                                                                             quint64 parseBacklogBytes) {
+                                                                             quint64 parseBacklogBytes,
+                                                                             bool includeFrameBytes) {
     TypedIngressRuntime::IngestResult aggregate;
     m_status.parseBacklogBytes = parseBacklogBytes;
     if (blocks.isEmpty()) {
-        aggregate.status = m_ingress.ingest(QByteArray(), handshakeElapsedMs).status;
+        aggregate.status = m_ingress.ingest(QByteArray(), handshakeElapsedMs, includeFrameBytes).status;
         return aggregate;
     }
 
@@ -24,7 +25,7 @@ TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocks(con
     for (const DrainByteQueue::Block& block : blocks) {
         m_status.ingestedBlocks += 1;
         m_status.ingestedBytes += quint64(block.bytes.size());
-        auto result = m_ingress.ingest(block.bytes, handshakeElapsedMs);
+        auto result = m_ingress.ingest(block.bytes, handshakeElapsedMs, includeFrameBytes);
         aggregate.recordBatches += result.recordBatches;
         aggregate.errors += result.errors;
         aggregate.capabilityFirstSeen = aggregate.capabilityFirstSeen || result.capabilityFirstSeen;
@@ -42,11 +43,12 @@ TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocks(con
 TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocksEach(const QVector<DrainByteQueue::Block>& blocks,
                                                                                  qint64 handshakeElapsedMs,
                                                                                  quint64 parseBacklogBytes,
+                                                                                 bool includeFrameBytes,
                                                                                  const std::function<void(TypedRecord&&)>& onRecord) {
     TypedIngressRuntime::IngestResult aggregate;
     m_status.parseBacklogBytes = parseBacklogBytes;
     if (blocks.isEmpty()) {
-        aggregate.status = m_ingress.ingestEach(QByteArray(), handshakeElapsedMs, onRecord).status;
+        aggregate.status = m_ingress.ingestEach(QByteArray(), handshakeElapsedMs, includeFrameBytes, onRecord).status;
         return aggregate;
     }
 
@@ -55,7 +57,7 @@ TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocksEach
     for (const DrainByteQueue::Block& block : blocks) {
         m_status.ingestedBlocks += 1;
         m_status.ingestedBytes += quint64(block.bytes.size());
-        auto result = m_ingress.ingestEach(block.bytes, handshakeElapsedMs, onRecord);
+        auto result = m_ingress.ingestEach(block.bytes, handshakeElapsedMs, includeFrameBytes, onRecord);
         aggregate.errors += result.errors;
         aggregate.capabilityFirstSeen = aggregate.capabilityFirstSeen || result.capabilityFirstSeen;
         if (result.capabilityFirstSeen) {
