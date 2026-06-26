@@ -30,7 +30,8 @@ public:
                                 CoreViewSeverity severity = CoreViewSeverity::Ok,
                                 const QJsonObject& cheapCounts = {},
                                 const CaptureSeqRange& sourceRange = {},
-                                qint64 nowMs = -1);
+                                qint64 nowMs = -1,
+                                quint64 droppedDisplayCountDelta = 0);
 
     ViewQueryResult queryView(const ViewQuery& query) const;
     quint64 viewSeq(CoreViewName viewName) const;

@@ -932,6 +932,8 @@ foreach(_can_monitor_transport_target IN ITEMS
             ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp

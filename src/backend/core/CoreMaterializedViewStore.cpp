@@ -79,7 +79,8 @@ ViewChanged CoreMaterializedViewStore::updateArrayView(CoreViewName viewName,
                                                        CoreViewSeverity severity,
                                                        const QJsonObject& cheapCounts,
                                                        const CaptureSeqRange& sourceRange,
-                                                       qint64 nowMs) {
+                                                       qint64 nowMs,
+                                                       quint64 droppedDisplayCountDelta) {
     const int index = indexOf(viewName);
     const int cap = m_maxItems[index];
     const QJsonArray boundedItems = tailArray(items, cap);
@@ -90,6 +91,7 @@ ViewChanged CoreMaterializedViewStore::updateArrayView(CoreViewName viewName,
     payload.insert(QStringLiteral("item_cap"), cap);
 
     quint64 dropped = m_entries[index].hasSnapshot ? m_entries[index].snapshot.droppedDisplayCount : 0;
+    dropped += droppedDisplayCountDelta;
     if (items.size() > boundedItems.size()) {
         dropped += static_cast<quint64>(items.size() - boundedItems.size());
     }

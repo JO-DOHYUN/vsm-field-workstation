@@ -1,16 +1,25 @@
+#include "core/CoreViewTypes.h"
+#include "transport/CaptureCoreRuntime.h"
 #include "transport/HostTxQueue.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LiveProjectionRuntime.h"
 #include "transport/LiveTruthRuntime.h"
 #include "transport/TransportSession.h"
 #include "transport/TransportRuntime.h"
+#include "TypedTransportParser.h"
 
 #include <QtTest/QtTest>
 
 #include <algorithm>
+#include <QJsonArray>
 #include <QJsonObject>
 
 namespace {
+void appendU16(QByteArray& out, quint16 value) {
+    out.append(char(value & 0xFF));
+    out.append(char((value >> 8) & 0xFF));
+}
+
 void appendU32(QByteArray& out, quint32 value) {
     for (int byte = 0; byte < 4; ++byte) out.append(char((value >> (byte * 8)) & 0xFF));
 }
@@ -36,6 +45,22 @@ TypedRecord makeCanRxRecord(quint16 seq, quint32 canId, quint64 monoUs, quint8 b
     record.header.payloadLength = quint16(payload.size());
     record.payload = payload;
     return record;
+}
+
+QByteArray makeTypedFrame(const TypedRecord& record) {
+    QByteArray frame;
+    frame.reserve(int(kTypedTransportFrameOverhead + record.payload.size()));
+    frame.append(char(kTypedTransportSof0));
+    frame.append(char(kTypedTransportSof1));
+    frame.append(char(record.header.version));
+    frame.append(char(record.header.recordType));
+    frame.append(char(record.header.flags));
+    appendU16(frame, record.header.seq);
+    appendU16(frame, quint16(record.payload.size()));
+    frame.append(record.payload);
+    const auto* crcStart = reinterpret_cast<const quint8*>(frame.constData() + 2);
+    appendU16(frame, TypedTransportParser::crc16Ccitt(crcStart, frame.size() - 2));
+    return frame;
 }
 
 TypedRecord makeCanTxRecord(quint16 seq, quint32 canId, quint64 monoUs, quint8 bus) {
@@ -236,6 +261,39 @@ private slots:
         QCOMPARE(bus0It->observedGapUs, quint64(800));
         QCOMPARE(bus1It->tExtUs, quint64(1100));
         QVERIFY(!bus1It->hasObservedGap);
+    }
+
+    void captureCoreRuntimeOwnsMaterializedLiveLatestView() {
+        CanMonitorTransport::CaptureCoreRuntime runtime;
+
+        QByteArray bytes;
+        bytes += makeTypedFrame(makeCanRxRecord(11, 0x121, 1100, 0));
+        bytes += makeTypedFrame(makeCanRxRecord(12, 0x122, 1200, 1));
+
+        QVector<CanMonitorTransport::DrainByteQueue::Block> blocks;
+        blocks.push_back({bytes, 1});
+        const auto result = runtime.ingestBlocks(blocks, 0, quint64(bytes.size()));
+
+        QVERIFY(!result.viewChanges.isEmpty());
+        const auto liveQuery = runtime.queryView({CanMonitorCore::CoreViewName::LiveLatest, 0, 0});
+        QVERIFY(liveQuery.changed);
+        QCOMPARE(liveQuery.change.viewName, CanMonitorCore::CoreViewName::LiveLatest);
+        QCOMPARE(liveQuery.snapshot.severity, CanMonitorCore::CoreViewSeverity::Ok);
+
+        const QJsonArray rows = liveQuery.snapshot.payload.value(QStringLiteral("frames")).toArray();
+        QCOMPARE(rows.size(), 2);
+        QCOMPARE(rows.at(0).toObject().value(QStringLiteral("can_id")).toInt(), 0x121);
+        QCOMPARE(rows.at(0).toObject().value(QStringLiteral("bus")).toInt(), 0);
+        QCOMPARE(rows.at(1).toObject().value(QStringLiteral("can_id")).toInt(), 0x122);
+        QCOMPARE(rows.at(1).toObject().value(QStringLiteral("bus")).toInt(), 1);
+
+        const auto limited = runtime.queryView({CanMonitorCore::CoreViewName::LiveLatest, 0, 1});
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("frames")).toArray().size(), 1);
+
+        const auto noChange = runtime.queryView({CanMonitorCore::CoreViewName::LiveLatest,
+                                                 liveQuery.snapshot.viewSeq,
+                                                 0});
+        QVERIFY(!noChange.changed);
     }
 
     void transportRuntimeNormalizesProductionModeKeys() {

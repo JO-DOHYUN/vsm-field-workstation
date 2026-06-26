@@ -93,6 +93,29 @@ private slots:
         const auto full = store.queryView({CoreViewName::LiveLatest, 0, 0});
         QCOMPARE(full.snapshot.payload.value(QStringLiteral("frames")).toArray().size(), 6);
     }
+
+    void arrayViewAcceptsExternalDropDelta() {
+        CoreMaterializedViewStore store;
+        store.setPolicy(CoreViewName::LiveLatest, 4);
+
+        QJsonArray rows;
+        rows.append(1);
+        rows.append(2);
+
+        store.updateArrayView(CoreViewName::LiveLatest,
+                              QStringLiteral("frames"),
+                              rows,
+                              CoreViewSeverity::Ok,
+                              {},
+                              {},
+                              -1,
+                              3);
+
+        const auto query = store.queryView({CoreViewName::LiveLatest, 0, 0});
+        QVERIFY(query.changed);
+        QCOMPARE(query.snapshot.droppedDisplayCount, quint64(3));
+        QCOMPARE(query.change.cheapCounts.value(QStringLiteral("dropped_display_count")).toString(), QStringLiteral("3"));
+    }
 };
 
 QTEST_MAIN(CoreMaterializedViewStoreTest)

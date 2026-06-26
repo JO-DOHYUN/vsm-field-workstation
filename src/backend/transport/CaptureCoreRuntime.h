@@ -1,11 +1,14 @@
 #pragma once
 
+#include "core/CoreMaterializedViewStore.h"
 #include "transport/LiveProjectionRuntime.h"
 #include "transport/LiveTruthRuntime.h"
 #include "transport/TypedEvidencePipelineRuntime.h"
 #include "transport/TypedRecordHandoffQueue.h"
 
+#include <QHash>
 #include <QSharedPointer>
+#include <QVector>
 
 namespace CanMonitorTransport {
 
@@ -43,6 +46,8 @@ public:
         QString captureHandoffError;
         quint64 captureHandoffOverrunRecords = 0;
         quint64 captureHandoffOverrunBytes = 0;
+
+        QVector<CanMonitorCore::ViewChanged> viewChanges;
     };
 
     explicit CaptureCoreRuntime(QSharedPointer<TypedRecordHandoffQueue> captureQueue = {});
@@ -59,6 +64,8 @@ public:
     QJsonObject makeCaptureDiagnostics() const;
     TypedEvidencePipelineRuntime::Status status() const { return m_pipeline.status(); }
     LiveProjectionRuntime::Status projectionStatus() const { return m_liveProjection.status(); }
+    CanMonitorCore::ViewQueryResult queryView(const CanMonitorCore::ViewQuery& query) const;
+    QVector<CanMonitorCore::ViewChanged> viewChanges() const;
 
     FrameRecordList flushTruth(bool force);
     LiveTruthRuntime::Status truthStatus() const { return m_liveTruth.status(); }
@@ -66,10 +73,16 @@ public:
 private:
     void appendCanRxFrames(const TypedRecord& record, FrameRecordList& out) const;
     void ingestBatch(TypedRecordList&& batch, Result& result);
+    void updateLiveLatestView(const FrameRecordList& frames, Result& result);
+    void updateStatusViews(const Result& ingestResult, Result& out);
+    static quint64 liveLatestKeyForFrame(const FrameRecord& frame);
 
     TypedEvidencePipelineRuntime m_pipeline;
     LiveProjectionRuntime m_liveProjection;
     LiveTruthRuntime m_liveTruth;
+    CanMonitorCore::CoreMaterializedViewStore m_viewStore;
+    QHash<quint64, FrameRecord> m_liveLatestByKey;
+    quint64 m_liveLatestDropped = 0;
     QSharedPointer<TypedRecordHandoffQueue> m_captureQueue;
     Options m_options;
 };
