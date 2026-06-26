@@ -46,6 +46,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/core/CoreIpcClientRuntime.cpp
     src/backend/core/CoreIpcServerRuntime.h
     src/backend/core/CoreIpcServerRuntime.cpp
+    src/backend/core/CoreProcessClientRuntime.h
+    src/backend/core/CoreProcessClientRuntime.cpp
     src/backend/evidence/BoardConnectionState.h
     src/backend/evidence/BoardConnectionState.cpp
     src/backend/evidence/EvidenceRuntime.h

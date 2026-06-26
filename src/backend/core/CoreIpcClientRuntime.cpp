@@ -3,6 +3,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <utility>
+
 namespace CanMonitorCore {
 
 CoreIpcClientRuntime::CoreIpcClientRuntime(QObject* parent)
@@ -40,6 +42,14 @@ quint64 CoreIpcClientRuntime::requestView(const QString& viewName, quint64 since
                                    {QStringLiteral("view_name"), viewName},
                                    {QStringLiteral("since_seq"), QString::number(sinceSeq)},
                                    {QStringLiteral("limit"), limit}});
+}
+
+bool CoreIpcClientRuntime::requestViewWithId(quint64 requestId, const QString& viewName, quint64 sinceSeq, int limit) {
+    return sendMessageWithId(requestId,
+                             QJsonObject{{QStringLiteral("message_type"), QStringLiteral("get_view")},
+                                         {QStringLiteral("view_name"), viewName},
+                                         {QStringLiteral("since_seq"), QString::number(sinceSeq)},
+                                         {QStringLiteral("limit"), limit}});
 }
 
 void CoreIpcClientRuntime::readMessages() {
@@ -97,12 +107,21 @@ void CoreIpcClientRuntime::handleMessage(const QJsonObject& message) {
 
 quint64 CoreIpcClientRuntime::sendMessage(QJsonObject message) {
     const quint64 requestId = m_nextRequestId++;
+    sendMessageWithId(requestId, std::move(message));
+    return requestId;
+}
+
+bool CoreIpcClientRuntime::sendMessageWithId(quint64 requestId, QJsonObject message) {
+    if (!isConnected()) {
+        emit errorReceived(requestId, QStringLiteral("not_connected"), QString());
+        return false;
+    }
     message.insert(QStringLiteral("schema_version"), 1);
     message.insert(QStringLiteral("request_id"), QString::number(requestId));
     m_socket.write(QJsonDocument(message).toJson(QJsonDocument::Compact));
     m_socket.write("\n");
     m_socket.flush();
-    return requestId;
+    return true;
 }
 
 } // namespace CanMonitorCore

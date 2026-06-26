@@ -18,6 +18,7 @@
 #include "control/ControlAuditModel.h"
 #include "control/ControlRuntime.h"
 #include "core/CoreViewClientRuntime.h"
+#include "core/CoreProcessClientRuntime.h"
 #include "evidence/EvidenceRuntime.h"
 #include "evidence/BusRoleResolver.h"
 #include "transport/LivePathTelemetry.h"
@@ -1392,6 +1393,8 @@ private:
     QTimer m_liveRuntimeOwnerTimer;
     QString m_liveRuntimeTraceDir;
     CanMonitorPerf::UiResponsivenessRuntime m_uiResponsiveness;
+    CanMonitorCore::CoreProcessClientRuntime m_coreProcessClient;
+    bool m_coreProcessMode = false;
     QProcess* m_verificationProcess = nullptr;
     QString m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
     QString m_verificationRunnerArtifactPath;

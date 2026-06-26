@@ -17,6 +17,7 @@ public:
     bool isConnected() const;
     quint64 ping();
     quint64 requestView(const QString& viewName, quint64 sinceSeq, int limit);
+    bool requestViewWithId(quint64 requestId, const QString& viewName, quint64 sinceSeq, int limit);
 
 signals:
     void connectedChanged(bool connected);
@@ -29,6 +30,7 @@ private:
     void readMessages();
     void handleMessage(const QJsonObject& message);
     quint64 sendMessage(QJsonObject message);
+    bool sendMessageWithId(quint64 requestId, QJsonObject message);
 
     QLocalSocket m_socket;
     QByteArray m_buffer;

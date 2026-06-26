@@ -146,6 +146,24 @@ bool replaceArgValue(QStringList& args, const QString& option, const QString& va
     return false;
 }
 
+bool coreProcessModeEnabled() {
+    const QString value = qEnvironmentVariable("CAN_MONITOR_USE_CORE_PROCESS").trimmed().toLower();
+    return value == QStringLiteral("1") ||
+           value == QStringLiteral("true") ||
+           value == QStringLiteral("yes") ||
+           value == QStringLiteral("on");
+}
+
+QString coreProcessExecutablePath() {
+    const QString suffix =
+#ifdef Q_OS_WIN
+        QStringLiteral("vsm-capture-core.exe");
+#else
+        QStringLiteral("vsm-capture-core");
+#endif
+    return QDir(QCoreApplication::applicationDirPath()).filePath(suffix);
+}
+
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
     if (elapsedUs == 0) return 0;
     const double fps = (double(delta) * 1'000'000.0) / double(elapsedUs);
@@ -1876,11 +1894,20 @@ QJsonObject AppController::drainEventTraceObject() {
     for (auto it = coreView.constBegin(); it != coreView.constEnd(); ++it) {
         out.insert(it.key(), it.value());
     }
+    const QJsonObject coreProcess = m_coreProcessClient.statusJson();
+    for (auto it = coreProcess.constBegin(); it != coreProcess.constEnd(); ++it) {
+        out.insert(it.key(), it.value());
+    }
     return out;
 }
 
 void AppController::dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request) {
-    if (!request.valid || !m_worker) return;
+    if (!request.valid) return;
+    if (m_coreProcessMode && m_coreProcessClient.isIpcConnected()) {
+        m_coreProcessClient.requestView(request);
+        return;
+    }
+    if (!m_worker) return;
     QMetaObject::invokeMethod(m_worker,
                               [worker = QPointer<SerialWorker>(m_worker), request]() {
                                   if (worker) {
@@ -2288,6 +2315,7 @@ quint64 AppController::replayAnalysisUs() const {
 
 AppController::AppController(QObject* parent) : QObject(parent) {
     m_uptime.start();
+    m_coreProcessMode = coreProcessModeEnabled();
     connect(&m_uiResponsiveness, &CanMonitorPerf::UiResponsivenessRuntime::snapshotChanged, this, [this]() {
         refreshPerformanceDiagnostics(false);
     });
@@ -2385,7 +2413,46 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
 
     m_worker = m_transportRuntime.createWorker();
+    connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::stateChanged, this, [this](bool active, const QString& message) {
+        if (!m_coreProcessMode) return;
+        const bool changed = m_connected != active;
+        m_connected = active;
+        m_evidenceRuntime.setSerialOpen(active);
+        m_transportSession.setConnected(active);
+        if (active) {
+            m_coreViewClient.reset();
+        } else {
+            m_controlRuntime.setArmed(false);
+            m_controlRuntime.setTestRunning(false);
+            m_controlKeepaliveTimer.stop();
+            m_controlPatternTimer.stop();
+        }
+        m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+        requestTransportDiagnosticsRefresh(true);
+        emit typedEvidenceChanged();
+        emit controlStateChanged();
+        requestLiveStatsRefresh(true);
+        if (changed) emit connectedChanged();
+        setStatus(QStringLiteral("core process: %1").arg(message));
+    });
+    connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::errorOccurred, this, [this](const QString& message) {
+        if (!m_coreProcessMode) return;
+        setStatus(message);
+        requestTransportDiagnosticsRefresh(true);
+    });
+    connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::viewChanged, this, [this](const QJsonObject& change) {
+        if (!m_coreProcessMode) return;
+        handleCoreViewChanged(change);
+    });
+    connect(&m_coreProcessClient,
+            &CanMonitorCore::CoreProcessClientRuntime::viewSnapshotReady,
+            this,
+            [this](quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change) {
+                if (!m_coreProcessMode) return;
+                handleCoreViewSnapshotReady(requestId, changed, snapshot, change);
+            });
     connect(m_worker, &SerialWorker::stateChanged, this, [this](bool ok, const QString& msg) {
+        if (m_coreProcessMode) return;
         const bool previousReplayActive = replayAnalysisActive();
         m_connected = ok;
         m_evidenceRuntime.setSerialOpen(ok);
@@ -3224,8 +3291,10 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     connect(&m_liveFrameView, &FrameFilterProxyModel::busFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
     connect(&m_replayFrameView, &FrameFilterProxyModel::busFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
 
-    m_transportRuntime.startWorkerThread(QThread::TimeCriticalPriority);
-    m_transportRuntime.setTransportModeKey(m_transportModeKey);
+    if (!m_coreProcessMode) {
+        m_transportRuntime.startWorkerThread(QThread::TimeCriticalPriority);
+        m_transportRuntime.setTransportModeKey(m_transportModeKey);
+    }
     syncAnalysisRuntimeConfig();
     refreshPorts();
     restoreSessionState();
@@ -3237,6 +3306,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 AppController::~AppController() {
     stopLiveRuntimeTraceSession(QStringLiteral("app_destroy"));
     prepareControlSafeStopForDisconnect(QStringLiteral("application shutdown safety stop"));
+    m_coreProcessClient.stop();
     stopDebugGateway();
     stopVerificationRunner();
     if (m_debugGatewayProcess) {
@@ -4851,9 +4921,11 @@ void AppController::setTransportMode(const QString& mode) {
 
     m_transportModeKey = key;
     resetTypedEvidenceState();
-    QString error;
-    if (!m_transportRuntime.setTransportModeKey(key, &error)) {
-        setStatus(error);
+    if (!m_coreProcessMode) {
+        QString error;
+        if (!m_transportRuntime.setTransportModeKey(key, &error)) {
+            setStatus(error);
+        }
     }
     emit transportModeChanged();
     emit typedEvidenceChanged();
@@ -8805,6 +8877,13 @@ void AppController::connectPort(const QString& portName) {
     const QString trimmed = portName.trimmed();
     if (trimmed.isEmpty()) return;
     if (m_transportModeKey == QStringLiteral("typed")) resetTypedEvidenceState();
+    if (m_coreProcessMode) {
+        QString error;
+        if (!m_coreProcessClient.startSerial(coreProcessExecutablePath(), trimmed, &error)) {
+            setStatus(error);
+        }
+        return;
+    }
     QString error;
     if (!m_transportRuntime.startSerial(trimmed, &error)) {
         setStatus(error);
@@ -8812,6 +8891,17 @@ void AppController::connectPort(const QString& portName) {
 }
 
 void AppController::disconnectPort() {
+    if (m_coreProcessMode) {
+        prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
+        m_coreProcessClient.stop();
+        m_connected = false;
+        m_transportSession.setConnected(false);
+        m_evidenceRuntime.setSerialOpen(false);
+        emit connectedChanged();
+        requestTransportDiagnosticsRefresh(true);
+        setStatus(QStringLiteral("core process disconnected"));
+        return;
+    }
     const bool delayedStop = prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
     if (delayedStop) {
         QTimer::singleShot(150, this, [this]() {
