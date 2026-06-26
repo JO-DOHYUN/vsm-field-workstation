@@ -40,6 +40,10 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/core/CoreMaterializedViewStore.cpp
     src/backend/core/CoreViewClientRuntime.h
     src/backend/core/CoreViewClientRuntime.cpp
+    src/backend/core/CoreIpcClientRuntime.h
+    src/backend/core/CoreIpcClientRuntime.cpp
+    src/backend/core/CoreIpcServerRuntime.h
+    src/backend/core/CoreIpcServerRuntime.cpp
     src/backend/evidence/BoardConnectionState.h
     src/backend/evidence/BoardConnectionState.cpp
     src/backend/evidence/EvidenceRuntime.h
@@ -193,6 +197,8 @@ qt_add_executable(vsm_capture_core
     src/backend/core/CoreViewTypes.cpp
     src/backend/core/CoreMaterializedViewStore.h
     src/backend/core/CoreMaterializedViewStore.cpp
+    src/backend/core/CoreIpcServerRuntime.h
+    src/backend/core/CoreIpcServerRuntime.cpp
 )
 set_target_properties(vsm_capture_core PROPERTIES
     OUTPUT_NAME "vsm-capture-core"
@@ -209,7 +215,7 @@ target_compile_definitions(vsm_capture_core
         CAN_MONITOR_BUILD_TIMESTAMP_UTC="${CAN_MONITOR_BUILD_TIMESTAMP_UTC}"
         CAN_MONITOR_BUILD_TYPE="$<CONFIG>"
 )
-target_link_libraries(vsm_capture_core PRIVATE Qt6::Core)
+target_link_libraries(vsm_capture_core PRIVATE Qt6::Core Qt6::Network)
 
 
 qt_add_resources(can_monitor_qml_reboot "can_monitor_data"

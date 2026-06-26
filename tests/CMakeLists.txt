@@ -105,6 +105,24 @@ target_link_libraries(test_core_view_client_runtime PRIVATE
 )
 add_test(NAME core_view_client_runtime COMMAND test_core_view_client_runtime)
 
+add_executable(test_core_ipc_runtime
+    test_core_ipc_runtime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcServerRuntime.cpp
+)
+target_include_directories(test_core_ipc_runtime PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_core_ipc_runtime PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+add_test(NAME core_ipc_runtime COMMAND test_core_ipc_runtime)
+
 add_executable(test_file_persistence
     test_file_persistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -985,6 +1003,7 @@ if (WIN32)
     set_tests_properties(live_runtime_trace PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(core_materialized_view_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(core_view_client_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(core_ipc_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
