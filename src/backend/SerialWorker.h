@@ -264,6 +264,9 @@ private:
     quint64 m_pendingCaptureWriterMaxBytes = 0;
     quint64 m_captureWriterHandoffOverrunBytes = 0;
     quint64 m_analysisHandoffOverrunFrames = 0;
+    quint64 m_rawLedgerDispatchInFlightFrames = 0;
+    quint64 m_analysisDispatchInFlightFrames = 0;
+    quint64 m_captureWriterDispatchInFlightRecords = 0;
     CanMonitorTransport::LivePathTelemetry m_livePathTelemetry;
     CanMonitorTransport::DrainEventTelemetry m_drainEventTelemetry;
     QJsonObject m_drainRuntimeEventTrace;

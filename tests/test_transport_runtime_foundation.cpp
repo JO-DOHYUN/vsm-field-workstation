@@ -294,10 +294,20 @@ private slots:
         liveTrace.insert(QStringLiteral("snapshot_ack"), QStringLiteral("3"));
         liveTrace.insert(QStringLiteral("frames_received_emit"), QStringLiteral("3"));
         liveTrace.insert(QStringLiteral("frames_received_frames"), QStringLiteral("12"));
+        liveTrace.insert(QStringLiteral("frames_received_emit_seq"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("framesReceived_slot_seq"), QStringLiteral("3"));
+        liveTrace.insert(QStringLiteral("framesReceived_slot_delay_ms"), 7);
+        liveTrace.insert(QStringLiteral("framesReceived_slot_delay_max_ms"), 9);
         liveTrace.insert(QStringLiteral("framesReceived_calls"), QStringLiteral("3"));
         liveTrace.insert(QStringLiteral("pending_live_rows"), QStringLiteral("0"));
+        liveTrace.insert(QStringLiteral("live_flush_timer_fire_count"), QStringLiteral("2"));
+        liveTrace.insert(QStringLiteral("live_view_flush_timer_fire_count"), QStringLiteral("1"));
         liveTrace.insert(QStringLiteral("append_live_batch_frames"), QStringLiteral("4"));
         liveTrace.insert(QStringLiteral("live_model_rows"), QStringLiteral("4"));
+        liveTrace.insert(QStringLiteral("app_snapshot_receive"), QStringLiteral("5"));
+        liveTrace.insert(QStringLiteral("app_snapshot_ack"), QStringLiteral("5"));
+        liveTrace.insert(QStringLiteral("app_snapshot_apply"), QStringLiteral("5"));
+        liveTrace.insert(QStringLiteral("app_snapshot_apply_rows"), QStringLiteral("22"));
         session.updateLivePathTrace(liveTrace);
         QJsonObject drainTrace;
         drainTrace.insert(QStringLiteral("readyRead_per_sec"), 120.0);
@@ -308,6 +318,22 @@ private slots:
         drainTrace.insert(QStringLiteral("readyRead_calls"), QStringLiteral("120"));
         drainTrace.insert(QStringLiteral("pump_calls"), QStringLiteral("30"));
         drainTrace.insert(QStringLiteral("drain_queue_overrun_bytes"), QStringLiteral("0"));
+        drainTrace.insert(QStringLiteral("typedProjectionStatus_receive"), QStringLiteral("4"));
+        drainTrace.insert(QStringLiteral("typedTruthStatus_receive"), QStringLiteral("5"));
+        drainTrace.insert(QStringLiteral("typedTransportStatus_receive"), QStringLiteral("6"));
+        drainTrace.insert(QStringLiteral("app_typedProjectionStatus_receive"), QStringLiteral("4"));
+        drainTrace.insert(QStringLiteral("app_typedTruthStatus_receive"), QStringLiteral("5"));
+        drainTrace.insert(QStringLiteral("app_typedTransportStatus_receive"), QStringLiteral("6"));
+        drainTrace.insert(QStringLiteral("analysis_handoff_pending_frames"), QStringLiteral("7"));
+        drainTrace.insert(QStringLiteral("analysis_handoff_complete_count"), QStringLiteral("8"));
+        drainTrace.insert(QStringLiteral("analysis_handoff_complete_frames"), QStringLiteral("900"));
+        drainTrace.insert(QStringLiteral("raw_ledger_handoff_pending_frames"), QStringLiteral("10"));
+        drainTrace.insert(QStringLiteral("raw_ledger_handoff_pending_bytes"), QStringLiteral("2048"));
+        drainTrace.insert(QStringLiteral("raw_ledger_handoff_complete_count"), QStringLiteral("11"));
+        drainTrace.insert(QStringLiteral("raw_ledger_handoff_complete_frames"), QStringLiteral("1200"));
+        drainTrace.insert(QStringLiteral("truth_handoff_emit_count"), QStringLiteral("12"));
+        drainTrace.insert(QStringLiteral("truth_handoff_emit_frames"), QStringLiteral("1300"));
+        drainTrace.insert(QStringLiteral("truth_handoff_pending_keys"), QStringLiteral("14"));
         session.updateDrainEventTrace(drainTrace);
         const QVariantList rows = session.rows();
         QCOMPARE(rows.size(), 15);
@@ -363,8 +389,14 @@ private slots:
         QCOMPARE(rows.at(12).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
         QCOMPARE(rows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
         QVERIFY(rows.at(13).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("parsed 100")));
+        QVERIFY(rows.at(13).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("seq 3/3")));
+        QVERIFY(rows.at(13).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("snap 5/5/5")));
         QCOMPARE(rows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
         QVERIFY(rows.at(14).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("readyRead/s 120")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("statusRx proj/truth/typed 4/5/6")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("analysis pend 7")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("raw pend 10/2048B")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth emit 12/1300")));
     }
 
     void transportRuntimeOwnsWorkerThreadAndQueuesModeChanges() {

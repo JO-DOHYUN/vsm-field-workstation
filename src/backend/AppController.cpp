@@ -1799,8 +1799,19 @@ QJsonObject AppController::livePathTraceObject() {
     m_livePathTelemetry.liveViewFlushTimerActive = m_liveViewFlushTimer.isActive();
     m_livePathTelemetry.livePanelActive = m_livePanelActive;
     m_livePathTelemetry.liveUiPaused = m_liveUiPaused;
+    const qint64 workerEmitWallMs = m_workerLivePathTrace.value(QStringLiteral("frames_received_last_emit_wall_ms")).toString().toLongLong();
+    if (workerEmitWallMs > 0 && m_livePathTelemetry.framesReceivedLastSlotWallMs > 0) {
+        m_livePathTelemetry.framesReceivedSlotDelayMs = m_livePathTelemetry.framesReceivedLastSlotWallMs - workerEmitWallMs;
+        m_livePathTelemetry.framesReceivedSlotDelayMaxMs =
+            std::max(m_livePathTelemetry.framesReceivedSlotDelayMaxMs, m_livePathTelemetry.framesReceivedSlotDelayMs);
+    }
 
     QJsonObject out = m_workerLivePathTrace;
+    CanMonitorTransport::insertCounter(out, QStringLiteral("framesReceived_slot_seq"), m_livePathTelemetry.framesReceivedSlotSeq);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("framesReceived_last_slot_wall_ms"),
+                                       quint64(std::max<qint64>(0, m_livePathTelemetry.framesReceivedLastSlotWallMs)));
+    out.insert(QStringLiteral("framesReceived_slot_delay_ms"), m_livePathTelemetry.framesReceivedSlotDelayMs);
+    out.insert(QStringLiteral("framesReceived_slot_delay_max_ms"), m_livePathTelemetry.framesReceivedSlotDelayMaxMs);
     CanMonitorTransport::insertCounter(out, QStringLiteral("framesReceived_calls"), m_livePathTelemetry.appFramesReceivedCalls);
     out.insert(QStringLiteral("framesReceived_calls_per_sec"),
                m_livePathTelemetry.rates.ratePerSec(QStringLiteral("framesReceived_calls"),
@@ -1811,14 +1822,25 @@ QJsonObject AppController::livePathTraceObject() {
     CanMonitorTransport::insertCounter(out, QStringLiteral("pending_live_rows"), m_livePathTelemetry.pendingLiveRows);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_flush_calls"), m_livePathTelemetry.liveFlushCalls);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_flush_processed"), m_livePathTelemetry.liveFlushProcessed);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_flush_timer_fire_count"), m_livePathTelemetry.liveFlushTimerFireCount);
     CanMonitorTransport::insertCounter(out, QStringLiteral("queue_live_view_calls"), m_livePathTelemetry.queueLiveViewCalls);
     CanMonitorTransport::insertCounter(out, QStringLiteral("queue_live_view_frames"), m_livePathTelemetry.queueLiveViewFrames);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_paused_drops"), m_livePathTelemetry.liveViewPausedDrops);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_panel_drops"), m_livePathTelemetry.liveViewPanelDrops);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_flush_calls"), m_livePathTelemetry.liveViewFlushCalls);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("live_view_flush_timer_fire_count"), m_livePathTelemetry.liveViewFlushTimerFireCount);
     CanMonitorTransport::insertCounter(out, QStringLiteral("append_live_batch_calls"), m_livePathTelemetry.appendLiveBatchCalls);
     CanMonitorTransport::insertCounter(out, QStringLiteral("append_live_batch_frames"), m_livePathTelemetry.appendLiveBatchFrames);
     CanMonitorTransport::insertCounter(out, QStringLiteral("live_model_rows"), m_livePathTelemetry.liveModelRows);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_receive"), m_livePathTelemetry.appSnapshotReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_ack"), m_livePathTelemetry.appSnapshotAck);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_apply"), m_livePathTelemetry.appSnapshotApply);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_apply_rows"), m_livePathTelemetry.appSnapshotApplyRows);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_last_receive_wall_ms"),
+                                       quint64(std::max<qint64>(0, m_livePathTelemetry.appSnapshotLastReceiveWallMs)));
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_snapshot_last_apply_wall_ms"),
+                                       quint64(std::max<qint64>(0, m_livePathTelemetry.appSnapshotLastApplyWallMs)));
+    out.insert(QStringLiteral("app_snapshot_apply_max_ms"), m_livePathTelemetry.appSnapshotApplyMaxMs);
     out.insert(QStringLiteral("liveFlushTimerActive"), m_livePathTelemetry.liveFlushTimerActive);
     out.insert(QStringLiteral("liveViewFlushTimerActive"), m_livePathTelemetry.liveViewFlushTimerActive);
     out.insert(QStringLiteral("m_livePanelActive"), m_livePathTelemetry.livePanelActive);
@@ -1827,7 +1849,11 @@ QJsonObject AppController::livePathTraceObject() {
 }
 
 QJsonObject AppController::drainEventTraceObject() {
-    return m_workerDrainEventTrace;
+    QJsonObject out = m_workerDrainEventTrace;
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedProjectionStatus_receive"), m_drainEventTelemetry.typedProjectionStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTruthStatus_receive"), m_drainEventTelemetry.typedTruthStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTransportStatus_receive"), m_drainEventTelemetry.typedTransportStatusReceive);
+    return out;
 }
 
 namespace {
@@ -2237,6 +2263,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     m_liveFlushTimer.setSingleShot(true);
     m_liveFlushTimer.setInterval(12);
     connect(&m_liveFlushTimer, &QTimer::timeout, this, [this]() {
+        ++m_livePathTelemetry.liveFlushTimerFireCount;
         flushPendingLiveFrames();
     });
 
@@ -2384,7 +2411,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         if (frames.isEmpty()) return;
         ++m_livePathTelemetry.appFramesReceivedCalls;
         m_livePathTelemetry.appFramesReceivedFrames += quint64(frames.size());
+        ++m_livePathTelemetry.framesReceivedSlotSeq;
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+        m_livePathTelemetry.framesReceivedLastSlotWallMs = m_lastLiveFrameWallMs;
         CanMonitorPerf::ScopedProbe probe("app.projection_frames_received", frames.size(), 3000);
         appendPendingLiveFrames(frames);
         if (!m_liveFlushTimer.isActive()) {
@@ -2752,6 +2781,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                  quint64 observedControlEvidenceRecords,
                                                                                  quint64 projectedControlEvidenceRecords,
                                                                                  quint64 sampledControlEvidenceRecords) {
+        ++m_drainEventTelemetry.typedProjectionStatusReceive;
         m_typedTypeCounts[static_cast<quint8>(TypedRecordType::CanRxRaw)] =
             std::max(m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw)), observedCanRxFrames);
         m_typedCanRxByBus[0] = std::max(m_typedCanRxByBus.value(0), observedBus0CanRxFrames);
@@ -2778,6 +2808,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                             int lastOutputFrames,
                                                                             int lastFlushMs,
                                                                             quint64 truthLoss) {
+        ++m_drainEventTelemetry.typedTruthStatusReceive;
         m_transportSession.updateLiveTruth(observedCanRxFrames,
                                            emittedTruthFrames,
                                            coalescedTruthUpdates,
@@ -2802,8 +2833,18 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                   const QVariantList& valueRows,
                                                                                   const QVariantList& alarmRows) {
         if (source != QStringLiteral("live")) return;
+        ++m_livePathTelemetry.appSnapshotReceive;
+        m_livePathTelemetry.appSnapshotLastReceiveWallMs = QDateTime::currentMSecsSinceEpoch();
         CanMonitorPerf::ScopedProbe probe("app.analysis_snapshot_accept", timingRows.size() + valueRows.size() + alarmRows.size(), 5000);
+        QElapsedTimer applyTimer;
+        applyTimer.start();
+        ++m_livePathTelemetry.appSnapshotAck;
         acceptLiveAnalysisRuntimeSnapshot(level, summary, diagnostics, timingRows, valueRows, alarmRows);
+        ++m_livePathTelemetry.appSnapshotApply;
+        m_livePathTelemetry.appSnapshotApplyRows += quint64(timingRows.size() + valueRows.size() + alarmRows.size());
+        m_livePathTelemetry.appSnapshotLastApplyWallMs = QDateTime::currentMSecsSinceEpoch();
+        m_livePathTelemetry.appSnapshotApplyMaxMs =
+            std::max<qint64>(m_livePathTelemetry.appSnapshotApplyMaxMs, applyTimer.elapsed());
     });
     connect(m_worker, &SerialWorker::typedTransportStatusChanged, this, [this](quint64 frames,
                                                                                quint64 bytesDropped,
@@ -2811,6 +2852,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                quint64 lengthFailures,
                                                                                quint64 versionWarnings,
                                                                                quint64 seqGaps) {
+        ++m_drainEventTelemetry.typedTransportStatusReceive;
         m_typedRecordCount = std::max(m_typedRecordCount, frames);
         m_typedBytesDropped = bytesDropped;
         m_typedCrcFailures = crcFailures;
@@ -3019,6 +3061,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 
     m_liveViewFlushTimer.setSingleShot(true);
     connect(&m_liveViewFlushTimer, &QTimer::timeout, this, [this]() {
+        ++m_livePathTelemetry.liveViewFlushTimerFireCount;
         flushQueuedLiveViewBatch();
     });
 

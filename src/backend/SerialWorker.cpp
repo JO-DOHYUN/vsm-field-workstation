@@ -88,6 +88,9 @@ QJsonObject serialLiveTraceJson(CanMonitorTransport::LivePathTelemetry& telemetr
     out.insert(QStringLiteral("frames_received_emit_per_sec"),
                telemetry.rates.ratePerSec(QStringLiteral("frames_received_emit"), telemetry.framesReceivedEmit, nowMs));
     CanMonitorTransport::insertCounter(out, QStringLiteral("frames_received_frames"), telemetry.framesReceivedFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("frames_received_emit_seq"), telemetry.framesReceivedEmitSeq);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("frames_received_last_emit_wall_ms"),
+                                       quint64(std::max<qint64>(0, telemetry.framesReceivedLastEmitWallMs)));
     return out;
 }
 
@@ -100,6 +103,33 @@ QJsonObject serialDrainTraceJson(CanMonitorTransport::DrainEventTelemetry& telem
     CanMonitorTransport::insertCounter(out, QStringLiteral("typed_worker_invoke_suppressed"), telemetry.typedWorkerInvokeSuppressed);
     CanMonitorTransport::insertCounter(out, QStringLiteral("drain_status_received"), telemetry.drainStatusReceived);
     out.insert(QStringLiteral("drain_pump_scheduled_flag"), telemetry.drainPumpScheduledFlag);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedProjectionStatus_emit"), telemetry.typedProjectionStatusEmit);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedProjectionStatus_receive"), telemetry.typedProjectionStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTruthStatus_emit"), telemetry.typedTruthStatusEmit);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTruthStatus_receive"), telemetry.typedTruthStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTransportStatus_emit"), telemetry.typedTransportStatusEmit);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTransportStatus_receive"), telemetry.typedTransportStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_pending_frames"), telemetry.analysisHandoffPendingFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_max_pending_frames"), telemetry.analysisHandoffMaxPendingFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_dispatch_count"), telemetry.analysisHandoffDispatchCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_dispatch_frames"), telemetry.analysisHandoffDispatchFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_complete_count"), telemetry.analysisHandoffCompleteCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_complete_frames"), telemetry.analysisHandoffCompleteFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_overrun_frames"), telemetry.analysisHandoffOverrunFrames);
+    out.insert(QStringLiteral("analysis_handoff_inflight"), telemetry.analysisHandoffInflight);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_pending_frames"), telemetry.rawLedgerHandoffPendingFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_pending_bytes"), telemetry.rawLedgerHandoffPendingBytes);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_max_pending_bytes"), telemetry.rawLedgerHandoffMaxPendingBytes);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_dispatch_count"), telemetry.rawLedgerHandoffDispatchCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_dispatch_frames"), telemetry.rawLedgerHandoffDispatchFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_complete_count"), telemetry.rawLedgerHandoffCompleteCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_complete_frames"), telemetry.rawLedgerHandoffCompleteFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_overrun_bytes"), telemetry.rawLedgerHandoffOverrunBytes);
+    out.insert(QStringLiteral("raw_ledger_handoff_inflight"), telemetry.rawLedgerHandoffInflight);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_emit_count"), telemetry.truthHandoffEmitCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_emit_frames"), telemetry.truthHandoffEmitFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_pending_keys"), telemetry.truthHandoffPendingKeys);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_flush_count"), telemetry.truthHandoffFlushCount);
     return out;
 }
 
@@ -567,6 +597,7 @@ void SerialWorker::setAnalysisConfig(const CanMonitorAnalysis::AnalysisRuntime::
 }
 
 void SerialWorker::emitTypedStatus(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {
+    ++m_drainEventTelemetry.typedTransportStatusEmit;
     emit typedTransportStatusChanged(status.frames,
                                      status.bytesDropped,
                                      status.crcFailures,
@@ -664,7 +695,10 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
     if (!frames.isEmpty()) {
         ++m_livePathTelemetry.framesReceivedEmit;
         m_livePathTelemetry.framesReceivedFrames += quint64(frames.size());
+        ++m_livePathTelemetry.framesReceivedEmitSeq;
+        m_livePathTelemetry.framesReceivedLastEmitWallMs = QDateTime::currentMSecsSinceEpoch();
         emit framesReceived(frames);
+        emitDrainPipelineStatus(true);
     }
     m_projectionFlushClock.restart();
     emitProjectionStatus(m_liveProjection.status());
@@ -677,6 +711,7 @@ void SerialWorker::queueRawLedgerFrames(const FrameRecordList& frames) {
     const quint64 incomingBytes = quint64(frames.size()) * quint64(kTypedCanRxSegmentHeaderSize + kTypedCanRxSegmentEntrySize + kTypedTransportFrameOverhead);
     if (m_pendingRawLedgerBytes + incomingBytes > kRawLedgerHandoffMaxBytes) {
         m_rawLedgerHandoffOverrunBytes += incomingBytes;
+        m_drainEventTelemetry.rawLedgerHandoffOverrunBytes = m_rawLedgerHandoffOverrunBytes;
         emit rawLedgerWriterStatusChanged(m_pendingRawLedgerBytes,
                                           m_pendingRawLedgerMaxBytes,
                                           m_rawLedgerHandoffOverrunBytes,
@@ -689,6 +724,9 @@ void SerialWorker::queueRawLedgerFrames(const FrameRecordList& frames) {
     for (const FrameRecord& frame : frames) m_pendingRawLedgerFrames.push_back(frame);
     m_pendingRawLedgerBytes += incomingBytes;
     m_pendingRawLedgerMaxBytes = std::max(m_pendingRawLedgerMaxBytes, m_pendingRawLedgerBytes);
+    m_drainEventTelemetry.rawLedgerHandoffPendingFrames = quint64(std::max<qsizetype>(0, m_pendingRawLedgerFrames.size()));
+    m_drainEventTelemetry.rawLedgerHandoffPendingBytes = m_pendingRawLedgerBytes;
+    m_drainEventTelemetry.rawLedgerHandoffMaxPendingBytes = m_pendingRawLedgerMaxBytes;
     if (m_rawLedgerFlushTimerId == 0) {
         m_rawLedgerFlushTimerId = startTimer(kRawLedgerFlushIntervalMs, Qt::CoarseTimer);
     }
@@ -710,6 +748,13 @@ void SerialWorker::flushQueuedRawLedgerRecords(bool force) {
     m_pendingRawLedgerFrames.erase(m_pendingRawLedgerFrames.begin(), m_pendingRawLedgerFrames.begin() + takeCount);
     m_pendingRawLedgerBytes = bytes > m_pendingRawLedgerBytes ? 0 : m_pendingRawLedgerBytes - bytes;
     m_rawLedgerDispatchInFlight = true;
+    m_rawLedgerDispatchInFlightFrames = quint64(takeCount);
+    ++m_drainEventTelemetry.rawLedgerHandoffDispatchCount;
+    m_drainEventTelemetry.rawLedgerHandoffDispatchFrames += quint64(takeCount);
+    m_drainEventTelemetry.rawLedgerHandoffPendingFrames = quint64(std::max<qsizetype>(0, m_pendingRawLedgerFrames.size()));
+    m_drainEventTelemetry.rawLedgerHandoffPendingBytes = m_pendingRawLedgerBytes;
+    m_drainEventTelemetry.rawLedgerHandoffMaxPendingBytes = m_pendingRawLedgerMaxBytes;
+    m_drainEventTelemetry.rawLedgerHandoffInflight = true;
     QPointer<CanMonitorTransport::RawLedgerWriterRuntime> worker = m_rawLedgerWorker;
     QMetaObject::invokeMethod(m_rawLedgerWorker, [worker, frames = std::move(out)]() mutable {
         if (worker) worker->appendFrames(std::move(frames));
@@ -722,6 +767,8 @@ void SerialWorker::flushRawLedgerHandoffSync() {
         FrameRecordList frames;
         frames.swap(m_pendingRawLedgerFrames);
         m_pendingRawLedgerBytes = 0;
+        m_drainEventTelemetry.rawLedgerHandoffPendingFrames = 0;
+        m_drainEventTelemetry.rawLedgerHandoffPendingBytes = 0;
         QPointer<CanMonitorTransport::RawLedgerWriterRuntime> worker = m_rawLedgerWorker;
         QMetaObject::invokeMethod(m_rawLedgerWorker, [worker, frames = std::move(frames)]() mutable {
             if (worker) worker->appendFrames(std::move(frames));
@@ -730,13 +777,20 @@ void SerialWorker::flushRawLedgerHandoffSync() {
         QMetaObject::invokeMethod(m_rawLedgerWorker, []() {}, Qt::BlockingQueuedConnection);
     }
     m_rawLedgerDispatchInFlight = false;
+    m_rawLedgerDispatchInFlightFrames = 0;
+    m_drainEventTelemetry.rawLedgerHandoffInflight = false;
 }
 
 void SerialWorker::queueTruthFrames(const TypedRecordList& records) {
     CanMonitorPerf::ScopedProbe probe("truth.queue_records", records.size(), 2000);
     const auto result = m_liveTruth.ingest(records);
-    if (!result.frames.isEmpty()) emit truthFramesReceived(result.frames);
+    if (!result.frames.isEmpty()) {
+        ++m_drainEventTelemetry.truthHandoffEmitCount;
+        m_drainEventTelemetry.truthHandoffEmitFrames += quint64(result.frames.size());
+        emit truthFramesReceived(result.frames);
+    }
     if (result.statusDue) emitTruthStatus(result.status);
+    m_drainEventTelemetry.truthHandoffPendingKeys = quint64(std::max(0, m_liveTruth.status().pendingKeys));
     if (!m_liveTruth.hasPending()) return;
     if (m_truthFlushTimerId == 0) {
         m_truthFlushTimerId = startTimer(m_liveTruth.flushIntervalMs(), Qt::CoarseTimer);
@@ -746,7 +800,13 @@ void SerialWorker::queueTruthFrames(const TypedRecordList& records) {
 void SerialWorker::flushQueuedTruthFrames(bool force) {
     CanMonitorPerf::ScopedProbe probe("truth.flush_frames", m_liveTruth.status().pendingKeys, 2000);
     const FrameRecordList frames = m_liveTruth.flush(force);
-    if (!frames.isEmpty()) emit truthFramesReceived(frames);
+    ++m_drainEventTelemetry.truthHandoffFlushCount;
+    if (!frames.isEmpty()) {
+        ++m_drainEventTelemetry.truthHandoffEmitCount;
+        m_drainEventTelemetry.truthHandoffEmitFrames += quint64(frames.size());
+        emit truthFramesReceived(frames);
+    }
+    m_drainEventTelemetry.truthHandoffPendingKeys = quint64(std::max(0, m_liveTruth.status().pendingKeys));
     emitTruthStatus(m_liveTruth.status());
 }
 
@@ -761,11 +821,15 @@ void SerialWorker::queueAnalysisFrames(const FrameRecordList& frames) {
         for (qsizetype index = 0; index < accepted; ++index) {
             m_pendingAnalysisFrames.push_back(frames.at(index));
         }
+        m_drainEventTelemetry.analysisHandoffPendingFrames = quint64(std::max<qsizetype>(0, m_pendingAnalysisFrames.size()));
+        m_drainEventTelemetry.analysisHandoffMaxPendingFrames =
+            std::max(m_drainEventTelemetry.analysisHandoffMaxPendingFrames, m_drainEventTelemetry.analysisHandoffPendingFrames);
     }
 
     const qsizetype dropped = frames.size() - accepted;
     if (dropped > 0) {
         m_analysisHandoffOverrunFrames += quint64(dropped);
+        m_drainEventTelemetry.analysisHandoffOverrunFrames = m_analysisHandoffOverrunFrames;
         QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime> worker = m_analysisWorker;
         QMetaObject::invokeMethod(m_analysisWorker, [worker, dropped]() {
             if (worker) {
@@ -798,6 +862,11 @@ void SerialWorker::dispatchAnalysisFrames() {
     m_pendingAnalysisFrames.erase(m_pendingAnalysisFrames.begin(), m_pendingAnalysisFrames.begin() + takeCount);
 
     m_analysisDispatchInFlight = true;
+    m_analysisDispatchInFlightFrames = quint64(takeCount);
+    ++m_drainEventTelemetry.analysisHandoffDispatchCount;
+    m_drainEventTelemetry.analysisHandoffDispatchFrames += quint64(takeCount);
+    m_drainEventTelemetry.analysisHandoffPendingFrames = quint64(std::max<qsizetype>(0, m_pendingAnalysisFrames.size()));
+    m_drainEventTelemetry.analysisHandoffInflight = true;
     QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime> worker = m_analysisWorker;
     QMetaObject::invokeMethod(m_analysisWorker, [worker, frames = std::move(frames)]() mutable {
         if (worker) worker->enqueueFrames(std::move(frames));
@@ -888,6 +957,7 @@ void SerialWorker::flushCaptureWriterHandoffSync() {
 
 void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
     m_lastProjectionStatus = status;
+    ++m_drainEventTelemetry.typedProjectionStatusEmit;
     emit typedProjectionStatusChanged(status.observedCanRxFrames,
                                       status.projectedCanRxFrames,
                                       status.sampledCanRxFrames + m_projectionQueueSampledFrames,
@@ -900,6 +970,7 @@ void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectio
 }
 
 void SerialWorker::emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
+    ++m_drainEventTelemetry.typedTruthStatusEmit;
     emit typedTruthStatusChanged(status.observedCanRxFrames,
                                  status.emittedTruthFrames,
                                  status.coalescedTruthUpdates,
@@ -932,6 +1003,9 @@ void SerialWorker::resetProjectionQueue() {
     m_pendingAnalysisFrames.clear();
     m_analysisDispatchScheduled = false;
     m_analysisDispatchInFlight = false;
+    m_analysisDispatchInFlightFrames = 0;
+    m_rawLedgerDispatchInFlight = false;
+    m_rawLedgerDispatchInFlightFrames = 0;
     m_projectionFlushClock.invalidate();
     m_liveTruth.reset();
     resetAnalysisWorker();
@@ -1211,6 +1285,8 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                    quint64 observedControlEvidenceRecords,
                    quint64 projectedControlEvidenceRecords,
                    quint64 sampledControlEvidenceRecords) {
+                ++m_drainEventTelemetry.typedProjectionStatusReceive;
+                ++m_drainEventTelemetry.typedProjectionStatusEmit;
                 emit typedProjectionStatusChanged(observedCanRxFrames,
                                                   projectedCanRxFrames,
                                                   sampledCanRxFrames + m_projectionQueueSampledFrames,
@@ -1225,12 +1301,52 @@ void SerialWorker::ensureTypedPipelineRuntime() {
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::truthStatusReady,
             this,
-            &SerialWorker::typedTruthStatusChanged,
+            [this](quint64 observedCanRxFrames,
+                   quint64 emittedTruthFrames,
+                   quint64 coalescedTruthUpdates,
+                   quint64 observedBus0CanRxFrames,
+                   quint64 observedBus1CanRxFrames,
+                   quint64 flushCount,
+                   int pendingKeys,
+                   int maxPendingKeys,
+                   int lastInputRecords,
+                   int lastOutputFrames,
+                   int lastFlushMs,
+                   quint64 truthLoss) {
+                ++m_drainEventTelemetry.typedTruthStatusReceive;
+                ++m_drainEventTelemetry.typedTruthStatusEmit;
+                emit typedTruthStatusChanged(observedCanRxFrames,
+                                             emittedTruthFrames,
+                                             coalescedTruthUpdates,
+                                             observedBus0CanRxFrames,
+                                             observedBus1CanRxFrames,
+                                             flushCount,
+                                             pendingKeys,
+                                             maxPendingKeys,
+                                             lastInputRecords,
+                                             lastOutputFrames,
+                                             lastFlushMs,
+                                             truthLoss);
+            },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::typedStatusReady,
             this,
-            &SerialWorker::typedTransportStatusChanged,
+            [this](quint64 frames,
+                   quint64 bytesDropped,
+                   quint64 crcFailures,
+                   quint64 lengthFailures,
+                   quint64 versionWarnings,
+                   quint64 seqGaps) {
+                ++m_drainEventTelemetry.typedTransportStatusReceive;
+                ++m_drainEventTelemetry.typedTransportStatusEmit;
+                emit typedTransportStatusChanged(frames,
+                                                 bytesDropped,
+                                                 crcFailures,
+                                                 lengthFailures,
+                                                 versionWarnings,
+                                                 seqGaps);
+            },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::pipelineStatusChanged,
@@ -1311,6 +1427,12 @@ void SerialWorker::ensureAnalysisRuntime() {
             this,
             [this]() {
                 m_analysisDispatchInFlight = false;
+                ++m_drainEventTelemetry.analysisHandoffCompleteCount;
+                m_drainEventTelemetry.analysisHandoffCompleteFrames += m_analysisDispatchInFlightFrames;
+                m_analysisDispatchInFlightFrames = 0;
+                m_drainEventTelemetry.analysisHandoffInflight = false;
+                m_drainEventTelemetry.analysisHandoffPendingFrames =
+                    quint64(std::max<qsizetype>(0, m_pendingAnalysisFrames.size()));
                 scheduleAnalysisDispatch();
             },
             Qt::QueuedConnection);
@@ -1460,6 +1582,13 @@ void SerialWorker::ensureRawLedgerRuntime() {
             this,
             [this]() {
                 m_rawLedgerDispatchInFlight = false;
+                ++m_drainEventTelemetry.rawLedgerHandoffCompleteCount;
+                m_drainEventTelemetry.rawLedgerHandoffCompleteFrames += m_rawLedgerDispatchInFlightFrames;
+                m_rawLedgerDispatchInFlightFrames = 0;
+                m_drainEventTelemetry.rawLedgerHandoffInflight = false;
+                m_drainEventTelemetry.rawLedgerHandoffPendingFrames =
+                    quint64(std::max<qsizetype>(0, m_pendingRawLedgerFrames.size()));
+                m_drainEventTelemetry.rawLedgerHandoffPendingBytes = m_pendingRawLedgerBytes;
                 if (!m_pendingRawLedgerFrames.isEmpty()) flushQueuedRawLedgerRecords(false);
             },
             Qt::QueuedConnection);
@@ -1481,6 +1610,7 @@ void SerialWorker::shutdownRawLedgerRuntime() {
     m_rawLedgerWriteFailures = 0;
     m_rawLedgerLastError.clear();
     m_rawLedgerDispatchInFlight = false;
+    m_rawLedgerDispatchInFlightFrames = 0;
 }
 
 CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate SerialWorker::finalizeCaptureWriterIfActive() {

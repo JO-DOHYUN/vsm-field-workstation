@@ -124,6 +124,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         const auto& s = result.truthStatus;
         ++m_eventTelemetry.outputSignalCount;
         ++m_eventTelemetry.statusSignalCount;
+        ++m_eventTelemetry.truthStatusReadySignalCount;
         emit truthStatusReady(s.observedCanRxFrames,
                               s.emittedTruthFrames,
                               s.coalescedTruthUpdates,
@@ -174,6 +175,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         const auto truthStatus = m_core.truthStatus();
         ++m_eventTelemetry.outputSignalCount;
         ++m_eventTelemetry.statusSignalCount;
+        ++m_eventTelemetry.truthStatusReadySignalCount;
         emit truthStatusReady(truthStatus.observedCanRxFrames,
                               truthStatus.emittedTruthFrames,
                               truthStatus.coalescedTruthUpdates,
