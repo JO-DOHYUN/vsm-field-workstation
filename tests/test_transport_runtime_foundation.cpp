@@ -6,6 +6,7 @@
 #include "transport/LiveTruthRuntime.h"
 #include "transport/TransportSession.h"
 #include "transport/TransportRuntime.h"
+#include "transport/TypedEvidencePipelineWorkerRuntime.h"
 #include "TypedTransportParser.h"
 
 #include <QtTest/QtTest>
@@ -105,6 +106,10 @@ class TransportRuntimeFoundationTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void initTestCase() {
+        qRegisterMetaType<QJsonObject>("QJsonObject");
+    }
+
     void hostTxQueuePreservesFifoAndCounters() {
         CanMonitorTransport::HostTxQueue queue(4, 128);
 
@@ -294,6 +299,57 @@ private slots:
                                                  liveQuery.snapshot.viewSeq,
                                                  0});
         QVERIFY(!noChange.changed);
+    }
+
+    void typedEvidenceWorkerExposesCoreViewQueryPlane() {
+        auto queue = QSharedPointer<CanMonitorTransport::DrainByteQueue>::create();
+        QByteArray bytes;
+        bytes += makeTypedFrame(makeCanRxRecord(31, 0x221, 3100, 0));
+        bytes += makeTypedFrame(makeCanRxRecord(32, 0x222, 3200, 1));
+        QVERIFY(queue->push(bytes));
+
+        CanMonitorTransport::TypedEvidencePipelineWorkerRuntime worker(queue);
+        QSignalSpy changedSpy(&worker, &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewChanged);
+        QSignalSpy snapshotSpy(&worker, &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewSnapshotReady);
+
+        worker.schedulePump(0);
+        QTRY_VERIFY(changedSpy.size() >= 1);
+
+        bool sawLiveLatest = false;
+        for (const auto& signalArgs : changedSpy) {
+            const QJsonObject change = signalArgs.at(0).toJsonObject();
+            if (change.value(QStringLiteral("view_name")).toString() == QStringLiteral("live_latest")) {
+                sawLiveLatest = true;
+                QCOMPARE(change.value(QStringLiteral("cheap_counts")).toObject().value(QStringLiteral("key_count")).toInt(), 2);
+                break;
+            }
+        }
+        QVERIFY(sawLiveLatest);
+
+        worker.queryCoreView(QStringLiteral("live_latest"), 0, 1, 1001);
+        QTRY_COMPARE(snapshotSpy.size(), 1);
+        const auto snapshotArgs = snapshotSpy.takeFirst();
+        QCOMPARE(snapshotArgs.at(0).toULongLong(), quint64(1001));
+        QCOMPARE(snapshotArgs.at(1).toBool(), true);
+        const QJsonObject snapshot = snapshotArgs.at(2).toJsonObject();
+        const QJsonArray rows = snapshot.value(QStringLiteral("payload")).toObject().value(QStringLiteral("frames")).toArray();
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().toObject().value(QStringLiteral("can_id")).toInt(), 0x222);
+
+        const quint64 viewSeq = snapshot.value(QStringLiteral("view_seq")).toString().toULongLong();
+        worker.queryCoreView(QStringLiteral("live_latest"), viewSeq, 0, 1002);
+        QTRY_COMPARE(snapshotSpy.size(), 1);
+        const auto noChangeArgs = snapshotSpy.takeFirst();
+        QCOMPARE(noChangeArgs.at(0).toULongLong(), quint64(1002));
+        QCOMPARE(noChangeArgs.at(1).toBool(), false);
+
+        worker.queryCoreView(QStringLiteral("missing_view"), 0, 0, 1003);
+        QTRY_COMPARE(snapshotSpy.size(), 1);
+        const auto errorArgs = snapshotSpy.takeFirst();
+        QCOMPARE(errorArgs.at(0).toULongLong(), quint64(1003));
+        QCOMPARE(errorArgs.at(1).toBool(), false);
+        QCOMPARE(errorArgs.at(2).toJsonObject().value(QStringLiteral("error")).toString(),
+                 QStringLiteral("unknown_core_view"));
     }
 
     void transportRuntimeNormalizesProductionModeKeys() {

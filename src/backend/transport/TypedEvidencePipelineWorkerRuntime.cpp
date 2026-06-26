@@ -84,6 +84,26 @@ void TypedEvidencePipelineWorkerRuntime::acknowledgeProjectionSnapshot() {
     if (!m_pendingProjectionByKey.isEmpty()) scheduleProjectionSnapshot();
 }
 
+void TypedEvidencePipelineWorkerRuntime::queryCoreView(const QString& viewName,
+                                                       quint64 sinceSeq,
+                                                       int limit,
+                                                       quint64 requestId) {
+    CanMonitorCore::CoreViewName parsedView = CanMonitorCore::CoreViewName::CoreHealth;
+    if (!CanMonitorCore::coreViewNameFromString(viewName, &parsedView)) {
+        QJsonObject error;
+        error.insert(QStringLiteral("view_name"), viewName);
+        error.insert(QStringLiteral("error"), QStringLiteral("unknown_core_view"));
+        emit coreViewSnapshotReady(requestId, false, error, QJsonObject{});
+        return;
+    }
+
+    const auto result = m_core.queryView({parsedView, sinceSeq, limit});
+    emit coreViewSnapshotReady(requestId,
+                               result.changed,
+                               result.snapshot.toJson(),
+                               result.change.toJson());
+}
+
 void TypedEvidencePipelineWorkerRuntime::pump() {
     m_pumpScheduled = false;
     ++m_eventTelemetry.pumpCalls;
@@ -105,6 +125,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
     }
 
     auto result = m_core.ingestBlocks(blocks, m_handshakeElapsedMs, snapshotBefore.usedBytes);
+    emitCoreViewChanges(result.viewChanges);
     if (result.capabilityFirstSeen) {
         ++m_eventTelemetry.outputSignalCount;
         emit capabilityFirstSeen(result.capabilityElapsedMs, result.capabilityBytes);
@@ -154,6 +175,13 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         queueTruthStatusSnapshot(m_core.truthStatus());
     }
     emit pumpCycleFinished();
+}
+
+void TypedEvidencePipelineWorkerRuntime::emitCoreViewChanges(const QVector<CanMonitorCore::ViewChanged>& changes) {
+    for (const auto& change : changes) {
+        ++m_eventTelemetry.outputSignalCount;
+        emit coreViewChanged(change.toJson());
+    }
 }
 
 void TypedEvidencePipelineWorkerRuntime::emitPipelineStatus(const CaptureCoreRuntime::Result* result, bool force) {

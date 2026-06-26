@@ -59,6 +59,7 @@ public slots:
     void sendControlCycleBurstOnce(int signedCommand, int rpm, double steeringDeg, quint8 motorMode, quint8 drivingMode, quint8 bus, const QString& reason, bool resetSlew = false);
     void setAnalysisConfig(const CanMonitorAnalysis::AnalysisRuntime::Config& config);
     void resetRawLedger(const QString& label = QStringLiteral("live"));
+    void requestCoreView(const QString& viewName, quint64 sinceSeq, int limit, quint64 requestId);
 
 signals:
     void stateChanged(bool connected, const QString& message);
@@ -134,6 +135,8 @@ signals:
                             quint64 captureWriteMaxMs);
     void livePathTraceChanged(const QJsonObject& trace);
     void drainEventTraceChanged(const QJsonObject& trace);
+    void coreViewChanged(const QJsonObject& change);
+    void coreViewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void analysisQueueStatusChanged(quint64 queuedFrames,
                                     quint64 maxQueuedFrames,
                                     quint64 capacityFrames,

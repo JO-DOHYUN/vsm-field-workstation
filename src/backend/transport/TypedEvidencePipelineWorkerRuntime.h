@@ -26,6 +26,7 @@ public slots:
     void setCaptureEnabled(bool enabled);
     void setSecondaryFanoutEnabled(bool enabled);
     void acknowledgeProjectionSnapshot();
+    void queryCoreView(const QString& viewName, quint64 sinceSeq, int limit, quint64 requestId);
 
 signals:
     void capabilityFirstSeen(qint64 elapsedMs, quint64 bytes);
@@ -66,6 +67,8 @@ signals:
     void pipelineStatusChanged(quint64 parseBacklogBytes, quint64 parserBatchMaxMs);
     void captureDiagnosticsChanged(const QJsonObject& diagnostics);
     void pipelineTraceChanged(const QJsonObject& livePathTrace, const QJsonObject& drainEventTrace);
+    void coreViewChanged(const QJsonObject& change);
+    void coreViewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void pumpCycleFinished();
 
 private slots:
@@ -74,6 +77,7 @@ private slots:
 
 private:
     void emitPipelineStatus(const CaptureCoreRuntime::Result* result = nullptr, bool force = false);
+    void emitCoreViewChanges(const QVector<CanMonitorCore::ViewChanged>& changes);
     void queueProjectionSnapshotFrames(const FrameRecordList& frames);
     void scheduleProjectionSnapshot();
     void emitProjectionSnapshot();

@@ -609,6 +609,23 @@ void SerialWorker::setAnalysisConfig(const CanMonitorAnalysis::AnalysisRuntime::
     }, Qt::QueuedConnection);
 }
 
+void SerialWorker::requestCoreView(const QString& viewName, quint64 sinceSeq, int limit, quint64 requestId) {
+    if (!m_typedPipelineWorker) {
+        QJsonObject error;
+        error.insert(QStringLiteral("view_name"), viewName);
+        error.insert(QStringLiteral("error"), QStringLiteral("typed_pipeline_not_started"));
+        emit coreViewSnapshotReady(requestId, false, error, QJsonObject{});
+        return;
+    }
+
+    QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime> worker = m_typedPipelineWorker;
+    QMetaObject::invokeMethod(m_typedPipelineWorker,
+                              [worker, viewName, sinceSeq, limit, requestId]() {
+                                  if (worker) worker->queryCoreView(viewName, sinceSeq, limit, requestId);
+                              },
+                              Qt::QueuedConnection);
+}
+
 void SerialWorker::emitTypedStatus(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {
     ++m_drainEventTelemetry.typedTransportStatusEmit;
     noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTransportStatusChanged, 1, 64);
@@ -1393,6 +1410,16 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                 m_pipelineLivePathTrace = livePathTrace;
                 m_pipelineDrainEventTrace = drainEventTrace;
             },
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewChanged,
+            this,
+            &SerialWorker::coreViewChanged,
+            Qt::QueuedConnection);
+    connect(m_typedPipelineWorker,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewSnapshotReady,
+            this,
+            &SerialWorker::coreViewSnapshotReady,
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::pumpCycleFinished,
