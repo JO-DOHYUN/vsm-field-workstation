@@ -52,6 +52,7 @@ private:
     QElapsedTimer m_flushClock;
     QElapsedTimer m_statusClock;
     Status m_status;
+    quint64 m_lastStatusTruthLoss = 0;
 };
 
 } // namespace CanMonitorTransport

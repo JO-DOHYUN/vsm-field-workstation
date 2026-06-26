@@ -2,6 +2,7 @@
 
 #include "AppLogging.h"
 #include "perf/PerformanceProbeRuntime.h"
+#include "perf/LiveRuntimeTrace.h"
 
 #include <QDateTime>
 #include <QIODevice>
@@ -18,7 +19,7 @@ constexpr int kTypedHandshakeTimeoutMs = 3500;
 constexpr int kUiProjectionFlushIntervalMs = 250;
 constexpr int kUiProjectionMaxFramesPerFlush = 4;
 constexpr int kUiProjectionHardPendingKeys = 64;
-constexpr int kRawLedgerFlushIntervalMs = 60;
+constexpr int kRawLedgerFlushIntervalMs = 200;
 constexpr int kRawLedgerMaxRecordsPerFlush = 512;
 constexpr quint64 kRawLedgerHandoffMaxBytes = 16ULL * 1024ULL * 1024ULL;
 constexpr qsizetype kDrainProcessMaxBytes = 512 * 1024;
@@ -76,6 +77,10 @@ void mergeTrace(QJsonObject& target, const QJsonObject& source) {
     for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
         target.insert(it.key(), it.value());
     }
+}
+
+void noteTraceEmit(CanMonitorPerf::LiveTraceSignal signal, quint64 payloadCount = 0, quint64 payloadBytes = 0) {
+    CanMonitorPerf::LiveRuntimeTraceRegistry::instance().noteEmit(signal, payloadCount, payloadBytes);
 }
 
 QJsonObject serialLiveTraceJson(CanMonitorTransport::LivePathTelemetry& telemetry, qint64 nowMs) {
@@ -222,6 +227,7 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
             emit errorOccurred(QStringLiteral("Typed storage requires TypedEvidence transport mode."));
             return false;
         }
+        resetRawLedger(QStringLiteral("typed_capture"));
         m_pendingCaptureWriterRecords.clear();
         if (m_captureRecordQueue) m_captureRecordQueue->clear();
         m_pendingCaptureWriterBytes = 0;
@@ -253,6 +259,7 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
                                   },
                                   Qt::BlockingQueuedConnection);
     }
+    flushRawLedgerHandoffSync();
     flushCaptureWriterHandoffSync();
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
     QJsonObject diagnostics = m_pipelineCaptureDiagnostics.isEmpty()
@@ -266,6 +273,9 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
     mergeTrace(drainTrace, serialDrainTraceJson(m_drainEventTelemetry, nowMs));
     diagnostics.insert(QStringLiteral("live_path_trace"), liveTrace);
     diagnostics.insert(QStringLiteral("drain_event_trace"), drainTrace);
+    diagnostics.insert(QStringLiteral("live_runtime_trace"),
+                       CanMonitorPerf::LiveRuntimeTraceRegistry::instance().toJson(nowMs));
+    if (!metadata.isEmpty()) diagnostics.insert(QStringLiteral("app_runtime_trace"), metadata);
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, sessionDir, diagnostics, &update]() {
         update = m_captureWriterWorker->stopStorageSync(sessionDir, diagnostics);
     }, Qt::BlockingQueuedConnection);
@@ -553,6 +563,9 @@ void SerialWorker::processLegacyBytes(const QByteArray& bytes) {
         emit errorOccurred(error);
     }
     for (const FrameRecordList& batch : result.frameBatches) {
+        noteTraceEmit(CanMonitorPerf::LiveTraceSignal::FramesReceived,
+                      quint64(batch.size()),
+                      quint64(batch.size()) * quint64(sizeof(FrameRecord)));
         emit framesReceived(batch);
     }
     for (const StatsRecord& stats : result.stats) {
@@ -598,6 +611,7 @@ void SerialWorker::setAnalysisConfig(const CanMonitorAnalysis::AnalysisRuntime::
 
 void SerialWorker::emitTypedStatus(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {
     ++m_drainEventTelemetry.typedTransportStatusEmit;
+    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTransportStatusChanged, 1, 64);
     emit typedTransportStatusChanged(status.frames,
                                      status.bytesDropped,
                                      status.crcFailures,
@@ -697,6 +711,9 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
         m_livePathTelemetry.framesReceivedFrames += quint64(frames.size());
         ++m_livePathTelemetry.framesReceivedEmitSeq;
         m_livePathTelemetry.framesReceivedLastEmitWallMs = QDateTime::currentMSecsSinceEpoch();
+        noteTraceEmit(CanMonitorPerf::LiveTraceSignal::FramesReceived,
+                      quint64(frames.size()),
+                      quint64(frames.size()) * quint64(sizeof(FrameRecord)));
         emit framesReceived(frames);
         emitDrainPipelineStatus(true);
     }
@@ -958,6 +975,7 @@ void SerialWorker::flushCaptureWriterHandoffSync() {
 void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
     m_lastProjectionStatus = status;
     ++m_drainEventTelemetry.typedProjectionStatusEmit;
+    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedProjectionStatusChanged, 1, 96);
     emit typedProjectionStatusChanged(status.observedCanRxFrames,
                                       status.projectedCanRxFrames,
                                       status.sampledCanRxFrames + m_projectionQueueSampledFrames,
@@ -971,6 +989,7 @@ void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectio
 
 void SerialWorker::emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
     ++m_drainEventTelemetry.typedTruthStatusEmit;
+    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
     emit typedTruthStatusChanged(status.observedCanRxFrames,
                                  status.emittedTruthFrames,
                                  status.coalescedTruthUpdates,
@@ -1191,10 +1210,10 @@ void SerialWorker::ensureTypedPipelineRuntime() {
     connect(&m_typedPipelineThread, &QThread::finished, m_typedPipelineWorker, &QObject::deleteLater);
     const bool captureEnabled = m_typedCaptureEnabled;
     QMetaObject::invokeMethod(m_typedPipelineWorker,
-                              [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker), captureEnabled]() {
+                                  [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_typedPipelineWorker), captureEnabled]() {
                                   if (worker) {
                                       worker->setCaptureEnabled(captureEnabled);
-                                      worker->setSecondaryFanoutEnabled(false);
+                                      worker->setSecondaryFanoutEnabled(true);
                                   }
                               },
                               Qt::QueuedConnection);
@@ -1287,6 +1306,7 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                    quint64 sampledControlEvidenceRecords) {
                 ++m_drainEventTelemetry.typedProjectionStatusReceive;
                 ++m_drainEventTelemetry.typedProjectionStatusEmit;
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedProjectionStatusChanged, 1, 96);
                 emit typedProjectionStatusChanged(observedCanRxFrames,
                                                   projectedCanRxFrames,
                                                   sampledCanRxFrames + m_projectionQueueSampledFrames,
@@ -1315,6 +1335,7 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                    quint64 truthLoss) {
                 ++m_drainEventTelemetry.typedTruthStatusReceive;
                 ++m_drainEventTelemetry.typedTruthStatusEmit;
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
                 emit typedTruthStatusChanged(observedCanRxFrames,
                                              emittedTruthFrames,
                                              coalescedTruthUpdates,
@@ -1340,6 +1361,7 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                    quint64 seqGaps) {
                 ++m_drainEventTelemetry.typedTransportStatusReceive;
                 ++m_drainEventTelemetry.typedTransportStatusEmit;
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTransportStatusChanged, 1, 64);
                 emit typedTransportStatusChanged(frames,
                                                  bytesDropped,
                                                  crcFailures,
@@ -1410,7 +1432,18 @@ void SerialWorker::ensureAnalysisRuntime() {
     connect(m_analysisWorker,
             &CanMonitorAnalysis::AnalysisWorkerRuntime::snapshotReady,
             this,
-            &SerialWorker::analysisRuntimeSnapshotChanged,
+            [this](const QString& source,
+                   const QString& level,
+                   const QString& summary,
+                   const QVariantList& diagnostics,
+                   const QVariantList& timingRows,
+                   const QVariantList& valueRows,
+                   const QVariantList& alarmRows) {
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::AnalysisRuntimeSnapshotChanged,
+                              quint64(timingRows.size() + valueRows.size() + alarmRows.size()),
+                              0);
+                emit analysisRuntimeSnapshotChanged(source, level, summary, diagnostics, timingRows, valueRows, alarmRows);
+            },
             Qt::QueuedConnection);
     connect(m_analysisWorker,
             &CanMonitorAnalysis::AnalysisWorkerRuntime::statusChanged,
@@ -1552,7 +1585,17 @@ void SerialWorker::ensureRawLedgerRuntime() {
     connect(m_rawLedgerWorker,
             &CanMonitorTransport::RawLedgerWriterRuntime::batchCommitted,
             this,
-            &SerialWorker::rawLedgerBatchCommitted,
+            [this](const FrameRecordList& frames,
+                   quint64 firstSeq,
+                   quint64 lastSeq,
+                   quint64 totalRows,
+                   quint64 segmentBytes,
+                   const QString& path) {
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::RawLedgerBatchCommitted,
+                              quint64(frames.size()),
+                              quint64(frames.size()) * quint64(sizeof(FrameRecord)));
+                emit rawLedgerBatchCommitted(frames, firstSeq, lastSeq, totalRows, segmentBytes, path);
+            },
             Qt::QueuedConnection);
     connect(m_rawLedgerWorker,
             &CanMonitorTransport::RawLedgerWriterRuntime::statusChanged,
@@ -1636,6 +1679,8 @@ CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate SerialWorker::fina
     mergeTrace(drainTrace, serialDrainTraceJson(m_drainEventTelemetry, nowMs));
     diagnostics.insert(QStringLiteral("live_path_trace"), liveTrace);
     diagnostics.insert(QStringLiteral("drain_event_trace"), drainTrace);
+    diagnostics.insert(QStringLiteral("live_runtime_trace"),
+                       CanMonitorPerf::LiveRuntimeTraceRegistry::instance().toJson(nowMs));
     QMetaObject::invokeMethod(m_captureWriterWorker, [this, diagnostics, &update]() {
         update = m_captureWriterWorker->finalizeStorageIfActiveSync(diagnostics);
     }, Qt::BlockingQueuedConnection);

@@ -11,6 +11,7 @@
 #include "SignalDecoder.h"
 #include "AlarmManager.h"
 #include "TypedReplayReader.h"
+#include "perf/LiveRuntimeTrace.h"
 #include "perf/PerformanceProbeRuntime.h"
 
 #include <QCoreApplication>
@@ -64,6 +65,9 @@ constexpr int kLiveProjectionMaxFlushFrames = 16;
 constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr int kLiveTruthMaxDisplayStateUpdates = 512;
 constexpr int kLiveTruthMaxGraphUpdates = 128;
+constexpr int kRawLedgerUiFlushIntervalMs = 250;
+constexpr int kRawLedgerUiPendingFrameCap = 1024;
+constexpr int kTransportDiagnosticsFlushIntervalMs = 250;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 constexpr int kLiveGraphSeriesHardPointLimit = 20000;
 constexpr int kLiveGraphBucketHardPointLimit = 20000;
@@ -115,6 +119,21 @@ QVariantMap processMemoryDiagnosticsRow() {
     row.insert(QStringLiteral("level"), QStringLiteral("WARN"));
     row.insert(QStringLiteral("detail"), QStringLiteral("process memory counters unavailable on this platform"));
     return row;
+}
+
+void noteTraceEmit(CanMonitorPerf::LiveTraceSignal signal, quint64 payloadCount = 0, quint64 payloadBytes = 0) {
+    CanMonitorPerf::LiveRuntimeTraceRegistry::instance().noteEmit(signal, payloadCount, payloadBytes);
+}
+
+void noteTraceSlot(CanMonitorPerf::LiveTraceSignal signal, quint64 payloadCount = 0, quint64 payloadBytes = 0) {
+    CanMonitorPerf::LiveRuntimeTraceRegistry::instance().noteSlot(signal, payloadCount, payloadBytes);
+}
+
+quint64 jsonCounter(const QJsonObject& obj, const QString& key) {
+    const QJsonValue value = obj.value(key);
+    if (value.isString()) return value.toString().toULongLong();
+    if (value.isDouble()) return quint64(std::max<double>(0.0, value.toDouble()));
+    return 0;
 }
 
 bool replaceArgValue(QStringList& args, const QString& option, const QString& value) {
@@ -2237,6 +2256,11 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         refreshPerformanceDiagnostics(false);
     });
     m_uiResponsiveness.start(50);
+    m_liveRuntimeOwnerTimer.setInterval(1000);
+    m_liveRuntimeOwnerTimer.setTimerType(Qt::CoarseTimer);
+    connect(&m_liveRuntimeOwnerTimer, &QTimer::timeout, this, [this]() {
+        flushLiveRuntimeTraceOwnerSnapshot();
+    });
     m_logTargetDirectory = defaultLogDirectory();
     m_timingModel.setRoles({QStringLiteral("key"), QStringLiteral("idText"), QStringLiteral("name"), QStringLiteral("severity"), QStringLiteral("severityColor"), QStringLiteral("expectedMsText"), QStringLiteral("lastGapMsText"), QStringLiteral("ageMsText"), QStringLiteral("source"), QStringLiteral("reason"), QStringLiteral("metricText"), QStringLiteral("gaugePct"), QStringLiteral("eventCount"), QStringLiteral("history")});
     m_valueModel.setRoles({QStringLiteral("key"), QStringLiteral("idText"), QStringLiteral("name"), QStringLiteral("severity"), QStringLiteral("severityColor"), QStringLiteral("source"), QStringLiteral("bus"), QStringLiteral("dataHex"), QStringLiteral("gapText"), QStringLiteral("ageText"), QStringLiteral("reason"), QStringLiteral("previewText"), QStringLiteral("summaryText"), QStringLiteral("summaryRich"), QStringLiteral("valueMetricText"), QStringLiteral("valueGaugePct")});
@@ -2265,6 +2289,18 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     connect(&m_liveFlushTimer, &QTimer::timeout, this, [this]() {
         ++m_livePathTelemetry.liveFlushTimerFireCount;
         flushPendingLiveFrames();
+    });
+
+    m_transportDiagnosticsTimer.setSingleShot(true);
+    m_transportDiagnosticsTimer.setInterval(kTransportDiagnosticsFlushIntervalMs);
+    connect(&m_transportDiagnosticsTimer, &QTimer::timeout, this, [this]() {
+        flushTransportDiagnosticsRefresh();
+    });
+
+    m_rawLedgerUiFlushTimer.setSingleShot(true);
+    m_rawLedgerUiFlushTimer.setInterval(kRawLedgerUiFlushIntervalMs);
+    connect(&m_rawLedgerUiFlushTimer, &QTimer::timeout, this, [this]() {
+        flushPendingRawLedgerUiCommit();
     });
 
     m_boardHealthWatchdogTimer.setInterval(250);
@@ -2319,11 +2355,16 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_evidenceRuntime.setSerialOpen(ok);
         m_transportSession.setConnected(ok);
         if (ok) {
+            clearPendingRawLedgerUiCommit();
             m_rawFrameTable.clear();
+            startLiveRuntimeTraceSession(makeLiveRuntimeTraceDirectory(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"))),
+                                         QStringLiteral("serial_connected"),
+                                         true);
         }
         updateTransportDiagnostics();
         if (ok) m_evidenceRuntime.advanceWallTimeMs(quint64(QDateTime::currentMSecsSinceEpoch()));
         if (!ok) {
+            stopLiveRuntimeTraceSession(QStringLiteral("serial_disconnected"));
             m_controlRuntime.setArmed(false);
             m_controlRuntime.setTestRunning(false);
             m_controlKeepaliveTimer.stop();
@@ -2365,7 +2406,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
             }
         }
         emit connectedChanged();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(true);
         emit typedEvidenceChanged();
         emit controlStateChanged();
         requestLiveStatsRefresh(true);
@@ -2380,11 +2421,17 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_logRecordingActive = active;
         if (active) {
             if (!path.isEmpty()) m_logTempPath = path;
+            if (m_logTypedSession && !m_logTempPath.isEmpty()) {
+                startLiveRuntimeTraceSession(m_logTempPath, QStringLiteral("typed_logging_active"), false);
+            }
             m_logStopping = false;
             m_logSaving = false;
             m_logPendingSave = false;
             setStatus(QStringLiteral("로그 기록 중 · 임시 버퍼 적재 중"));
         } else {
+            if (m_logTypedSession && !m_logTempPath.isEmpty()) {
+                stopLiveRuntimeTraceSession(QStringLiteral("typed_logging_inactive"));
+            }
             m_logStopping = false;
             if (!m_logTempPath.isEmpty() && (QFileInfo::exists(m_logTempPath) || m_logRecordedFrameCount > 0)) {
                 m_logPendingSave = true;
@@ -2408,6 +2455,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         requestDerivedSummaryRefresh(false);
     });
     connect(m_worker, &SerialWorker::framesReceived, this, [this](const FrameRecordList& frames) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::FramesReceived,
+                      quint64(frames.size()),
+                      quint64(frames.size()) * quint64(sizeof(FrameRecord)));
         if (frames.isEmpty()) return;
         ++m_livePathTelemetry.appFramesReceivedCalls;
         m_livePathTelemetry.appFramesReceivedFrames += quint64(frames.size());
@@ -2423,12 +2473,12 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     connect(m_worker, &SerialWorker::livePathTraceChanged, this, [this](const QJsonObject& trace) {
         m_workerLivePathTrace = trace;
         m_transportSession.updateLivePathTrace(livePathTraceObject());
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(false);
     });
     connect(m_worker, &SerialWorker::drainEventTraceChanged, this, [this](const QJsonObject& trace) {
         m_workerDrainEventTrace = trace;
         m_transportSession.updateDrainEventTrace(drainEventTraceObject());
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(false);
     });
     connect(m_worker, &SerialWorker::rawFramesReceived, this, [this](const FrameRecordList& frames) {
         if (frames.isEmpty()) return;
@@ -2443,6 +2493,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         requestLiveStatsRefresh(false);
     });
     connect(m_worker, &SerialWorker::rawLedgerReset, this, [this](bool ok, const QString& path, const QString& error) {
+        clearPendingRawLedgerUiCommit();
         m_rawFrameTable.resetLedgerState(path, ok ? QString() : error);
         requestLiveStatsRefresh(true);
     });
@@ -2453,11 +2504,13 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                    quint64 totalRows,
                    quint64 segmentBytes,
                    const QString& path) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::RawLedgerBatchCommitted,
+                      quint64(frames.size()),
+                      quint64(frames.size()) * quint64(sizeof(FrameRecord)));
         if (frames.isEmpty()) return;
         CanMonitorPerf::ScopedProbe probe("app.raw_ledger_commit", frames.size(), 1500);
         m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        m_rawFrameTable.applyCommittedFrames(frames, firstSeq, lastSeq, totalRows, segmentBytes, path);
-        requestLiveStatsRefresh(false);
+        queueRawLedgerUiCommit(frames, firstSeq, lastSeq, totalRows, segmentBytes, path);
     });
     connect(m_worker, &SerialWorker::rawLedgerWriterStatusChanged, this,
             [this](quint64 queueBytes,
@@ -2781,6 +2834,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                  quint64 observedControlEvidenceRecords,
                                                                                  quint64 projectedControlEvidenceRecords,
                                                                                  quint64 sampledControlEvidenceRecords) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedProjectionStatusChanged, 1, 96);
         ++m_drainEventTelemetry.typedProjectionStatusReceive;
         m_typedTypeCounts[static_cast<quint8>(TypedRecordType::CanRxRaw)] =
             std::max(m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw)), observedCanRxFrames);
@@ -2808,6 +2862,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                             int lastOutputFrames,
                                                                             int lastFlushMs,
                                                                             quint64 truthLoss) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
         ++m_drainEventTelemetry.typedTruthStatusReceive;
         m_transportSession.updateLiveTruth(observedCanRxFrames,
                                            emittedTruthFrames,
@@ -2821,8 +2876,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                            lastOutputFrames,
                                            lastFlushMs,
                                            truthLoss);
-        updateTransportDiagnostics();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(false);
         requestDerivedSummaryRefresh(false);
     });
     connect(m_worker, &SerialWorker::analysisRuntimeSnapshotChanged, this, [this](const QString& source,
@@ -2832,6 +2886,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                   const QVariantList& timingRows,
                                                                                   const QVariantList& valueRows,
                                                                                   const QVariantList& alarmRows) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::AnalysisRuntimeSnapshotChanged,
+                      quint64(timingRows.size() + valueRows.size() + alarmRows.size()),
+                      0);
         if (source != QStringLiteral("live")) return;
         ++m_livePathTelemetry.appSnapshotReceive;
         m_livePathTelemetry.appSnapshotLastReceiveWallMs = QDateTime::currentMSecsSinceEpoch();
@@ -2852,6 +2909,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                                                quint64 lengthFailures,
                                                                                quint64 versionWarnings,
                                                                                quint64 seqGaps) {
+        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedTransportStatusChanged, 1, 64);
         ++m_drainEventTelemetry.typedTransportStatusReceive;
         m_typedRecordCount = std::max(m_typedRecordCount, frames);
         m_typedBytesDropped = bytesDropped;
@@ -2865,9 +2923,8 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                              lengthFailures,
                                              versionWarnings,
                                              seqGaps);
-        updateTransportDiagnostics();
         emit typedEvidenceChanged();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(false);
         requestDerivedSummaryRefresh(false);
     });
     connect(m_worker, &SerialWorker::hostTxQueueChanged, this, [this](quint64 queuedFrames,
@@ -2882,8 +2939,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
             || nowWallMs - m_lastHostTxQueueNotifyWallMs >= kHostTxQueueUiMinIntervalMs;
         if (notifyDue) {
             m_lastHostTxQueueNotifyWallMs = nowWallMs;
-            updateTransportDiagnostics();
-            emit transportDiagnosticsChanged();
+            requestTransportDiagnosticsRefresh(droppedFrames > 0);
         }
     });
     connect(m_worker, &SerialWorker::drainStatusChanged, this, [this](quint64 bytesTotal,
@@ -2916,8 +2972,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                captureWriterMaxQueueBytes,
                                                captureWriterOverrunBytes,
                                                captureWriteMaxMs);
-        updateTransportDiagnostics();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(rawQueueOverrunBytes > 0 || captureWriterOverrunBytes > 0);
     });
     connect(m_worker, &SerialWorker::analysisQueueStatusChanged, this, [this](quint64 queuedFrames,
                                                                               quint64 maxQueuedFrames,
@@ -2939,8 +2994,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                                                pumpMaxMs,
                                                snapshotMaxMs,
                                                truthLoss);
-        updateTransportDiagnostics();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(overrunFrames > 0 || truthLoss > 0);
     });
     connect(m_worker, &SerialWorker::typedStorageStateChanged, this, [this](bool active, const QString& path) {
         m_logTypedSession = true;
@@ -3134,6 +3188,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 }
 
 AppController::~AppController() {
+    stopLiveRuntimeTraceSession(QStringLiteral("app_destroy"));
     prepareControlSafeStopForDisconnect(QStringLiteral("application shutdown safety stop"));
     stopDebugGateway();
     stopVerificationRunner();
@@ -3164,6 +3219,123 @@ AppController::~AppController() {
     m_session.sync();
     m_transportRuntime.shutdown();
     m_worker = nullptr;
+}
+
+QString AppController::makeLiveRuntimeTraceDirectory(const QString& stamp) const {
+    const QString safeStamp = stamp.trimmed().isEmpty()
+        ? QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"))
+        : stamp.trimmed();
+    return QDir(logTargetDirectory()).filePath(QStringLiteral("live_runtime_trace_%1.diag").arg(safeStamp));
+}
+
+quint64 AppController::liveGraphPointEstimate() const {
+    quint64 points = 0;
+    for (auto it = m_liveGraphHistory.cbegin(); it != m_liveGraphHistory.cend(); ++it) {
+        points += quint64(std::max<qsizetype>(0, it.value().size()));
+    }
+    return points;
+}
+
+CanMonitorPerf::RuntimeOwnerSnapshot AppController::runtimeOwnerSnapshot() const {
+    CanMonitorPerf::RuntimeOwnerSnapshot snapshot;
+    snapshot.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
+    snapshot.rawLedgerRows = m_rawFrameTable.totalRows();
+    snapshot.rawLedgerVisibleRows = quint64(std::max(0, m_rawFrameTable.count()));
+    snapshot.rawLedgerCacheRows = quint64(std::max(0, m_rawFrameTable.ledgerCacheRows()));
+    snapshot.graphSeriesCount = quint64(std::max<qsizetype>(0, m_graphSeriesCache.size()));
+    snapshot.graphSelectedKeys = quint64(std::max<qsizetype>(0, m_graphSelectedKeys.size()));
+    snapshot.liveGraphSeries = quint64(std::max<qsizetype>(0, m_liveGraphHistory.size()));
+    snapshot.liveGraphPointsEstimate = liveGraphPointEstimate();
+    snapshot.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
+    snapshot.pendingLiveViewRows = quint64(std::max<qsizetype>(0, m_pendingLiveViewFrames.size()));
+    snapshot.analysisTimingRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeTimingRows.size()));
+    snapshot.analysisValueRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeValueRows.size()));
+    snapshot.analysisAlarmRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeAlarmRows.size()));
+    snapshot.diagnosticsRows = quint64(std::max<qsizetype>(0, m_analysisRuntimeDiagnostics.size()))
+        + quint64(std::max<qsizetype>(0, m_transportSession.rows().size()));
+    snapshot.captureWriterQueueBytes = jsonCounter(m_workerDrainEventTrace, QStringLiteral("capture_writer_queue_bytes"));
+    snapshot.captureWriterMaxQueueBytes = jsonCounter(m_workerDrainEventTrace, QStringLiteral("capture_writer_max_queue_bytes"));
+    snapshot.captureWriterOverrunBytes = jsonCounter(m_workerDrainEventTrace, QStringLiteral("capture_writer_overrun_bytes"));
+    snapshot.rawLedgerWriterQueueBytes = m_rawFrameTable.writerQueueBytes();
+    snapshot.rawLedgerWriterMaxQueueBytes = m_rawFrameTable.writerMaxQueueBytes();
+    snapshot.rawLedgerWriterOverrunBytes = m_rawFrameTable.writerOverrunBytes();
+    snapshot.analysisQueueFrames = jsonCounter(m_workerDrainEventTrace, QStringLiteral("analysis_handoff_pending_frames"));
+    snapshot.analysisQueueMaxFrames = jsonCounter(m_workerDrainEventTrace, QStringLiteral("analysis_handoff_max_pending_frames"));
+    snapshot.analysisQueueOverrunFrames = jsonCounter(m_workerDrainEventTrace, QStringLiteral("analysis_handoff_overrun_frames"));
+    return snapshot;
+}
+
+QJsonObject AppController::runtimeTraceAppSnapshot(const QString& reason) const {
+    QJsonObject root;
+    root.insert(QStringLiteral("format"), QStringLiteral("vsm-live-runtime-app-snapshot-v1"));
+    root.insert(QStringLiteral("reason"), reason);
+    root.insert(QStringLiteral("wall_ms"), QString::number(quint64(QDateTime::currentMSecsSinceEpoch())));
+    root.insert(QStringLiteral("connected"), m_connected);
+    root.insert(QStringLiteral("transport_mode"), m_transportModeKey);
+    root.insert(QStringLiteral("log_recording_active"), m_logRecordingActive);
+    root.insert(QStringLiteral("log_stopping"), m_logStopping);
+    root.insert(QStringLiteral("log_typed_session"), m_logTypedSession);
+    root.insert(QStringLiteral("log_path"), m_logPath);
+    root.insert(QStringLiteral("log_temp_path"), m_logTempPath);
+    root.insert(QStringLiteral("status_text"), m_statusText);
+    root.insert(QStringLiteral("live_path_trace"), const_cast<AppController*>(this)->livePathTraceObject());
+    root.insert(QStringLiteral("drain_event_trace"), const_cast<AppController*>(this)->drainEventTraceObject());
+    root.insert(QStringLiteral("live_runtime_trace"),
+                CanMonitorPerf::LiveRuntimeTraceRegistry::instance().toJson(QDateTime::currentMSecsSinceEpoch()));
+    root.insert(QStringLiteral("runtime_owner"), runtimeOwnerSnapshot().toJson());
+    root.insert(QStringLiteral("ui_responsiveness"), m_uiResponsiveness.toJson());
+    return root;
+}
+
+void AppController::writeRuntimeTraceAppSnapshot(const QString& filePath, const QString& reason) const {
+    const QString normalized = RuntimePaths::normalizeLocalPath(filePath);
+    if (normalized.trimmed().isEmpty()) return;
+    QString error;
+    if (!FilePersistence::writeJsonAtomically(normalized, QJsonDocument(runtimeTraceAppSnapshot(reason)), &error)) {
+        qCWarning(logDeploy).noquote() << "Live runtime trace snapshot write failed:" << error;
+    }
+}
+
+void AppController::flushLiveRuntimeTraceOwnerSnapshot() {
+    if (m_liveRuntimeTraceDir.trimmed().isEmpty()) return;
+    m_liveRuntimeTrace.updateOwnerSnapshot(runtimeOwnerSnapshot());
+}
+
+void AppController::startLiveRuntimeTraceSession(const QString& directory, const QString& reason, bool resetCounters) {
+    const QString normalized = RuntimePaths::normalizeLocalPath(directory);
+    if (normalized.trimmed().isEmpty()) return;
+    if (!m_liveRuntimeTraceDir.isEmpty() && m_liveRuntimeTraceDir == normalized) {
+        flushLiveRuntimeTraceOwnerSnapshot();
+        writeRuntimeTraceAppSnapshot(QDir(normalized).filePath(QStringLiteral("app_snapshot_before_live.json")), reason);
+        if (!m_liveRuntimeOwnerTimer.isActive()) m_liveRuntimeOwnerTimer.start();
+        return;
+    }
+    if (!m_liveRuntimeTraceDir.isEmpty() && m_liveRuntimeTraceDir != normalized) {
+        stopLiveRuntimeTraceSession(QStringLiteral("switch_session"));
+    }
+    QDir().mkpath(normalized);
+    m_liveRuntimeTraceDir = normalized;
+    flushLiveRuntimeTraceOwnerSnapshot();
+    writeRuntimeTraceAppSnapshot(QDir(normalized).filePath(QStringLiteral("app_snapshot_before_live.json")), reason);
+    m_liveRuntimeTrace.startSession(normalized, this, resetCounters);
+    if (!m_liveRuntimeOwnerTimer.isActive()) m_liveRuntimeOwnerTimer.start();
+}
+
+void AppController::stopLiveRuntimeTraceSession(const QString& reason) {
+    if (m_liveRuntimeTraceDir.trimmed().isEmpty()) return;
+    flushPendingRawLedgerUiCommit();
+    flushTransportDiagnosticsRefresh();
+    flushLiveRuntimeTraceOwnerSnapshot();
+    writeRuntimeTraceAppSnapshot(QDir(m_liveRuntimeTraceDir).filePath(QStringLiteral("app_snapshot_after_disconnect_or_stop.json")), reason);
+    m_liveRuntimeTrace.flush();
+    m_liveRuntimeTrace.stopSession(reason);
+    m_liveRuntimeOwnerTimer.stop();
+    m_liveRuntimeTraceDir.clear();
+}
+
+void AppController::noteTransportDiagnosticsEmit() {
+    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TransportDiagnosticsChanged, 1, 0);
+    noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TransportDiagnosticsChanged, 1, 0);
 }
 
 void AppController::rebuildTimingEvalIdCache(const QString& source) {
@@ -6194,7 +6366,7 @@ void AppController::requestLiveStatsRefresh(bool immediate) {
         if (m_liveStatsTimer.isActive()) m_liveStatsTimer.stop();
         updateTransportDiagnostics();
         emit liveStatsChanged();
-        emit transportDiagnosticsChanged();
+        requestTransportDiagnosticsRefresh(true);
         return;
     }
 
@@ -6211,7 +6383,95 @@ void AppController::flushLiveStatsRefresh() {
     m_liveStatsDirty = false;
     updateTransportDiagnostics();
     emit liveStatsChanged();
+    requestTransportDiagnosticsRefresh(false);
+}
+
+void AppController::requestTransportDiagnosticsRefresh(bool immediate) {
+    if (immediate) {
+        m_transportDiagnosticsDirty = false;
+        if (m_transportDiagnosticsTimer.isActive()) m_transportDiagnosticsTimer.stop();
+        updateTransportDiagnostics();
+        noteTransportDiagnosticsEmit();
+        emit transportDiagnosticsChanged();
+        return;
+    }
+
+    m_transportDiagnosticsDirty = true;
+    if (m_transportDiagnosticsTimer.isActive()) return;
+    m_transportDiagnosticsTimer.start(kTransportDiagnosticsFlushIntervalMs);
+}
+
+void AppController::flushTransportDiagnosticsRefresh() {
+    if (!m_transportDiagnosticsDirty) return;
+    m_transportDiagnosticsDirty = false;
+    updateTransportDiagnostics();
+    noteTransportDiagnosticsEmit();
     emit transportDiagnosticsChanged();
+}
+
+void AppController::queueRawLedgerUiCommit(const FrameRecordList& frames,
+                                           quint64 firstSeq,
+                                           quint64 lastSeq,
+                                           quint64 totalRows,
+                                           quint64 segmentBytes,
+                                           const QString& path) {
+    if (frames.isEmpty()) return;
+    if (!m_pendingRawLedgerUiCommit) {
+        m_pendingRawLedgerUiCommit = true;
+        m_pendingRawLedgerUiFirstSeq = firstSeq;
+        m_pendingRawLedgerUiFrames = frames;
+    } else if (firstSeq == m_pendingRawLedgerUiLastSeq + 1) {
+        m_pendingRawLedgerUiFrames.reserve(m_pendingRawLedgerUiFrames.size() + frames.size());
+        for (const FrameRecord& frame : frames) m_pendingRawLedgerUiFrames.push_back(frame);
+    } else {
+        flushPendingRawLedgerUiCommit();
+        m_pendingRawLedgerUiCommit = true;
+        m_pendingRawLedgerUiFirstSeq = firstSeq;
+        m_pendingRawLedgerUiFrames = frames;
+    }
+
+    m_pendingRawLedgerUiLastSeq = lastSeq;
+    m_pendingRawLedgerUiTotalRows = totalRows;
+    m_pendingRawLedgerUiSegmentBytes = segmentBytes;
+    m_pendingRawLedgerUiPath = path;
+
+    if (m_pendingRawLedgerUiFrames.size() > kRawLedgerUiPendingFrameCap) {
+        const int removeCount = m_pendingRawLedgerUiFrames.size() - kRawLedgerUiPendingFrameCap;
+        m_pendingRawLedgerUiFrames.erase(m_pendingRawLedgerUiFrames.begin(),
+                                         m_pendingRawLedgerUiFrames.begin() + removeCount);
+        m_pendingRawLedgerUiFirstSeq += quint64(removeCount);
+    }
+
+    if (!m_rawLedgerUiFlushTimer.isActive()) {
+        m_rawLedgerUiFlushTimer.start(kRawLedgerUiFlushIntervalMs);
+    }
+}
+
+void AppController::flushPendingRawLedgerUiCommit() {
+    if (!m_pendingRawLedgerUiCommit) return;
+    m_rawLedgerUiFlushTimer.stop();
+    const FrameRecordList frames = std::move(m_pendingRawLedgerUiFrames);
+    const quint64 firstSeq = m_pendingRawLedgerUiFirstSeq;
+    const quint64 totalRows = m_pendingRawLedgerUiTotalRows;
+    const quint64 segmentBytes = m_pendingRawLedgerUiSegmentBytes;
+    const QString path = m_pendingRawLedgerUiPath;
+    clearPendingRawLedgerUiCommit();
+    if (!frames.isEmpty()) {
+        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_ui_commit", frames.size(), 1500);
+        m_rawFrameTable.applyCommittedTailFrames(frames, firstSeq, totalRows, segmentBytes, path);
+        requestLiveStatsRefresh(false);
+    }
+}
+
+void AppController::clearPendingRawLedgerUiCommit() {
+    m_rawLedgerUiFlushTimer.stop();
+    m_pendingRawLedgerUiCommit = false;
+    m_pendingRawLedgerUiFrames.clear();
+    m_pendingRawLedgerUiFirstSeq = 0;
+    m_pendingRawLedgerUiLastSeq = 0;
+    m_pendingRawLedgerUiTotalRows = 0;
+    m_pendingRawLedgerUiSegmentBytes = 0;
+    m_pendingRawLedgerUiPath.clear();
 }
 
 void AppController::updateTransportDiagnostics() {
@@ -9287,6 +9547,9 @@ void AppController::finalizeAttachedVerificationReport() {
     result.insert(QStringLiteral("performance_summary"), m_performanceSummary);
     result.insert(QStringLiteral("live_path_trace"), livePathTraceObject());
     result.insert(QStringLiteral("drain_event_trace"), drainEventTraceObject());
+    result.insert(QStringLiteral("live_runtime_trace"),
+                  CanMonitorPerf::LiveRuntimeTraceRegistry::instance().toJson(QDateTime::currentMSecsSinceEpoch()));
+    result.insert(QStringLiteral("runtime_owner"), runtimeOwnerSnapshot().toJson());
     QFile resultFile(QDir(m_verificationRunnerArtifactPath).filePath(QStringLiteral("attached_result.json")));
     if (resultFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         resultFile.write(QJsonDocument(result).toJson(QJsonDocument::Indented));
@@ -9355,9 +9618,13 @@ void AppController::startLog() {
         m_logPath = paths.recordPath;
         emit logPathChanged();
         requestLogStateRefresh(true);
+        clearPendingRawLedgerUiCommit();
+        m_rawFrameTable.clear();
+        startLiveRuntimeTraceSession(sessionDir, QStringLiteral("typed_capture_start_requested"), true);
 
         QString error;
         if (!m_transportRuntime.setTypedStorage(true, sessionDir, metadata, &error)) {
+            stopLiveRuntimeTraceSession(QStringLiteral("typed_capture_start_failed"));
             setStatus(error);
             return;
         }
@@ -9444,7 +9711,7 @@ void AppController::resetTypedEvidenceState() {
     m_controlBusSummary = QStringLiteral("waiting for CAPABILITY bus descriptors");
     m_controlRuntime.clearBurstWallMs();
     m_controlAudit.reset();
-    emit transportDiagnosticsChanged();
+    requestTransportDiagnosticsRefresh(true);
 }
 
 void AppController::stopLog() {
@@ -9460,7 +9727,10 @@ void AppController::stopLog() {
     requestLogStateRefresh(true);
     if (m_logTypedSession) {
         QString error;
-        if (!m_transportRuntime.setTypedStorage(false, m_logTempPath, QJsonObject{}, &error)) {
+        if (!m_transportRuntime.setTypedStorage(false,
+                                                m_logTempPath,
+                                                runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
+                                                &error)) {
             setStatus(error);
             return;
         }
@@ -9531,6 +9801,7 @@ void AppController::finalizePendingLogSave(const QString& filePath) {
 }
 
 void AppController::discardPendingLog() {
+    stopLiveRuntimeTraceSession(QStringLiteral("discard_pending_log"));
     if (m_logTypedSession && !m_logTempPath.isEmpty()) {
         QDir(m_logTempPath).removeRecursively();
     } else {
@@ -9793,6 +10064,8 @@ void AppController::stepReplay(int delta) {
 void AppController::exportAnalysisSnapshot(const QString& filePath) {
     const QString normalized = RuntimePaths::normalizeLocalPath(filePath);
     if (normalized.isEmpty()) return;
+    flushPendingRawLedgerUiCommit();
+    flushTransportDiagnosticsRefresh();
 
     auto modelToArray = [](StableMapListModel* model) {
         QJsonArray arr;
@@ -9929,6 +10202,9 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     root.insert(QStringLiteral("transport_diagnostics"), QJsonArray::fromVariantList(transportDiagnostics()));
     root.insert(QStringLiteral("live_path_trace"), livePathTraceObject());
     root.insert(QStringLiteral("drain_event_trace"), drainEventTraceObject());
+    root.insert(QStringLiteral("live_runtime_trace"),
+                CanMonitorPerf::LiveRuntimeTraceRegistry::instance().toJson(QDateTime::currentMSecsSinceEpoch()));
+    root.insert(QStringLiteral("runtime_owner"), runtimeOwnerSnapshot().toJson());
 
     QJsonObject liveStats;
     liveStats.insert(QStringLiteral("rx_fps"), liveRxFps());
@@ -10242,6 +10518,7 @@ void AppController::clearFrames() {
     setReplayAnalysisHeld(false);
     m_recentFrames.clear();
     m_liveFrames.clear();
+    clearPendingRawLedgerUiCommit();
     m_rawFrameTable.clear();
     if (m_worker) {
         QMetaObject::invokeMethod(m_worker, [worker = m_worker]() {

@@ -112,6 +112,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/perf/PerformanceProbeRuntime.cpp
     src/backend/perf/UiResponsivenessRuntime.h
     src/backend/perf/UiResponsivenessRuntime.cpp
+    src/backend/perf/LiveRuntimeTrace.h
+    src/backend/perf/LiveRuntimeTrace.cpp
     src/backend/LevelState.h
     src/backend/LevelState.cpp
     src/backend/SignalDecoder.h

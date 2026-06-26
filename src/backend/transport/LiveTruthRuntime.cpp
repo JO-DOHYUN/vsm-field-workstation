@@ -16,6 +16,7 @@ void LiveTruthRuntime::reset() {
     m_flushClock.invalidate();
     m_statusClock.invalidate();
     m_status = {};
+    m_lastStatusTruthLoss = 0;
 }
 
 LiveTruthRuntime::IngestResult LiveTruthRuntime::ingest(const TypedRecordList& records) {
@@ -55,7 +56,10 @@ LiveTruthRuntime::IngestResult LiveTruthRuntime::ingest(const TypedRecordList& r
         result.frames = flush(false);
     }
     result.statusDue = statusDue() || !result.frames.isEmpty();
-    if (result.statusDue) m_statusClock.restart();
+    if (result.statusDue) {
+        m_statusClock.restart();
+        m_lastStatusTruthLoss = m_status.truthLoss;
+    }
     result.status = status();
     return result;
 }
@@ -173,7 +177,7 @@ FrameRecord LiveTruthRuntime::toFrameRecord(const TypedRecord& record, const Typ
 }
 
 bool LiveTruthRuntime::statusDue() const {
-    if (m_status.truthLoss > 0) return true;
+    if (m_status.truthLoss != m_lastStatusTruthLoss) return true;
     if (!m_statusClock.isValid()) return true;
     return m_statusClock.elapsed() >= kTruthStatusIntervalMs;
 }

@@ -88,6 +88,11 @@ public:
                               quint64 totalRows,
                               quint64 segmentBytes,
                               const QString& sessionPath);
+    void applyCommittedTailFrames(const FrameRecordList& frames,
+                                  quint64 firstSeq,
+                                  quint64 totalRows,
+                                  quint64 segmentBytes,
+                                  const QString& sessionPath);
     void updateWriterStatus(quint64 queueBytes,
                             quint64 maxQueueBytes,
                             quint64 overrunBytes,
@@ -127,7 +132,7 @@ private:
     const DisplayRow* displayRow(int row) const;
     void appendTailRows(const FrameRecordList& frames, quint64 firstSeq);
 
-    static constexpr int kDisplayTailLimit = 30000;
+    static constexpr int kDisplayTailLimit = 512;
     std::deque<DisplayRow> m_tailRows;
     QVector<quint64> m_visibleRows;
     QString m_idFilter;

@@ -10,6 +10,7 @@
 namespace {
 constexpr qsizetype kPipelinePumpMaxBytes = 1024 * 1024;
 constexpr int kPipelineStatusIntervalMs = 250;
+constexpr int kRuntimeStatusSignalIntervalMs = 250;
 constexpr int kProjectionSnapshotIntervalMs = 80;
 constexpr int kProjectionSnapshotMaxFrames = 8;
 constexpr int kProjectionSnapshotHardKeys = 64;
@@ -30,9 +31,17 @@ void TypedEvidencePipelineWorkerRuntime::reset() {
     m_pumpScheduled = false;
     m_projectionSnapshotScheduled = false;
     m_projectionSnapshotInFlight = false;
+    m_statusSignalScheduled = false;
+    m_hasPendingProjectionStatus = false;
+    m_hasPendingTruthStatus = false;
+    m_hasPendingTypedStatus = false;
     m_handshakeElapsedMs = -1;
     m_statusClock.invalidate();
+    m_statusSignalClock.invalidate();
     m_projectionSnapshotClock.invalidate();
+    m_pendingProjectionStatus = {};
+    m_pendingTruthStatus = {};
+    m_pendingTypedStatus = {};
     m_projectionSnapshotEmitted = 0;
     m_projectionSnapshotCoalesced = 0;
     m_projectionSnapshotDropped = 0;
@@ -117,27 +126,8 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         ++m_eventTelemetry.outputSignalCount;
         emit criticalRecordsReady(result.criticalRecords);
     }
-    if (result.projectionStatusDue) {
-        emitProjectionStatusSnapshot(result.projectionStatus);
-    }
-    if (result.truthStatusDue) {
-        const auto& s = result.truthStatus;
-        ++m_eventTelemetry.outputSignalCount;
-        ++m_eventTelemetry.statusSignalCount;
-        ++m_eventTelemetry.truthStatusReadySignalCount;
-        emit truthStatusReady(s.observedCanRxFrames,
-                              s.emittedTruthFrames,
-                              s.coalescedTruthUpdates,
-                              s.observedBus0CanRxFrames,
-                              s.observedBus1CanRxFrames,
-                              s.flushCount,
-                              s.pendingKeys,
-                              s.maxPendingKeys,
-                              s.lastInputRecords,
-                              s.lastOutputFrames,
-                              s.lastFlushMs,
-                              s.truthLoss);
-    }
+    if (result.projectionStatusDue) queueProjectionStatusSnapshot(result.projectionStatus);
+    if (result.truthStatusDue) queueTruthStatusSnapshot(result.truthStatus);
     if (result.captureHandoffOverrun) {
         ++m_eventTelemetry.outputSignalCount;
         emit captureHandoffOverrun(result.captureHandoffOverrunRecords,
@@ -149,18 +139,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         ++m_eventTelemetry.captureQueueReadySignalCount;
         emit captureQueueReady();
     }
-    if (result.typedStatusDue) {
-        const auto& s = result.typedStatus;
-        ++m_eventTelemetry.outputSignalCount;
-        ++m_eventTelemetry.statusSignalCount;
-        ++m_eventTelemetry.typedStatusReadySignalCount;
-        emit typedStatusReady(s.frames,
-                              s.bytesDropped,
-                              s.crcFailures,
-                              s.lengthFailures,
-                              s.versionWarnings,
-                              s.seqGaps);
-    }
+    if (result.typedStatusDue) queueTypedStatusSnapshot(result.typedStatus);
 
     emitPipelineStatus(&result, false);
     if (m_queue->snapshot().usedBytes > 0) {
@@ -172,22 +151,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
             ++m_eventTelemetry.outputSignalCount;
             emit truthFramesReady(finalTruth);
         }
-        const auto truthStatus = m_core.truthStatus();
-        ++m_eventTelemetry.outputSignalCount;
-        ++m_eventTelemetry.statusSignalCount;
-        ++m_eventTelemetry.truthStatusReadySignalCount;
-        emit truthStatusReady(truthStatus.observedCanRxFrames,
-                              truthStatus.emittedTruthFrames,
-                              truthStatus.coalescedTruthUpdates,
-                              truthStatus.observedBus0CanRxFrames,
-                              truthStatus.observedBus1CanRxFrames,
-                              truthStatus.flushCount,
-                              truthStatus.pendingKeys,
-                              truthStatus.maxPendingKeys,
-                              truthStatus.lastInputRecords,
-                              truthStatus.lastOutputFrames,
-                              truthStatus.lastFlushMs,
-                              truthStatus.truthLoss);
+        queueTruthStatusSnapshot(m_core.truthStatus());
     }
     emit pumpCycleFinished();
 }
@@ -305,6 +269,61 @@ void TypedEvidencePipelineWorkerRuntime::emitProjectionSnapshot() {
     emit projectedFramesReady(frames);
 }
 
+void TypedEvidencePipelineWorkerRuntime::queueProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
+    m_pendingProjectionStatus = status;
+    m_hasPendingProjectionStatus = true;
+    scheduleStatusSnapshotFlush();
+}
+
+void TypedEvidencePipelineWorkerRuntime::queueTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
+    m_pendingTruthStatus = status;
+    m_hasPendingTruthStatus = true;
+    scheduleStatusSnapshotFlush();
+}
+
+void TypedEvidencePipelineWorkerRuntime::queueTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {
+    m_pendingTypedStatus = status;
+    m_hasPendingTypedStatus = true;
+    scheduleStatusSnapshotFlush();
+}
+
+void TypedEvidencePipelineWorkerRuntime::scheduleStatusSnapshotFlush() {
+    if (m_statusSignalScheduled) return;
+
+    int delayMs = 0;
+    if (m_statusSignalClock.isValid()) {
+        const int elapsed = int(m_statusSignalClock.elapsed());
+        delayMs = std::max(0, kRuntimeStatusSignalIntervalMs - elapsed);
+    }
+
+    m_statusSignalScheduled = true;
+    QTimer::singleShot(delayMs, this, &TypedEvidencePipelineWorkerRuntime::emitPendingStatusSnapshots);
+}
+
+void TypedEvidencePipelineWorkerRuntime::emitPendingStatusSnapshots() {
+    m_statusSignalScheduled = false;
+    const bool hasProjection = m_hasPendingProjectionStatus;
+    const bool hasTruth = m_hasPendingTruthStatus;
+    const bool hasTyped = m_hasPendingTypedStatus;
+    if (!hasProjection && !hasTruth && !hasTyped) return;
+
+    const auto projectionStatus = m_pendingProjectionStatus;
+    const auto truthStatus = m_pendingTruthStatus;
+    const auto typedStatus = m_pendingTypedStatus;
+    m_hasPendingProjectionStatus = false;
+    m_hasPendingTruthStatus = false;
+    m_hasPendingTypedStatus = false;
+
+    if (hasProjection) emitProjectionStatusSnapshot(projectionStatus);
+    if (hasTruth) emitTruthStatusSnapshot(truthStatus);
+    if (hasTyped) emitTypedStatusSnapshot(typedStatus);
+    m_statusSignalClock.restart();
+
+    if (m_hasPendingProjectionStatus || m_hasPendingTruthStatus || m_hasPendingTypedStatus) {
+        scheduleStatusSnapshotFlush();
+    }
+}
+
 void TypedEvidencePipelineWorkerRuntime::emitProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status) {
     ++m_eventTelemetry.outputSignalCount;
     ++m_eventTelemetry.statusSignalCount;
@@ -318,6 +337,36 @@ void TypedEvidencePipelineWorkerRuntime::emitProjectionStatusSnapshot(const CanM
                                status.observedControlEvidenceRecords,
                                status.projectedControlEvidenceRecords,
                                status.sampledControlEvidenceRecords);
+}
+
+void TypedEvidencePipelineWorkerRuntime::emitTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
+    ++m_eventTelemetry.outputSignalCount;
+    ++m_eventTelemetry.statusSignalCount;
+    ++m_eventTelemetry.truthStatusReadySignalCount;
+    emit truthStatusReady(status.observedCanRxFrames,
+                          status.emittedTruthFrames,
+                          status.coalescedTruthUpdates,
+                          status.observedBus0CanRxFrames,
+                          status.observedBus1CanRxFrames,
+                          status.flushCount,
+                          status.pendingKeys,
+                          status.maxPendingKeys,
+                          status.lastInputRecords,
+                          status.lastOutputFrames,
+                          status.lastFlushMs,
+                          status.truthLoss);
+}
+
+void TypedEvidencePipelineWorkerRuntime::emitTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {
+    ++m_eventTelemetry.outputSignalCount;
+    ++m_eventTelemetry.statusSignalCount;
+    ++m_eventTelemetry.typedStatusReadySignalCount;
+    emit typedStatusReady(status.frames,
+                          status.bytesDropped,
+                          status.crcFailures,
+                          status.lengthFailures,
+                          status.versionWarnings,
+                          status.seqGaps);
 }
 
 quint64 TypedEvidencePipelineWorkerRuntime::projectionKeyForFrame(const FrameRecord& frame) {

@@ -251,6 +251,61 @@ void RawFrameTableModel::applyCommittedFrames(const FrameRecordList& frames,
     emit rowsAppended(firstSeq, lastSeq, frames.size());
 }
 
+void RawFrameTableModel::applyCommittedTailFrames(const FrameRecordList& frames,
+                                                  quint64 firstSeq,
+                                                  quint64 totalRows,
+                                                  quint64 segmentBytes,
+                                                  const QString& sessionPath) {
+    if (frames.isEmpty()) {
+        if (totalRows < m_totalRows) {
+            resetLedgerState(sessionPath, QStringLiteral("raw ledger commit sequence mismatch"));
+            return;
+        }
+        m_totalRows = totalRows;
+        m_segmentBytes = segmentBytes;
+        m_sessionPath = sessionPath;
+        m_latestSeq = totalRows == 0 ? 0 : totalRows - 1;
+        emit totalRowsChanged();
+        emit summaryChanged();
+        return;
+    }
+
+    const quint64 frameCount = quint64(frames.size());
+    if (totalRows < m_totalRows || firstSeq + frameCount > totalRows) {
+        resetLedgerState(sessionPath, QStringLiteral("raw ledger commit sequence mismatch"));
+        return;
+    }
+
+    for (const FrameRecord& frame : frames) {
+        if (m_firstTimeUs == 0 || frame.tExtUs < m_firstTimeUs) m_firstTimeUs = frame.tExtUs;
+    }
+
+    const bool hasGap = !m_tailRows.empty() && firstSeq > m_tailRows.back().ledgerSeq + 1;
+    if (hasGap) {
+        beginResetModel();
+        m_tailRows.clear();
+        m_visibleRows.clear();
+        const int start = frames.size() > kDisplayTailLimit ? frames.size() - kDisplayTailLimit : 0;
+        for (int index = start; index < frames.size(); ++index) {
+            const DisplayRow row{firstSeq + quint64(index), frames.at(index)};
+            m_tailRows.push_back(row);
+            if (hasActiveFilter() && rowMatches(row)) m_visibleRows.push_back(row.ledgerSeq);
+        }
+        endResetModel();
+        emit countChanged();
+    } else {
+        appendTailRows(frames, firstSeq);
+    }
+
+    m_totalRows = totalRows;
+    m_segmentBytes = segmentBytes;
+    m_sessionPath = sessionPath;
+    m_latestSeq = totalRows == 0 ? 0 : totalRows - 1;
+    emit totalRowsChanged();
+    emit summaryChanged();
+    emit rowsAppended(firstSeq, firstSeq + frameCount - 1, frames.size());
+}
+
 void RawFrameTableModel::appendTailRows(const FrameRecordList& frames, quint64 firstSeq) {
     const int incoming = frames.size();
     const int overflow = std::max(0, int(m_tailRows.size()) + incoming - kDisplayTailLimit);

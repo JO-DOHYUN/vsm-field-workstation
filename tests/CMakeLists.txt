@@ -61,6 +61,20 @@ target_link_libraries(test_performance_probe_runtime PRIVATE
 )
 add_test(NAME performance_probe_runtime COMMAND test_performance_probe_runtime)
 
+add_executable(test_live_runtime_trace
+    test_live_runtime_trace.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/perf/LiveRuntimeTrace.cpp
+)
+target_include_directories(test_live_runtime_trace PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_live_runtime_trace PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME live_runtime_trace COMMAND test_live_runtime_trace)
+
 add_executable(test_file_persistence
     test_file_persistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
@@ -883,6 +897,7 @@ foreach(_can_monitor_perf_target IN ITEMS
         target_sources(${_can_monitor_perf_target} PRIVATE
             ${CMAKE_SOURCE_DIR}/src/backend/perf/PerformanceProbeRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/perf/UiResponsivenessRuntime.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/perf/LiveRuntimeTrace.cpp
         )
     endif()
 endforeach()
@@ -915,6 +930,7 @@ endforeach()
 
 if (WIN32)
     foreach(_can_monitor_appcontroller_target IN ITEMS
+        test_live_runtime_trace
         test_app_controller_replay_flow
         test_app_controller_log_flow
         test_app_controller_analysis_source_flow
@@ -933,6 +949,7 @@ if (WIN32)
     set_tests_properties(model_pack_validator PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(ui_state_store PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(performance_probe_runtime PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
+    set_tests_properties(live_runtime_trace PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(file_persistence PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(typed_transport_foundation PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")
     set_tests_properties(drain_byte_queue PROPERTIES ENVIRONMENT "${_can_monitor_test_env}")

@@ -70,13 +70,20 @@ signals:
 
 private slots:
     void pump();
+    void emitPendingStatusSnapshots();
 
 private:
     void emitPipelineStatus(const CaptureCoreRuntime::Result* result = nullptr, bool force = false);
     void queueProjectionSnapshotFrames(const FrameRecordList& frames);
     void scheduleProjectionSnapshot();
     void emitProjectionSnapshot();
+    void queueProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
+    void queueTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status);
+    void queueTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
+    void scheduleStatusSnapshotFlush();
     void emitProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
+    void emitTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status);
+    void emitTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
     static quint64 projectionKeyForFrame(const FrameRecord& frame);
 
     QSharedPointer<DrainByteQueue> m_queue;
@@ -85,11 +92,19 @@ private:
     LivePathTelemetry m_livePathTelemetry;
     DrainEventTelemetry m_eventTelemetry;
     QElapsedTimer m_statusClock;
+    QElapsedTimer m_statusSignalClock;
     QElapsedTimer m_projectionSnapshotClock;
+    LiveProjectionRuntime::Status m_pendingProjectionStatus;
+    LiveTruthRuntime::Status m_pendingTruthStatus;
+    TypedIngressRuntime::StatusSnapshot m_pendingTypedStatus;
     quint64 m_projectionSnapshotEmitted = 0;
     quint64 m_projectionSnapshotCoalesced = 0;
     quint64 m_projectionSnapshotDropped = 0;
     bool m_pumpScheduled = false;
+    bool m_statusSignalScheduled = false;
+    bool m_hasPendingProjectionStatus = false;
+    bool m_hasPendingTruthStatus = false;
+    bool m_hasPendingTypedStatus = false;
     bool m_projectionSnapshotScheduled = false;
     bool m_projectionSnapshotInFlight = false;
     qint64 m_handshakeElapsedMs = -1;

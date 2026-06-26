@@ -22,6 +22,7 @@
 #include "transport/LivePathTelemetry.h"
 #include "transport/TransportRuntime.h"
 #include "transport/TransportSession.h"
+#include "perf/LiveRuntimeTrace.h"
 #include "perf/UiResponsivenessRuntime.h"
 
 #include <QElapsedTimer>
@@ -810,6 +811,15 @@ private:
     void runAttachedVerificationScenario(const QString& scenarioKey, const QString& durationKey = QStringLiteral("30s"));
     void startAttachedVerificationProcess(QProcess* process, const QStringList& args);
     void finalizeAttachedVerificationReport();
+    void startLiveRuntimeTraceSession(const QString& directory, const QString& reason, bool resetCounters = true);
+    void stopLiveRuntimeTraceSession(const QString& reason);
+    void flushLiveRuntimeTraceOwnerSnapshot();
+    CanMonitorPerf::RuntimeOwnerSnapshot runtimeOwnerSnapshot() const;
+    QJsonObject runtimeTraceAppSnapshot(const QString& reason) const;
+    void writeRuntimeTraceAppSnapshot(const QString& filePath, const QString& reason) const;
+    QString makeLiveRuntimeTraceDirectory(const QString& stamp) const;
+    quint64 liveGraphPointEstimate() const;
+    void noteTransportDiagnosticsEmit();
     void refreshPerformanceDiagnostics(bool force = false);
     void setReplayLoaded(bool loaded);
     void setReplayPlaying(bool playing);
@@ -868,6 +878,16 @@ private:
     void flushLogStateRefresh();
     void requestLiveStatsRefresh(bool immediate = false);
     void flushLiveStatsRefresh();
+    void requestTransportDiagnosticsRefresh(bool immediate = false);
+    void flushTransportDiagnosticsRefresh();
+    void queueRawLedgerUiCommit(const FrameRecordList& frames,
+                                quint64 firstSeq,
+                                quint64 lastSeq,
+                                quint64 totalRows,
+                                quint64 segmentBytes,
+                                const QString& path);
+    void flushPendingRawLedgerUiCommit();
+    void clearPendingRawLedgerUiCommit();
     void updateTransportDiagnostics();
     void rebuildGraphCatalog();
     void clearGraphHistory(const QString& source = QString());
@@ -1277,9 +1297,19 @@ private:
     QTimer m_derivedSummaryTimer;
     QTimer m_logStateTimer;
     QTimer m_liveStatsTimer;
+    QTimer m_transportDiagnosticsTimer;
+    QTimer m_rawLedgerUiFlushTimer;
     bool m_derivedSummaryDirty = false;
     bool m_logStateDirty = false;
     bool m_liveStatsDirty = false;
+    bool m_transportDiagnosticsDirty = false;
+    bool m_pendingRawLedgerUiCommit = false;
+    FrameRecordList m_pendingRawLedgerUiFrames;
+    quint64 m_pendingRawLedgerUiFirstSeq = 0;
+    quint64 m_pendingRawLedgerUiLastSeq = 0;
+    quint64 m_pendingRawLedgerUiTotalRows = 0;
+    quint64 m_pendingRawLedgerUiSegmentBytes = 0;
+    QString m_pendingRawLedgerUiPath;
     QVector<AnalysisStateKey> m_liveTimingEvalIds;
     QVector<AnalysisStateKey> m_replayTimingEvalIds;
     int m_liveTimingEvalCursor = 0;
@@ -1353,6 +1383,9 @@ private:
     QString m_performanceSummary = QStringLiteral("성능 계측 꺼짐");
     QVariantList m_performanceDiagnostics;
     QTimer m_performanceTimer;
+    CanMonitorPerf::LiveRuntimeTraceService m_liveRuntimeTrace;
+    QTimer m_liveRuntimeOwnerTimer;
+    QString m_liveRuntimeTraceDir;
     CanMonitorPerf::UiResponsivenessRuntime m_uiResponsiveness;
     QProcess* m_verificationProcess = nullptr;
     QString m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
