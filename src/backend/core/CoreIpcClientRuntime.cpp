@@ -58,6 +58,18 @@ quint64 CoreIpcClientRuntime::sendHostFrame(const QByteArray& frame, const QStri
                                    {QStringLiteral("summary"), summary}});
 }
 
+quint64 CoreIpcClientRuntime::startCapture(const QString& sessionDir, const QJsonObject& metadata) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("start_capture")},
+                                   {QStringLiteral("session_dir"), sessionDir},
+                                   {QStringLiteral("metadata"), metadata}});
+}
+
+quint64 CoreIpcClientRuntime::stopCapture(const QString& inactivePath, const QJsonObject& diagnostics) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("stop_capture")},
+                                   {QStringLiteral("inactive_path"), inactivePath},
+                                   {QStringLiteral("diagnostics"), diagnostics}});
+}
+
 void CoreIpcClientRuntime::readMessages() {
     m_buffer += m_socket.readAll();
     constexpr qsizetype kMaxBufferedBytes = 1024 * 1024;
@@ -107,6 +119,18 @@ void CoreIpcClientRuntime::handleMessage(const QJsonObject& message) {
                                   message.value(QStringLiteral("ok")).toBool(),
                                   message.value(QStringLiteral("summary")).toString(),
                                   message.value(QStringLiteral("bytes_written")).toVariant().toULongLong());
+        return;
+    }
+    if (type == QStringLiteral("capture_storage_update")) {
+        emit captureStorageUpdate(requestId,
+                                  message.value(QStringLiteral("ok")).toBool(),
+                                  message.value(QStringLiteral("error")).toString(),
+                                  message.value(QStringLiteral("state_changed")).toBool(),
+                                  message.value(QStringLiteral("active")).toBool(),
+                                  message.value(QStringLiteral("path")).toString(),
+                                  message.value(QStringLiteral("progress_due")).toBool(),
+                                  message.value(QStringLiteral("bytes_written")).toVariant().toULongLong(),
+                                  message.value(QStringLiteral("record_count")).toVariant().toULongLong());
         return;
     }
     if (type == QStringLiteral("error")) {

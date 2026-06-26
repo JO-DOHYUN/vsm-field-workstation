@@ -28,12 +28,22 @@ public:
 
     bool requestView(const CoreViewClientRuntime::ViewRequest& request);
     bool sendHostFrame(const QByteArray& frame, const QString& summary, QString* errorOut = nullptr);
+    bool startCapture(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut = nullptr);
+    bool stopCapture(const QString& inactivePath, const QJsonObject& diagnostics, QString* errorOut = nullptr);
 
 signals:
     void stateChanged(bool active, const QString& message);
     void viewChanged(const QJsonObject& change);
     void viewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void hostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
+    void captureStorageUpdate(bool ok,
+                              const QString& error,
+                              bool stateChanged,
+                              bool active,
+                              const QString& path,
+                              bool progressDue,
+                              quint64 bytesWritten,
+                              quint64 recordCount);
     void errorOccurred(const QString& message);
 
 private:

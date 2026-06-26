@@ -2504,6 +2504,44 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                 if (!m_coreProcessMode) return;
                 handleHostFrameWriteResult(ok, summary, bytesWritten);
             });
+    connect(&m_coreProcessClient,
+            &CanMonitorCore::CoreProcessClientRuntime::captureStorageUpdate,
+            this,
+            [this](bool ok,
+                   const QString& error,
+                   bool stateChanged,
+                   bool active,
+                   const QString& path,
+                   bool progressDue,
+                   quint64 bytesWritten,
+                   quint64 recordCount) {
+                if (!m_coreProcessMode) return;
+                if (!ok && !error.isEmpty()) {
+                    setStatus(error);
+                }
+                if (stateChanged) {
+                    m_logTypedSession = true;
+                    m_logRecordingActive = active;
+                    m_logStopping = false;
+                    m_logSaving = false;
+                    m_logPendingSave = false;
+                    if (!path.isEmpty()) {
+                        m_logTempPath = path;
+                        m_logPath = path;
+                        m_logSuggestedSavePath = path;
+                        if (!active) m_logLastSavedPath = path;
+                        emit logPathChanged();
+                    }
+                    setStatus(active
+                        ? QStringLiteral("Typed capture recording: %1").arg(path)
+                        : QStringLiteral("Typed capture finalized: %1").arg(path));
+                }
+                if (progressDue || stateChanged) {
+                    m_logRecordedBytes = bytesWritten;
+                    m_logRecordedFrameCount = recordCount;
+                    requestLogStateRefresh(stateChanged);
+                }
+            });
     connect(m_worker, &SerialWorker::stateChanged, this, [this](bool ok, const QString& msg) {
         if (m_coreProcessMode) return;
         const bool previousReplayActive = replayAnalysisActive();
@@ -9821,7 +9859,10 @@ void AppController::startLog() {
         startLiveRuntimeTraceSession(sessionDir, QStringLiteral("typed_capture_start_requested"), true);
 
         QString error;
-        if (!m_transportRuntime.setTypedStorage(true, sessionDir, metadata, &error)) {
+        const bool captureQueued = m_coreProcessMode
+            ? m_coreProcessClient.startCapture(sessionDir, metadata, &error)
+            : m_transportRuntime.setTypedStorage(true, sessionDir, metadata, &error);
+        if (!captureQueued) {
             stopLiveRuntimeTraceSession(QStringLiteral("typed_capture_start_failed"));
             setStatus(error);
             return;
@@ -9925,10 +9966,15 @@ void AppController::stopLog() {
     requestLogStateRefresh(true);
     if (m_logTypedSession) {
         QString error;
-        if (!m_transportRuntime.setTypedStorage(false,
-                                                m_logTempPath,
-                                                runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
-                                                &error)) {
+        const bool stopQueued = m_coreProcessMode
+            ? m_coreProcessClient.stopCapture(m_logTempPath,
+                                              runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
+                                              &error)
+            : m_transportRuntime.setTypedStorage(false,
+                                                 m_logTempPath,
+                                                 runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
+                                                 &error);
+        if (!stopQueued) {
             setStatus(error);
             return;
         }

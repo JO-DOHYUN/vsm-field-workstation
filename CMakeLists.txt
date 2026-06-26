@@ -197,6 +197,12 @@ qt_add_executable(vsm_capture_core
     src/capture_core_main.cpp
     src/backend/BuildMetadata.h
     src/backend/BuildMetadata.cpp
+    src/backend/RuntimePaths.h
+    src/backend/RuntimePaths.cpp
+    src/backend/FilePersistence.h
+    src/backend/FilePersistence.cpp
+    src/backend/StorageRuntime.h
+    src/backend/StorageRuntime.cpp
     src/backend/core/CoreViewTypes.h
     src/backend/core/CoreViewTypes.cpp
     src/backend/core/CoreMaterializedViewStore.h
@@ -226,6 +232,10 @@ qt_add_executable(vsm_capture_core
     src/backend/transport/SerialDrainRuntime.cpp
     src/backend/transport/TypedIngressRuntime.h
     src/backend/transport/TypedIngressRuntime.cpp
+    src/backend/transport/TypedCaptureWriterRuntime.h
+    src/backend/transport/TypedCaptureWriterRuntime.cpp
+    src/backend/transport/TypedCaptureWriterWorkerRuntime.h
+    src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
     src/backend/transport/TypedEvidencePipelineRuntime.h
     src/backend/transport/TypedEvidencePipelineRuntime.cpp
     src/backend/transport/CaptureCoreRuntime.h

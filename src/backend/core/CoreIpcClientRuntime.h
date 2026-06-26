@@ -19,6 +19,8 @@ public:
     quint64 requestView(const QString& viewName, quint64 sinceSeq, int limit);
     bool requestViewWithId(quint64 requestId, const QString& viewName, quint64 sinceSeq, int limit);
     quint64 sendHostFrame(const QByteArray& frame, const QString& summary);
+    quint64 startCapture(const QString& sessionDir, const QJsonObject& metadata);
+    quint64 stopCapture(const QString& inactivePath, const QJsonObject& diagnostics);
 
 signals:
     void connectedChanged(bool connected);
@@ -26,6 +28,15 @@ signals:
     void viewChanged(const QJsonObject& change);
     void viewSnapshotReceived(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void hostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten);
+    void captureStorageUpdate(quint64 requestId,
+                              bool ok,
+                              const QString& error,
+                              bool stateChanged,
+                              bool active,
+                              const QString& path,
+                              bool progressDue,
+                              quint64 bytesWritten,
+                              quint64 recordCount);
     void errorReceived(quint64 requestId, const QString& error, const QString& detail);
 
 private:

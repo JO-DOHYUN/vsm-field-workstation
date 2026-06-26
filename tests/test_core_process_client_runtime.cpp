@@ -1,6 +1,7 @@
 #include "core/CoreProcessClientRuntime.h"
 
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 
 class CoreProcessClientRuntimeTest : public QObject {
@@ -99,6 +100,40 @@ private slots:
         QCOMPARE(args.at(0).toBool(), false);
         QVERIFY(args.at(1).toString().contains(QStringLiteral("core transport not connected")));
         QCOMPARE(args.at(2).toULongLong(), quint64(0));
+
+        runtime.stop();
+        QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);
+    }
+
+    void startsAndStopsCoreCaptureStorage() {
+        CanMonitorCore::CoreProcessClientRuntime runtime;
+        QSignalSpy storageSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::captureStorageUpdate);
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+
+        QString error;
+        QVERIFY2(runtime.startServerOnly(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE), &error), qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.isIpcConnected(), 5000);
+
+        QVERIFY(runtime.startCapture(dir.path(), QJsonObject{{QStringLiteral("source"), QStringLiteral("unit-core-process")}}, &error));
+        QTRY_VERIFY_WITH_TIMEOUT(storageSpy.size() >= 1, 5000);
+        bool activeSeen = false;
+        for (const auto& entry : storageSpy) {
+            if (entry.at(1).toString().isEmpty() && entry.at(2).toBool() && entry.at(3).toBool()) {
+                activeSeen = true;
+            }
+        }
+        QVERIFY(activeSeen);
+
+        QVERIFY(runtime.stopCapture(dir.path(), QJsonObject{{QStringLiteral("reason"), QStringLiteral("unit-stop")}}, &error));
+        QTRY_VERIFY_WITH_TIMEOUT(storageSpy.size() >= 2, 5000);
+        bool finalizedSeen = false;
+        for (const auto& entry : storageSpy) {
+            if (entry.at(2).toBool() && !entry.at(3).toBool()) {
+                finalizedSeen = true;
+            }
+        }
+        QVERIFY(finalizedSeen);
 
         runtime.stop();
         QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);

@@ -4,6 +4,7 @@
 #include "core/CoreMaterializedViewStore.h"
 #include "transport/DrainByteQueue.h"
 #include "transport/SerialDrainRuntime.h"
+#include "transport/TypedCaptureWriterWorkerRuntime.h"
 #include "transport/TypedEvidencePipelineWorkerRuntime.h"
 #include "transport/TypedRecordHandoffQueue.h"
 
@@ -53,6 +54,16 @@ private:
                                const QJsonObject& change);
     void handleHostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
     void publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
+    void handleCaptureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
+    void handleCaptureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
+    void ensureCaptureWriterRuntime();
+    void shutdownCaptureWriterRuntime();
+    void setPipelineCaptureEnabled(bool enabled, Qt::ConnectionType connectionType = Qt::QueuedConnection);
+    void drainCaptureQueueSync();
+    void publishCaptureStorageUpdate(quint64 requestId,
+                                     const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate& update);
+    void updateCaptureProgressView(const CanMonitorTransport::TypedCaptureWriterRuntime::Status& status,
+                                   const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate* update = nullptr);
 
     CoreMaterializedViewStore m_viewStore;
     CoreIpcServerRuntime m_ipc;
@@ -60,8 +71,10 @@ private:
     QSharedPointer<CanMonitorTransport::TypedRecordHandoffQueue> m_captureQueue;
     QThread m_drainThread;
     QThread m_pipelineThread;
+    QThread m_captureWriterThread;
     QPointer<CanMonitorTransport::SerialDrainRuntime> m_drainRuntime;
     QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime> m_pipelineRuntime;
+    QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> m_captureWriterRuntime;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
     QQueue<quint64> m_pendingHostFrameRequests;
     quint64 m_nextMirrorRequestId = 1;

@@ -79,6 +79,32 @@ void CoreIpcServerRuntime::publishHostFrameWriteResult(quint64 requestId, bool o
     }
 }
 
+void CoreIpcServerRuntime::publishCaptureStorageUpdate(quint64 requestId,
+                                                       bool ok,
+                                                       const QString& error,
+                                                       bool stateChanged,
+                                                       bool active,
+                                                       const QString& path,
+                                                       bool progressDue,
+                                                       quint64 bytesWritten,
+                                                       quint64 recordCount) {
+    QJsonObject message{{QStringLiteral("message_type"), QStringLiteral("capture_storage_update")},
+                        {QStringLiteral("request_id"), QString::number(requestId)},
+                        {QStringLiteral("ok"), ok},
+                        {QStringLiteral("error"), error},
+                        {QStringLiteral("state_changed"), stateChanged},
+                        {QStringLiteral("active"), active},
+                        {QStringLiteral("path"), path},
+                        {QStringLiteral("progress_due"), progressDue},
+                        {QStringLiteral("bytes_written"), QString::number(bytesWritten)},
+                        {QStringLiteral("record_count"), QString::number(recordCount)}};
+    for (const auto& client : std::as_const(m_clients)) {
+        if (client) {
+            sendObject(client, message);
+        }
+    }
+}
+
 void CoreIpcServerRuntime::acceptConnection() {
     while (QLocalSocket* socket = m_server.nextPendingConnection()) {
         m_clients.push_back(socket);
@@ -147,6 +173,23 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
             return;
         }
         emit hostFrameRequested(requestId, frame, summary);
+        return;
+    }
+    if (type == QStringLiteral("start_capture")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        const QString sessionDir = message.value(QStringLiteral("session_dir")).toString();
+        if (sessionDir.trimmed().isEmpty()) {
+            sendObject(socket, errorResponse(message, QStringLiteral("empty_capture_session_dir"), QString()));
+            return;
+        }
+        emit captureStartRequested(requestId, sessionDir, message.value(QStringLiteral("metadata")).toObject());
+        return;
+    }
+    if (type == QStringLiteral("stop_capture")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        emit captureStopRequested(requestId,
+                                  message.value(QStringLiteral("inactive_path")).toString(),
+                                  message.value(QStringLiteral("diagnostics")).toObject());
         return;
     }
     if (type != QStringLiteral("get_view")) {

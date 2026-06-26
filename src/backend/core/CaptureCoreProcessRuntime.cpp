@@ -31,6 +31,16 @@ CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
             this,
             &CaptureCoreProcessRuntime::handleHostFrameRequested,
             Qt::QueuedConnection);
+    connect(&m_ipc,
+            &CoreIpcServerRuntime::captureStartRequested,
+            this,
+            &CaptureCoreProcessRuntime::handleCaptureStartRequested,
+            Qt::QueuedConnection);
+    connect(&m_ipc,
+            &CoreIpcServerRuntime::captureStopRequested,
+            this,
+            &CaptureCoreProcessRuntime::handleCaptureStopRequested,
+            Qt::QueuedConnection);
 }
 
 CaptureCoreProcessRuntime::~CaptureCoreProcessRuntime() {
@@ -178,6 +188,34 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
             &CaptureCoreProcessRuntime::requestPipelineViewMirror,
             Qt::QueuedConnection);
     connect(pipeline,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::captureQueueReady,
+            this,
+            [this]() {
+                if (!m_captureWriterRuntime) return;
+                QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                          &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::drainQueuedRecords,
+                                          Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+    connect(pipeline,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::captureHandoffOverrun,
+            this,
+            [this](quint64 records, quint64 bytes, const QString& reason) {
+                if (!m_captureWriterRuntime) {
+                    emit errorOccurred(reason);
+                    return;
+                }
+                QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                          [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
+                                           records,
+                                           bytes,
+                                           reason]() {
+                                              if (worker) worker->noteOverrun(records, bytes, reason);
+                                          },
+                                          Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
+    connect(pipeline,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewSnapshotReady,
             this,
             &CaptureCoreProcessRuntime::applyPipelineSnapshot,
@@ -200,6 +238,7 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
 }
 
 void CaptureCoreProcessRuntime::teardownTransportRuntime() {
+    shutdownCaptureWriterRuntime();
     if (m_drainRuntime) {
         QMetaObject::invokeMethod(m_drainRuntime,
                                   &CanMonitorTransport::SerialDrainRuntime::stop,
@@ -216,6 +255,84 @@ void CaptureCoreProcessRuntime::teardownTransportRuntime() {
     m_pendingMirrorRequests.clear();
     m_pendingHostFrameRequests.clear();
     m_transportRuntimeStarted = false;
+}
+
+void CaptureCoreProcessRuntime::ensureCaptureWriterRuntime() {
+    if (m_captureWriterRuntime) return;
+    if (!m_captureQueue) {
+        m_captureQueue = QSharedPointer<CanMonitorTransport::TypedRecordHandoffQueue>::create();
+    }
+    auto* writer = new CanMonitorTransport::TypedCaptureWriterWorkerRuntime();
+    writer->setRecordQueue(m_captureQueue);
+    m_captureWriterRuntime = writer;
+    writer->moveToThread(&m_captureWriterThread);
+    connect(&m_captureWriterThread, &QThread::finished, writer, &QObject::deleteLater);
+    connect(writer,
+            &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::storageUpdate,
+            this,
+            [this](bool ok,
+                   const QString& error,
+                   bool stateChanged,
+                   bool active,
+                   const QString& path,
+                   bool progressDue,
+                   quint64 bytesWritten,
+                   quint64 recordCount) {
+                CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
+                update.ok = ok;
+                update.error = error;
+                update.stateChanged = stateChanged;
+                update.active = active;
+                update.path = path;
+                update.progressDue = progressDue;
+                update.bytesWritten = bytesWritten;
+                update.recordCount = recordCount;
+                CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+                status.active = active;
+                updateCaptureProgressView(status, &update);
+            },
+            Qt::QueuedConnection);
+    connect(writer,
+            &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::statusChanged,
+            this,
+            [this](bool active,
+                   bool captureInvalid,
+                   quint64 queuedRecords,
+                   quint64 queuedBytes,
+                   quint64 maxQueuedBytes,
+                   quint64 overrunRecords,
+                   quint64 overrunBytes,
+                   quint64 writeMaxMs) {
+                CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+                status.active = active;
+                status.captureInvalid = captureInvalid;
+                status.queuedRecords = queuedRecords;
+                status.queuedBytes = queuedBytes;
+                status.maxQueuedBytes = maxQueuedBytes;
+                status.overrunRecords = overrunRecords;
+                status.overrunBytes = overrunBytes;
+                status.writeMaxMs = writeMaxMs;
+                updateCaptureProgressView(status);
+            },
+            Qt::QueuedConnection);
+    m_captureWriterThread.setObjectName(QStringLiteral("vsm-core-capture-writer"));
+    m_captureWriterThread.start(QThread::HighPriority);
+}
+
+void CaptureCoreProcessRuntime::shutdownCaptureWriterRuntime() {
+    if (m_captureWriterRuntime) {
+        setPipelineCaptureEnabled(false, Qt::BlockingQueuedConnection);
+        drainCaptureQueueSync();
+        QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                  &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::resetQueue,
+                                  Qt::BlockingQueuedConnection);
+    }
+    if (m_captureWriterThread.isRunning()) {
+        m_captureWriterThread.quit();
+        m_captureWriterThread.wait(3000);
+    }
+    m_captureWriterRuntime = nullptr;
+    if (m_captureQueue) m_captureQueue->clear();
 }
 
 void CaptureCoreProcessRuntime::seedInitialViews() {
@@ -305,6 +422,129 @@ void CaptureCoreProcessRuntime::handleHostFrameRequested(quint64 requestId, cons
 void CaptureCoreProcessRuntime::publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten) {
     const quint64 requestId = m_pendingHostFrameRequests.isEmpty() ? 0 : m_pendingHostFrameRequests.dequeue();
     m_ipc.publishHostFrameWriteResult(requestId, ok, summary, bytesWritten);
+}
+
+void CaptureCoreProcessRuntime::handleCaptureStartRequested(quint64 requestId,
+                                                            const QString& sessionDir,
+                                                            const QJsonObject& metadata) {
+    ensureTransportRuntime();
+    ensureCaptureWriterRuntime();
+    if (m_captureQueue) m_captureQueue->clear();
+
+    CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
+    QMetaObject::invokeMethod(m_captureWriterRuntime,
+                              [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
+                               sessionDir,
+                               metadata,
+                               &update]() {
+                                  if (worker) update = worker->startStorageSync(sessionDir, metadata);
+                              },
+                              Qt::BlockingQueuedConnection);
+    if (update.ok) {
+        setPipelineCaptureEnabled(true, Qt::BlockingQueuedConnection);
+    }
+    publishCaptureStorageUpdate(requestId, update);
+    CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+    status.active = update.active;
+    updateCaptureProgressView(status, &update);
+}
+
+void CaptureCoreProcessRuntime::handleCaptureStopRequested(quint64 requestId,
+                                                           const QString& inactivePath,
+                                                           const QJsonObject& diagnostics) {
+    if (!m_captureWriterRuntime) {
+        CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
+        update.ok = false;
+        update.error = QStringLiteral("core capture writer is not running");
+        update.stateChanged = true;
+        update.active = false;
+        update.path = inactivePath;
+        publishCaptureStorageUpdate(requestId, update);
+        return;
+    }
+
+    setPipelineCaptureEnabled(false, Qt::BlockingQueuedConnection);
+    drainCaptureQueueSync();
+
+    CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
+    QMetaObject::invokeMethod(m_captureWriterRuntime,
+                              [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
+                               inactivePath,
+                               diagnostics,
+                               &update]() {
+                                  if (worker) update = worker->stopStorageSync(inactivePath, diagnostics);
+                              },
+                              Qt::BlockingQueuedConnection);
+    publishCaptureStorageUpdate(requestId, update);
+    CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+    status.active = update.active;
+    updateCaptureProgressView(status, &update);
+}
+
+void CaptureCoreProcessRuntime::setPipelineCaptureEnabled(bool enabled, Qt::ConnectionType connectionType) {
+    if (!m_pipelineRuntime) return;
+    QMetaObject::invokeMethod(m_pipelineRuntime,
+                              [worker = QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime>(m_pipelineRuntime), enabled]() {
+                                  if (worker) worker->setCaptureEnabled(enabled);
+                              },
+                              connectionType);
+}
+
+void CaptureCoreProcessRuntime::drainCaptureQueueSync() {
+    if (!m_captureWriterRuntime) return;
+    while (m_captureQueue && m_captureQueue->hasQueuedRecords()) {
+        QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                  &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::drainQueuedRecords,
+                                  Qt::BlockingQueuedConnection);
+    }
+}
+
+void CaptureCoreProcessRuntime::publishCaptureStorageUpdate(
+    quint64 requestId,
+    const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate& update) {
+    m_ipc.publishCaptureStorageUpdate(requestId,
+                                      update.ok,
+                                      update.error,
+                                      update.stateChanged,
+                                      update.active,
+                                      update.path,
+                                      update.progressDue,
+                                      update.bytesWritten,
+                                      update.recordCount);
+}
+
+void CaptureCoreProcessRuntime::updateCaptureProgressView(
+    const CanMonitorTransport::TypedCaptureWriterRuntime::Status& status,
+    const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate* update) {
+    QJsonObject payload;
+    payload.insert(QStringLiteral("capture_active"), status.active);
+    payload.insert(QStringLiteral("capture_invalid"), status.captureInvalid);
+    payload.insert(QStringLiteral("queued_records"), QString::number(status.queuedRecords));
+    payload.insert(QStringLiteral("queued_bytes"), QString::number(status.queuedBytes));
+    payload.insert(QStringLiteral("max_queued_bytes"), QString::number(status.maxQueuedBytes));
+    payload.insert(QStringLiteral("overrun_records"), QString::number(status.overrunRecords));
+    payload.insert(QStringLiteral("overrun_bytes"), QString::number(status.overrunBytes));
+    payload.insert(QStringLiteral("write_max_ms"), QString::number(status.writeMaxMs));
+    if (update) {
+        payload.insert(QStringLiteral("ok"), update->ok);
+        payload.insert(QStringLiteral("state_changed"), update->stateChanged);
+        payload.insert(QStringLiteral("path"), update->path);
+        payload.insert(QStringLiteral("bytes_written"), QString::number(update->bytesWritten));
+        payload.insert(QStringLiteral("record_count"), QString::number(update->recordCount));
+        if (!update->error.isEmpty()) payload.insert(QStringLiteral("error"), update->error);
+    }
+
+    QJsonObject counts;
+    counts.insert(QStringLiteral("queued_bytes"), QString::number(status.queuedBytes));
+    counts.insert(QStringLiteral("overrun_bytes"), QString::number(status.overrunBytes));
+    counts.insert(QStringLiteral("record_count"), update ? QString::number(update->recordCount) : QStringLiteral("0"));
+
+    publishChange(m_viewStore.updateView(CanMonitorCore::CoreViewName::CaptureProgress,
+                                         payload,
+                                         status.captureInvalid || (update && !update->ok)
+                                             ? CanMonitorCore::CoreViewSeverity::Error
+                                             : CanMonitorCore::CoreViewSeverity::Ok,
+                                         counts));
 }
 
 } // namespace CanMonitorCore

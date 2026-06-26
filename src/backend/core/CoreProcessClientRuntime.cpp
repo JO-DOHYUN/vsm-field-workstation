@@ -104,6 +104,30 @@ bool CoreProcessClientRuntime::sendHostFrame(const QByteArray& frame, const QStr
     return true;
 }
 
+bool CoreProcessClientRuntime::startCapture(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut) {
+    if (sessionDir.trimmed().isEmpty()) {
+        if (errorOut) *errorOut = QStringLiteral("empty core capture session directory");
+        return false;
+    }
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.startCapture(sessionDir, metadata);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
+bool CoreProcessClientRuntime::stopCapture(const QString& inactivePath, const QJsonObject& diagnostics, QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.stopCapture(inactivePath, diagnostics);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
 bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const QStringList& extraArgs, QString* errorOut) {
     if (m_process.state() != QProcess::NotRunning) stop();
 
@@ -148,6 +172,20 @@ void CoreProcessClientRuntime::connectClientSignals() {
     connect(&m_client, &CoreIpcClientRuntime::hostFrameWriteResult, this, [this](quint64, bool ok, const QString& summary, quint64 bytesWritten) {
         emit hostFrameWriteResult(ok, summary, bytesWritten);
     });
+    connect(&m_client,
+            &CoreIpcClientRuntime::captureStorageUpdate,
+            this,
+            [this](quint64,
+                   bool ok,
+                   const QString& error,
+                   bool stateChanged,
+                   bool active,
+                   const QString& path,
+                   bool progressDue,
+                   quint64 bytesWritten,
+                   quint64 recordCount) {
+                emit captureStorageUpdate(ok, error, stateChanged, active, path, progressDue, bytesWritten, recordCount);
+            });
     connect(&m_client, &CoreIpcClientRuntime::errorReceived, this, [this](quint64, const QString& error, const QString& detail) {
         const QString message = detail.isEmpty() ? error : QStringLiteral("%1: %2").arg(error, detail);
         emit errorOccurred(QStringLiteral("core IPC error: %1").arg(message));

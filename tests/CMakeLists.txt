@@ -126,6 +126,9 @@ add_test(NAME core_ipc_runtime COMMAND test_core_ipc_runtime)
 add_executable(test_capture_core_process_runtime
     test_capture_core_process_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/BuildMetadata.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
@@ -141,6 +144,8 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedIngressRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/CaptureCoreRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp

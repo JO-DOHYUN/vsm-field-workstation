@@ -97,6 +97,43 @@ private slots:
         client.disconnectFromServer();
         server.close();
     }
+
+    void clientRequestsCaptureStartStop() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-capture-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy startSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::captureStartRequested);
+        QSignalSpy stopSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::captureStopRequested);
+        QSignalSpy updateSpy(&client, &CanMonitorCore::CoreIpcClientRuntime::captureStorageUpdate);
+
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        const quint64 startId = client.startCapture(QStringLiteral("unit-session"), QJsonObject{{QStringLiteral("source"), QStringLiteral("unit")}});
+        QTRY_COMPARE(startSpy.size(), 1);
+        QCOMPARE(startSpy.takeFirst().at(0).toULongLong(), startId);
+
+        server.publishCaptureStorageUpdate(startId, true, QString(), true, true, QStringLiteral("unit-session"), true, 12, 3);
+        QTRY_COMPARE(updateSpy.size(), 1);
+        auto args = updateSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), startId);
+        QCOMPARE(args.at(1).toBool(), true);
+        QCOMPARE(args.at(4).toBool(), true);
+        QCOMPARE(args.at(5).toString(), QStringLiteral("unit-session"));
+
+        const quint64 stopId = client.stopCapture(QStringLiteral("unit-session"), QJsonObject{{QStringLiteral("reason"), QStringLiteral("unit-stop")}});
+        QTRY_COMPARE(stopSpy.size(), 1);
+        QCOMPARE(stopSpy.takeFirst().at(0).toULongLong(), stopId);
+
+        client.disconnectFromServer();
+        server.close();
+    }
 };
 
 QTEST_MAIN(CoreIpcRuntimeTest)

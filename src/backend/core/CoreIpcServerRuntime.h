@@ -26,12 +26,23 @@ public:
 
     void publishViewChanged(const ViewChanged& change);
     void publishHostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten);
+    void publishCaptureStorageUpdate(quint64 requestId,
+                                     bool ok,
+                                     const QString& error,
+                                     bool stateChanged,
+                                     bool active,
+                                     const QString& path,
+                                     bool progressDue,
+                                     quint64 bytesWritten,
+                                     quint64 recordCount);
 
 signals:
     void clientConnected();
     void clientDisconnected();
     void protocolError(const QString& error);
     void hostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
+    void captureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
+    void captureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
 
 private:
     void acceptConnection();
