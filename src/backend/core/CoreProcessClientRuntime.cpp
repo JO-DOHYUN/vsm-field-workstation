@@ -47,6 +47,15 @@ bool CoreProcessClientRuntime::startSerial(const QString& executablePath, const 
     return startProcess(executablePath, {QStringLiteral("--port"), endpoint}, errorOut);
 }
 
+bool CoreProcessClientRuntime::startGatewayTcp(const QString& executablePath, const QString& endpoint, QString* errorOut) {
+    const QString normalized = endpoint.trimmed();
+    if (!normalized.startsWith(QStringLiteral("tcp://"))) {
+        if (errorOut) *errorOut = QStringLiteral("invalid core process gateway endpoint: %1").arg(endpoint);
+        return false;
+    }
+    return startProcess(executablePath, {QStringLiteral("--gateway"), normalized}, errorOut);
+}
+
 bool CoreProcessClientRuntime::startServerOnly(const QString& executablePath, QString* errorOut) {
     return startProcess(executablePath, {}, errorOut);
 }

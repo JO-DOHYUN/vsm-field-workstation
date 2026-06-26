@@ -8925,7 +8925,10 @@ void AppController::connectPort(const QString& portName) {
     if (m_transportModeKey == QStringLiteral("typed")) resetTypedEvidenceState();
     if (m_coreProcessMode) {
         QString error;
-        if (!m_coreProcessClient.startSerial(coreProcessExecutablePath(), trimmed, &error)) {
+        const bool started = trimmed.startsWith(QStringLiteral("tcp://"), Qt::CaseInsensitive)
+            ? m_coreProcessClient.startGatewayTcp(coreProcessExecutablePath(), trimmed, &error)
+            : m_coreProcessClient.startSerial(coreProcessExecutablePath(), trimmed, &error);
+        if (!started) {
             setStatus(error);
         }
         return;

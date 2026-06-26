@@ -17,6 +17,7 @@ public:
     ~CoreProcessClientRuntime() override;
 
     bool startSerial(const QString& executablePath, const QString& portName, QString* errorOut = nullptr);
+    bool startGatewayTcp(const QString& executablePath, const QString& endpoint, QString* errorOut = nullptr);
     bool startServerOnly(const QString& executablePath, QString* errorOut = nullptr);
     void stop();
     bool isActive() const;
