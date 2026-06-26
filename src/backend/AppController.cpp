@@ -390,6 +390,36 @@ QString severityColor(const QString& severity) {
     return QStringLiteral("#52606d");
 }
 
+quint64 jsonU64Value(const QJsonObject& object, const QString& key) {
+    const QJsonValue value = object.value(key);
+    if (value.isString()) return value.toString().toULongLong();
+    if (value.isDouble()) return quint64(std::max<double>(0.0, value.toDouble()));
+    return 0;
+}
+
+std::optional<FrameRecord> frameFromCoreLiveLatestRow(const QJsonObject& row) {
+    if (!row.contains(QStringLiteral("can_id"))) return std::nullopt;
+
+    FrameRecord frame;
+    frame.tExtUs = jsonU64Value(row, QStringLiteral("mono_us"));
+    frame.canId = quint32(jsonU64Value(row, QStringLiteral("can_id")) & 0x1FFFFFFFULL);
+    frame.ext = row.value(QStringLiteral("ext")).toBool(false);
+    frame.rtr = row.value(QStringLiteral("rtr")).toBool(false);
+    frame.dlc = quint8(std::clamp(row.value(QStringLiteral("dlc")).toInt(0), 0, 8));
+    frame.bus = quint8(std::clamp(row.value(QStringLiteral("bus")).toInt(0), 0, 255));
+    frame.seq = quint8(std::clamp(row.value(QStringLiteral("seq")).toInt(0), 0, 255));
+
+    const QByteArray payload = QByteArray::fromHex(row.value(QStringLiteral("data_hex")).toString().toLatin1());
+    for (int i = 0; i < std::min<int>(payload.size(), 8); ++i) {
+        frame.data[i] = quint8(payload.at(i));
+    }
+    if (row.contains(QStringLiteral("capture_seq"))) {
+        frame.hasCaptureSeq = true;
+        frame.captureSeq = jsonU64Value(row, QStringLiteral("capture_seq"));
+    }
+    return frame;
+}
+
 quint64 framePayloadFingerprint(const FrameRecord& fr) {
     quint64 fingerprint = quint64(fr.canId) ^ (quint64(fr.dlc) << 29) ^ (quint64(fr.bus) << 37);
     for (int i = 0; i < 8; ++i) {
@@ -1933,6 +1963,22 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
     auto result = m_coreViewClient.applySnapshot(requestId, changed, snapshot, change);
     if (result.followup) {
         dispatchCoreViewRequest(*result.followup);
+    }
+    if (result.accepted && result.changed && result.viewName == QStringLiteral("live_latest")) {
+        const QJsonArray rows = result.snapshot.value(QStringLiteral("payload")).toObject().value(QStringLiteral("frames")).toArray();
+        FrameRecordList frames;
+        frames.reserve(rows.size());
+        for (const QJsonValue& value : rows) {
+            const auto frame = frameFromCoreLiveLatestRow(value.toObject());
+            if (frame) frames.push_back(*frame);
+        }
+        if (!frames.isEmpty()) {
+            m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
+            appendPendingLiveFrames(frames);
+            if (!m_liveFlushTimer.isActive()) {
+                m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
+            }
+        }
     }
     m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     requestTransportDiagnosticsRefresh(false);

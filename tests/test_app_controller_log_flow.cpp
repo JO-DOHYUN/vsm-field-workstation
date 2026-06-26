@@ -416,6 +416,43 @@ private slots:
         QCOMPARE(trace.value(QStringLiteral("live_model_rows")).toString().toULongLong(), quint64(1));
     }
 
+    void coreLiveLatestSnapshotFeedsLiveRows() {
+        AppController controller;
+        controller.clearModel();
+        controller.m_transportModeKey = QStringLiteral("typed");
+
+        QJsonObject change{{QStringLiteral("view_name"), QStringLiteral("live_latest")},
+                           {QStringLiteral("view_seq"), QStringLiteral("1")},
+                           {QStringLiteral("severity"), QStringLiteral("ok")}};
+        controller.handleCoreViewChanged(change);
+
+        QJsonObject row;
+        row.insert(QStringLiteral("mono_us"), QStringLiteral("42000"));
+        row.insert(QStringLiteral("bus"), 1);
+        row.insert(QStringLiteral("can_id"), 0x321);
+        row.insert(QStringLiteral("ext"), false);
+        row.insert(QStringLiteral("rtr"), false);
+        row.insert(QStringLiteral("dlc"), 2);
+        row.insert(QStringLiteral("data_hex"), QStringLiteral("1020"));
+        row.insert(QStringLiteral("seq"), 7);
+
+        QJsonObject snapshot;
+        snapshot.insert(QStringLiteral("view_name"), QStringLiteral("live_latest"));
+        snapshot.insert(QStringLiteral("view_seq"), QStringLiteral("1"));
+        snapshot.insert(QStringLiteral("severity"), QStringLiteral("ok"));
+        snapshot.insert(QStringLiteral("payload"), QJsonObject{{QStringLiteral("frames"), QJsonArray{row}}});
+        controller.handleCoreViewSnapshotReady(1, true, snapshot, change);
+        controller.flushPendingLiveFrames();
+        controller.flushQueuedLiveViewBatch();
+
+        QCOMPARE(controller.liveFrames()->rowCount(), 1);
+        const QModelIndex index = controller.liveFrames()->index(0, 0);
+        QCOMPARE(controller.liveFrames()->data(index, FrameListModel::BusRole).toInt(), 1);
+        QCOMPARE(controller.liveFrames()->data(index, FrameListModel::DlcRole).toInt(), 2);
+        QCOMPARE(controller.liveFrames()->data(index, FrameListModel::DataHexRole).toString(), QStringLiteral("10 20"));
+        QCOMPARE(controller.liveFrames()->data(index, FrameListModel::IdRole).toUInt(), quint32(0x321));
+    }
+
     void livePathTelemetryCountsPausedDrops() {
         AppController controller;
         controller.clearModel();
