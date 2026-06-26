@@ -1980,6 +1980,32 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
             }
         }
     }
+    if (result.accepted && result.changed && result.viewName == QStringLiteral("raw_ledger_tail")) {
+        const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
+        const QJsonArray rows = payload.value(QStringLiteral("frames")).toArray();
+        const quint64 firstSeq = jsonU64Value(payload, QStringLiteral("first_seq"));
+        const quint64 totalRows = jsonU64Value(payload, QStringLiteral("total_rows"));
+        const quint64 segmentBytes = jsonU64Value(payload, QStringLiteral("segment_bytes"));
+        const QString path = payload.value(QStringLiteral("path")).toString();
+
+        if (totalRows < m_rawFrameTable.totalRows()) {
+            m_rawFrameTable.resetLedgerState(path, QStringLiteral("core raw ledger sequence rewound"));
+        }
+
+        FrameRecordList frames;
+        quint64 applyFirstSeq = totalRows;
+        const quint64 currentRows = m_rawFrameTable.totalRows();
+        for (int index = 0; index < rows.size(); ++index) {
+            const quint64 rowSeq = firstSeq + quint64(index);
+            if (rowSeq < currentRows) continue;
+            const auto frame = frameFromCoreLiveLatestRow(rows.at(index).toObject());
+            if (!frame) continue;
+            if (frames.isEmpty()) applyFirstSeq = rowSeq;
+            frames.push_back(*frame);
+        }
+        m_rawFrameTable.applyCommittedTailFrames(frames, applyFirstSeq, totalRows, segmentBytes, path);
+        requestLiveStatsRefresh(false);
+    }
     m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     requestTransportDiagnosticsRefresh(false);
 }

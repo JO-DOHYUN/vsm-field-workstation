@@ -223,6 +223,10 @@ qt_add_executable(vsm_capture_core
     src/backend/transport/DrainByteQueue.cpp
     src/backend/transport/TypedRecordHandoffQueue.h
     src/backend/transport/TypedRecordHandoffQueue.cpp
+    src/backend/transport/RawLedgerRuntime.h
+    src/backend/transport/RawLedgerRuntime.cpp
+    src/backend/transport/RawLedgerWriterRuntime.h
+    src/backend/transport/RawLedgerWriterRuntime.cpp
     src/backend/transport/LivePathTelemetry.h
     src/backend/transport/LiveProjectionRuntime.h
     src/backend/transport/LiveProjectionRuntime.cpp

@@ -69,6 +69,12 @@ void TypedEvidencePipelineWorkerRuntime::setCaptureEnabled(bool enabled) {
     m_core.setOptions(options);
 }
 
+void TypedEvidencePipelineWorkerRuntime::setCanRxFramesEnabled(bool enabled) {
+    auto options = m_core.options();
+    options.emitCanRxFrames = enabled;
+    m_core.setOptions(options);
+}
+
 void TypedEvidencePipelineWorkerRuntime::setSecondaryFanoutEnabled(bool enabled) {
     auto options = m_core.options();
     options.emitCanRxFrames = enabled;

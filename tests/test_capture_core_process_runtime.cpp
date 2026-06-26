@@ -2,6 +2,7 @@
 #include "core/CoreIpcClientRuntime.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -44,6 +45,17 @@ private slots:
         snapshot = args.at(2).toJsonObject();
         QCOMPARE(snapshot.value(QStringLiteral("payload")).toObject().value(QStringLiteral("serial_owner")).toString(),
                  QStringLiteral("core"));
+
+        const quint64 rawLedgerRequest = client.requestView(QStringLiteral("raw_ledger_tail"), 0, 16);
+        QTRY_COMPARE(snapshotSpy.size(), 1);
+        args = snapshotSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), rawLedgerRequest);
+        QCOMPARE(args.at(1).toBool(), true);
+        snapshot = args.at(2).toJsonObject();
+        const QJsonObject rawPayload = snapshot.value(QStringLiteral("payload")).toObject();
+        QCOMPARE(rawPayload.value(QStringLiteral("source")).toString(),
+                 QStringLiteral("core_raw_ledger_writer"));
+        QCOMPARE(rawPayload.value(QStringLiteral("frames")).toArray().size(), 0);
 
         client.disconnectFromServer();
         runtime.stopIpc();

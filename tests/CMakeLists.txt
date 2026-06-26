@@ -140,6 +140,8 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerWriterRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp

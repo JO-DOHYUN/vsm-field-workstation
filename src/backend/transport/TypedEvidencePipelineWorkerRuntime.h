@@ -24,6 +24,7 @@ public slots:
     void reset();
     void schedulePump(qint64 handshakeElapsedMs);
     void setCaptureEnabled(bool enabled);
+    void setCanRxFramesEnabled(bool enabled);
     void setSecondaryFanoutEnabled(bool enabled);
     void acknowledgeProjectionSnapshot();
     void queryCoreView(const QString& viewName, quint64 sinceSeq, int limit, quint64 requestId);

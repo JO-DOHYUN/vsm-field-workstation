@@ -3,6 +3,7 @@
 #include "backend/BuildMetadata.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QStringList>
@@ -15,10 +16,39 @@ QJsonObject buildInfoJson() {
     return QJsonObject::fromVariantMap(BuildMetadata::toVariantMap(BuildMetadata::current()));
 }
 
+constexpr int kCoreRawLedgerPendingFrameCap = 4096;
+constexpr int kCoreRawLedgerTailViewCap = 1024;
+
 CoreViewSeverity severityFromJson(const QJsonObject& object) {
     CoreViewSeverity severity = CoreViewSeverity::Ok;
     coreViewSeverityFromString(object.value(QStringLiteral("severity")).toString(), &severity);
     return severity;
+}
+
+QString frameDataHex(const FrameRecord& frame) {
+    QByteArray bytes;
+    bytes.reserve(8);
+    for (quint8 byte : frame.data) {
+        bytes.append(char(byte));
+    }
+    return QString::fromLatin1(bytes.toHex());
+}
+
+QJsonObject frameToViewRow(const FrameRecord& frame, quint64 ledgerSeq) {
+    QJsonObject row;
+    row.insert(QStringLiteral("ledger_seq"), QString::number(ledgerSeq));
+    row.insert(QStringLiteral("mono_us"), QString::number(frame.tExtUs));
+    row.insert(QStringLiteral("bus"), int(frame.bus));
+    row.insert(QStringLiteral("can_id"), int(frame.canId));
+    row.insert(QStringLiteral("ext"), frame.ext);
+    row.insert(QStringLiteral("rtr"), frame.rtr);
+    row.insert(QStringLiteral("dlc"), int(frame.dlc));
+    row.insert(QStringLiteral("data_hex"), frameDataHex(frame));
+    row.insert(QStringLiteral("seq"), int(frame.seq));
+    if (frame.hasCaptureSeq) {
+        row.insert(QStringLiteral("capture_seq"), QString::number(frame.captureSeq));
+    }
+    return row;
 }
 
 } // namespace
@@ -188,6 +218,11 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
             &CaptureCoreProcessRuntime::requestPipelineViewMirror,
             Qt::QueuedConnection);
     connect(pipeline,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::canRxFramesReady,
+            this,
+            &CaptureCoreProcessRuntime::queueRawLedgerFrames,
+            Qt::QueuedConnection);
+    connect(pipeline,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::captureQueueReady,
             this,
             [this]() {
@@ -231,14 +266,20 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
 
     m_drainThread.setObjectName(QStringLiteral("vsm-core-drain"));
     m_pipelineThread.setObjectName(QStringLiteral("vsm-core-pipeline"));
+    ensureRawLedgerRuntime();
     m_drainThread.start(QThread::TimeCriticalPriority);
     m_pipelineThread.start(QThread::HighPriority);
+    QMetaObject::invokeMethod(pipeline,
+                              "setCanRxFramesEnabled",
+                              Qt::QueuedConnection,
+                              Q_ARG(bool, true));
     m_transportRuntimeStarted = true;
     updateCoreHealth(QStringLiteral("transport_runtime_started"));
 }
 
 void CaptureCoreProcessRuntime::teardownTransportRuntime() {
     shutdownCaptureWriterRuntime();
+    shutdownRawLedgerRuntime();
     if (m_drainRuntime) {
         QMetaObject::invokeMethod(m_drainRuntime,
                                   &CanMonitorTransport::SerialDrainRuntime::stop,
@@ -335,14 +376,211 @@ void CaptureCoreProcessRuntime::shutdownCaptureWriterRuntime() {
     if (m_captureQueue) m_captureQueue->clear();
 }
 
+void CaptureCoreProcessRuntime::ensureRawLedgerRuntime() {
+    if (m_rawLedgerRuntime) return;
+
+    auto* writer = new CanMonitorTransport::RawLedgerWriterRuntime();
+    m_rawLedgerRuntime = writer;
+    writer->moveToThread(&m_rawLedgerThread);
+    connect(&m_rawLedgerThread, &QThread::finished, writer, &QObject::deleteLater);
+    connect(writer,
+            &CanMonitorTransport::RawLedgerWriterRuntime::resetCompleted,
+            this,
+            [this](bool ok, const QString& path, const QString& error) {
+                m_rawLedgerTailRows = QJsonArray{};
+                m_rawLedgerDroppedDisplayRows = 0;
+                m_rawLedgerDroppedHandoffFrames = 0;
+                m_rawLedgerLastTotalRows = 0;
+                m_rawLedgerLastSegmentBytes = 0;
+                QJsonObject payload{{QStringLiteral("ok"), ok},
+                                    {QStringLiteral("path"), path},
+                                    {QStringLiteral("total_rows"), QStringLiteral("0")},
+                                    {QStringLiteral("segment_bytes"), QStringLiteral("0")},
+                                    {QStringLiteral("frames"), QJsonArray{}},
+                                    {QStringLiteral("item_count"), 0},
+                                    {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
+                                    {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+                if (!error.isEmpty()) payload.insert(QStringLiteral("error"), error);
+                QJsonObject counts{{QStringLiteral("total_rows"), QStringLiteral("0")},
+                                   {QStringLiteral("segment_bytes"), QStringLiteral("0")},
+                                   {QStringLiteral("dropped_display_count"), QStringLiteral("0")}};
+                publishChange(m_viewStore.updateView(CoreViewName::RawLedgerTail,
+                                                     payload,
+                                                     ok ? CoreViewSeverity::Ok : CoreViewSeverity::Error,
+                                                     counts));
+            },
+            Qt::QueuedConnection);
+    connect(writer,
+            &CanMonitorTransport::RawLedgerWriterRuntime::batchCommitted,
+            this,
+            &CaptureCoreProcessRuntime::updateRawLedgerTailView,
+            Qt::QueuedConnection);
+    connect(writer,
+            &CanMonitorTransport::RawLedgerWriterRuntime::statusChanged,
+            this,
+            &CaptureCoreProcessRuntime::updateRawLedgerStatusView,
+            Qt::QueuedConnection);
+    connect(writer,
+            &CanMonitorTransport::RawLedgerWriterRuntime::batchFinished,
+            this,
+            [this]() {
+                m_rawLedgerDispatchInFlight = false;
+                flushRawLedgerFrames(false);
+            },
+            Qt::QueuedConnection);
+
+    m_rawLedgerThread.setObjectName(QStringLiteral("vsm-core-raw-ledger"));
+    m_rawLedgerThread.start(QThread::HighPriority);
+    QMetaObject::invokeMethod(writer,
+                              "reset",
+                              Qt::QueuedConnection,
+                              Q_ARG(QString, QStringLiteral("core")));
+}
+
+void CaptureCoreProcessRuntime::shutdownRawLedgerRuntime() {
+    flushRawLedgerFrames(true);
+    if (m_rawLedgerThread.isRunning()) {
+        m_rawLedgerThread.quit();
+        m_rawLedgerThread.wait(3000);
+    }
+    m_rawLedgerRuntime = nullptr;
+    m_pendingRawLedgerFrames.clear();
+    m_rawLedgerDispatchInFlight = false;
+}
+
+void CaptureCoreProcessRuntime::queueRawLedgerFrames(const FrameRecordList& frames) {
+    if (frames.isEmpty()) return;
+    ensureRawLedgerRuntime();
+    m_pendingRawLedgerFrames.reserve(m_pendingRawLedgerFrames.size() + frames.size());
+    for (const FrameRecord& frame : frames) {
+        m_pendingRawLedgerFrames.push_back(frame);
+    }
+    if (m_pendingRawLedgerFrames.size() > kCoreRawLedgerPendingFrameCap) {
+        const int removeCount = m_pendingRawLedgerFrames.size() - kCoreRawLedgerPendingFrameCap;
+        m_pendingRawLedgerFrames.erase(m_pendingRawLedgerFrames.begin(),
+                                       m_pendingRawLedgerFrames.begin() + removeCount);
+        m_rawLedgerDroppedHandoffFrames += quint64(removeCount);
+    }
+    flushRawLedgerFrames(false);
+}
+
+void CaptureCoreProcessRuntime::flushRawLedgerFrames(bool force) {
+    if (!m_rawLedgerRuntime || m_pendingRawLedgerFrames.isEmpty()) return;
+    if (m_rawLedgerDispatchInFlight && !force) return;
+
+    FrameRecordList frames = std::move(m_pendingRawLedgerFrames);
+    m_pendingRawLedgerFrames.clear();
+    m_rawLedgerDispatchInFlight = true;
+    QMetaObject::invokeMethod(m_rawLedgerRuntime,
+                              [worker = QPointer<CanMonitorTransport::RawLedgerWriterRuntime>(m_rawLedgerRuntime),
+                               frames = std::move(frames)]() mutable {
+                                  if (worker) worker->appendFrames(std::move(frames));
+                              },
+                              force ? Qt::BlockingQueuedConnection : Qt::QueuedConnection);
+    if (force) {
+        m_rawLedgerDispatchInFlight = false;
+    }
+}
+
+void CaptureCoreProcessRuntime::updateRawLedgerTailView(const FrameRecordList& frames,
+                                                        quint64 firstSeq,
+                                                        quint64 lastSeq,
+                                                        quint64 totalRows,
+                                                        quint64 segmentBytes,
+                                                        const QString& path) {
+    Q_UNUSED(lastSeq);
+    for (int index = 0; index < frames.size(); ++index) {
+        m_rawLedgerTailRows.append(frameToViewRow(frames.at(index), firstSeq + quint64(index)));
+    }
+    while (m_rawLedgerTailRows.size() > kCoreRawLedgerTailViewCap) {
+        m_rawLedgerTailRows.removeAt(0);
+        ++m_rawLedgerDroppedDisplayRows;
+    }
+    m_rawLedgerLastTotalRows = totalRows;
+    m_rawLedgerLastSegmentBytes = segmentBytes;
+
+    QJsonObject payload{{QStringLiteral("ok"), true},
+                        {QStringLiteral("path"), path},
+                        {QStringLiteral("first_seq"), QString::number(totalRows > quint64(m_rawLedgerTailRows.size())
+                                                                          ? totalRows - quint64(m_rawLedgerTailRows.size())
+                                                                          : 0)},
+                        {QStringLiteral("last_seq"), QString::number(totalRows == 0 ? 0 : totalRows - 1)},
+                        {QStringLiteral("total_rows"), QString::number(totalRows)},
+                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
+                        {QStringLiteral("frames"), m_rawLedgerTailRows},
+                        {QStringLiteral("item_count"), m_rawLedgerTailRows.size()},
+                        {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
+                        {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
+                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
+                        {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+    QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
+                       {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
+                       {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
+                       {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)}};
+    const CoreViewSeverity severity = m_rawLedgerDroppedHandoffFrames > 0 ? CoreViewSeverity::Warn : CoreViewSeverity::Ok;
+    publishChange(m_viewStore.updateView(CoreViewName::RawLedgerTail, payload, severity, counts));
+}
+
+void CaptureCoreProcessRuntime::updateRawLedgerStatusView(quint64 totalRows,
+                                                          quint64 segmentBytes,
+                                                          quint64 batchCount,
+                                                          quint64 writeMaxUs,
+                                                          quint64 writeFailures,
+                                                          const QString& lastError) {
+    m_rawLedgerLastTotalRows = totalRows;
+    m_rawLedgerLastSegmentBytes = segmentBytes;
+    m_rawLedgerLastBatchCount = batchCount;
+    m_rawLedgerLastWriteMaxUs = writeMaxUs;
+    m_rawLedgerLastWriteFailures = writeFailures;
+    if (m_rawLedgerTailRows.isEmpty() && writeFailures == 0 && totalRows == 0) return;
+
+    QJsonObject payload{{QStringLiteral("ok"), writeFailures == 0},
+                        {QStringLiteral("total_rows"), QString::number(totalRows)},
+                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
+                        {QStringLiteral("batch_count"), QString::number(batchCount)},
+                        {QStringLiteral("write_max_us"), QString::number(writeMaxUs)},
+                        {QStringLiteral("write_failures"), QString::number(writeFailures)},
+                        {QStringLiteral("frames"), m_rawLedgerTailRows},
+                        {QStringLiteral("item_count"), m_rawLedgerTailRows.size()},
+                        {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
+                        {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
+                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
+                        {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+    if (!lastError.isEmpty()) payload.insert(QStringLiteral("error"), lastError);
+    QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
+                       {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
+                       {QStringLiteral("write_failures"), QString::number(writeFailures)},
+                       {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)}};
+    const CoreViewSeverity severity = writeFailures > 0
+        ? CoreViewSeverity::Error
+        : (m_rawLedgerDroppedHandoffFrames > 0 ? CoreViewSeverity::Warn : CoreViewSeverity::Ok);
+    publishChange(m_viewStore.updateView(CoreViewName::RawLedgerTail, payload, severity, counts));
+}
+
 void CaptureCoreProcessRuntime::seedInitialViews() {
     m_viewStore.clear();
+    m_rawLedgerTailRows = QJsonArray{};
+    m_rawLedgerDroppedDisplayRows = 0;
+    m_rawLedgerDroppedHandoffFrames = 0;
+    m_rawLedgerLastTotalRows = 0;
+    m_rawLedgerLastSegmentBytes = 0;
     updateCoreHealth(QStringLiteral("ready"));
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")},
                                        {QStringLiteral("capture_active"), false}},
                            CoreViewSeverity::Ok,
                            QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")}});
+    publishChange(m_viewStore.updateView(CoreViewName::RawLedgerTail,
+                                         QJsonObject{{QStringLiteral("ok"), true},
+                                                     {QStringLiteral("total_rows"), QStringLiteral("0")},
+                                                     {QStringLiteral("segment_bytes"), QStringLiteral("0")},
+                                                     {QStringLiteral("frames"), QJsonArray{}},
+                                                     {QStringLiteral("item_count"), 0},
+                                                     {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
+                                                     {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}},
+                                         CoreViewSeverity::Ok,
+                                         QJsonObject{{QStringLiteral("total_rows"), QStringLiteral("0")},
+                                                     {QStringLiteral("segment_bytes"), QStringLiteral("0")}}));
 }
 
 void CaptureCoreProcessRuntime::updateCoreHealth(const QString& state, CoreViewSeverity severity) {

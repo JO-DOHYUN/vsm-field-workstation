@@ -3,12 +3,14 @@
 #include "core/CoreIpcServerRuntime.h"
 #include "core/CoreMaterializedViewStore.h"
 #include "transport/DrainByteQueue.h"
+#include "transport/RawLedgerWriterRuntime.h"
 #include "transport/SerialDrainRuntime.h"
 #include "transport/TypedCaptureWriterWorkerRuntime.h"
 #include "transport/TypedEvidencePipelineWorkerRuntime.h"
 #include "transport/TypedRecordHandoffQueue.h"
 
 #include <QHash>
+#include <QJsonArray>
 #include <QObject>
 #include <QPointer>
 #include <QQueue>
@@ -58,6 +60,22 @@ private:
     void handleCaptureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
     void ensureCaptureWriterRuntime();
     void shutdownCaptureWriterRuntime();
+    void ensureRawLedgerRuntime();
+    void shutdownRawLedgerRuntime();
+    void queueRawLedgerFrames(const FrameRecordList& frames);
+    void flushRawLedgerFrames(bool force = false);
+    void updateRawLedgerTailView(const FrameRecordList& frames,
+                                 quint64 firstSeq,
+                                 quint64 lastSeq,
+                                 quint64 totalRows,
+                                 quint64 segmentBytes,
+                                 const QString& path);
+    void updateRawLedgerStatusView(quint64 totalRows,
+                                   quint64 segmentBytes,
+                                   quint64 batchCount,
+                                   quint64 writeMaxUs,
+                                   quint64 writeFailures,
+                                   const QString& lastError);
     void setPipelineCaptureEnabled(bool enabled, Qt::ConnectionType connectionType = Qt::QueuedConnection);
     void drainCaptureQueueSync();
     void publishCaptureStorageUpdate(quint64 requestId,
@@ -72,12 +90,24 @@ private:
     QThread m_drainThread;
     QThread m_pipelineThread;
     QThread m_captureWriterThread;
+    QThread m_rawLedgerThread;
     QPointer<CanMonitorTransport::SerialDrainRuntime> m_drainRuntime;
     QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime> m_pipelineRuntime;
     QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> m_captureWriterRuntime;
+    QPointer<CanMonitorTransport::RawLedgerWriterRuntime> m_rawLedgerRuntime;
+    FrameRecordList m_pendingRawLedgerFrames;
+    QJsonArray m_rawLedgerTailRows;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
     QQueue<quint64> m_pendingHostFrameRequests;
     quint64 m_nextMirrorRequestId = 1;
+    quint64 m_rawLedgerDroppedDisplayRows = 0;
+    quint64 m_rawLedgerDroppedHandoffFrames = 0;
+    quint64 m_rawLedgerLastTotalRows = 0;
+    quint64 m_rawLedgerLastSegmentBytes = 0;
+    quint64 m_rawLedgerLastBatchCount = 0;
+    quint64 m_rawLedgerLastWriteMaxUs = 0;
+    quint64 m_rawLedgerLastWriteFailures = 0;
+    bool m_rawLedgerDispatchInFlight = false;
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;
     QString m_transportMessage = QStringLiteral("idle");
