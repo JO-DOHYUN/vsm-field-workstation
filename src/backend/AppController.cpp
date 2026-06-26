@@ -2497,6 +2497,13 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                 if (!m_coreProcessMode) return;
                 handleCoreViewSnapshotReady(requestId, changed, snapshot, change);
             });
+    connect(&m_coreProcessClient,
+            &CanMonitorCore::CoreProcessClientRuntime::hostFrameWriteResult,
+            this,
+            [this](bool ok, const QString& summary, quint64 bytesWritten) {
+                if (!m_coreProcessMode) return;
+                handleHostFrameWriteResult(ok, summary, bytesWritten);
+            });
     connect(m_worker, &SerialWorker::stateChanged, this, [this](bool ok, const QString& msg) {
         if (m_coreProcessMode) return;
         const bool previousReplayActive = replayAnalysisActive();
@@ -3179,32 +3186,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         m_logRecordedFrameCount = recordCount;
         requestLogStateRefresh(false);
     });
-    connect(m_worker, &SerialWorker::hostFrameWriteResult, this, [this](bool ok, const QString& summary, quint64 bytesWritten) {
-        m_controlAudit.noteHostWriteResult(ok);
-        const bool routineWrite = ok
-            && (summary.contains(QStringLiteral("worker control cycle")) ||
-                summary.contains(QStringLiteral("worker HOST_HEARTBEAT")) ||
-                summary.contains(QStringLiteral("RENEW_LEASE")));
-        const QString writeSummary = QStringLiteral("%1 | serial %2 | %3 bytes")
-            .arg(summary, ok ? QStringLiteral("write ok") : QStringLiteral("write failed"))
-            .arg(bytesWritten);
-        if (!routineWrite) {
-            m_controlRuntime.setLastCommandSummary(writeSummary);
-            appendControlEvidenceEvent(QStringLiteral("HOST_WRITE"),
-                                       ok ? QStringLiteral("info") : QStringLiteral("error"),
-                                       ok ? QStringLiteral("Qt serial write accepted") : QStringLiteral("Qt serial write failed"),
-                                       m_controlRuntime.lastCommandSummary());
-            refreshControlStatus(ok ? QStringLiteral("요청 전송됨: 실제 성공은 CAN_TX_RAW audit 기준")
-                                    : QStringLiteral("제어 요청 write 실패"));
-        } else {
-            const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
-            if (m_lastRoutineControlWriteNotifyWallMs <= 0 ||
-                nowWallMs - m_lastRoutineControlWriteNotifyWallMs >= kRoutineControlWriteUiMinIntervalMs) {
-                m_lastRoutineControlWriteNotifyWallMs = nowWallMs;
-                emit controlStateChanged();
-            }
-        }
-    });
+    connect(m_worker, &SerialWorker::hostFrameWriteResult, this, &AppController::handleHostFrameWriteResult);
     connect(&m_replay, &ReplayEngine::replayFrame, this, [this](const FrameRecord& fr) {
         if (m_replayDisplayedUs > 0 && fr.tExtUs < m_replayDisplayedUs) {
             m_replayStates.clear();
@@ -5407,7 +5389,10 @@ void AppController::queueControlHostFrame(const QByteArray& frame,
                                    bus);
     }
     QString error;
-    if (!m_transportRuntime.sendHostFrame(frame, summary, &error)) {
+    const bool queued = m_coreProcessMode
+        ? m_coreProcessClient.sendHostFrame(frame, summary, &error)
+        : m_transportRuntime.sendHostFrame(frame, summary, &error);
+    if (!queued) {
         appendControlEvidenceEvent(QStringLiteral("HOST_WRITE"),
                                    QStringLiteral("error"),
                                    QStringLiteral("Qt serial write queue failed"),
@@ -5416,6 +5401,33 @@ void AppController::queueControlHostFrame(const QByteArray& frame,
                                    canId,
                                    bus);
         refreshControlStatus(error);
+    }
+}
+
+void AppController::handleHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten) {
+    m_controlAudit.noteHostWriteResult(ok);
+    const bool routineWrite = ok
+        && (summary.contains(QStringLiteral("worker control cycle")) ||
+            summary.contains(QStringLiteral("worker HOST_HEARTBEAT")) ||
+            summary.contains(QStringLiteral("RENEW_LEASE")));
+    const QString writeSummary = QStringLiteral("%1 | serial %2 | %3 bytes")
+        .arg(summary, ok ? QStringLiteral("write ok") : QStringLiteral("write failed"))
+        .arg(bytesWritten);
+    if (!routineWrite) {
+        m_controlRuntime.setLastCommandSummary(writeSummary);
+        appendControlEvidenceEvent(QStringLiteral("HOST_WRITE"),
+                                   ok ? QStringLiteral("info") : QStringLiteral("error"),
+                                   ok ? QStringLiteral("Qt serial write accepted") : QStringLiteral("Qt serial write failed"),
+                                   m_controlRuntime.lastCommandSummary());
+        refreshControlStatus(ok ? QStringLiteral("요청 전송됨: 실제 성공은 CAN_TX_RAW audit 기준")
+                                : QStringLiteral("제어 요청 write 실패"));
+    } else {
+        const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
+        if (m_lastRoutineControlWriteNotifyWallMs <= 0 ||
+            nowWallMs - m_lastRoutineControlWriteNotifyWallMs >= kRoutineControlWriteUiMinIntervalMs) {
+            m_lastRoutineControlWriteNotifyWallMs = nowWallMs;
+            emit controlStateChanged();
+        }
     }
 }
 

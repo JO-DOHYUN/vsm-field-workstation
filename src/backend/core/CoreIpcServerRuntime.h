@@ -6,6 +6,7 @@
 #include <QLocalServer>
 #include <QObject>
 #include <QPointer>
+#include <QByteArray>
 #include <QVector>
 
 class QLocalSocket;
@@ -24,11 +25,13 @@ public:
     QString serverName() const;
 
     void publishViewChanged(const ViewChanged& change);
+    void publishHostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten);
 
 signals:
     void clientConnected();
     void clientDisconnected();
     void protocolError(const QString& error);
+    void hostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
 
 private:
     void acceptConnection();

@@ -61,6 +61,42 @@ private slots:
         client.disconnectFromServer();
         server.close();
     }
+
+    void clientSubmitsHostFrameAndReceivesWriteResult() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-host-frame-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy requestSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::hostFrameRequested);
+        QSignalSpy resultSpy(&client, &CanMonitorCore::CoreIpcClientRuntime::hostFrameWriteResult);
+
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        const QByteArray frame = QByteArray::fromHex("a55a010b000100000000");
+        const quint64 requestId = client.sendHostFrame(frame, QStringLiteral("unit host frame"));
+        QTRY_COMPARE(requestSpy.size(), 1);
+        const auto requestArgs = requestSpy.takeFirst();
+        QCOMPARE(requestArgs.at(0).toULongLong(), requestId);
+        QCOMPARE(requestArgs.at(1).toByteArray(), frame);
+        QCOMPARE(requestArgs.at(2).toString(), QStringLiteral("unit host frame"));
+
+        server.publishHostFrameWriteResult(requestId, true, QStringLiteral("unit host frame"), quint64(frame.size()));
+        QTRY_COMPARE(resultSpy.size(), 1);
+        const auto resultArgs = resultSpy.takeFirst();
+        QCOMPARE(resultArgs.at(0).toULongLong(), requestId);
+        QCOMPARE(resultArgs.at(1).toBool(), true);
+        QCOMPARE(resultArgs.at(2).toString(), QStringLiteral("unit host frame"));
+        QCOMPARE(resultArgs.at(3).toULongLong(), quint64(frame.size()));
+
+        client.disconnectFromServer();
+        server.close();
+    }
 };
 
 QTEST_MAIN(CoreIpcRuntimeTest)

@@ -3,6 +3,7 @@
 #include "core/CoreIpcClientRuntime.h"
 #include "core/CoreViewClientRuntime.h"
 
+#include <QByteArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QProcess>
@@ -26,11 +27,13 @@ public:
     QJsonObject statusJson() const;
 
     bool requestView(const CoreViewClientRuntime::ViewRequest& request);
+    bool sendHostFrame(const QByteArray& frame, const QString& summary, QString* errorOut = nullptr);
 
 signals:
     void stateChanged(bool active, const QString& message);
     void viewChanged(const QJsonObject& change);
     void viewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
+    void hostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
     void errorOccurred(const QString& message);
 
 private:

@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <QQueue>
 #include <QSharedPointer>
 #include <QThread>
 
@@ -50,6 +51,8 @@ private:
                                bool changed,
                                const QJsonObject& snapshot,
                                const QJsonObject& change);
+    void handleHostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
+    void publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
 
     CoreMaterializedViewStore m_viewStore;
     CoreIpcServerRuntime m_ipc;
@@ -60,6 +63,7 @@ private:
     QPointer<CanMonitorTransport::SerialDrainRuntime> m_drainRuntime;
     QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime> m_pipelineRuntime;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
+    QQueue<quint64> m_pendingHostFrameRequests;
     quint64 m_nextMirrorRequestId = 1;
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;

@@ -960,6 +960,7 @@ private:
     bool autoSelectSystemControlBus();
     QString controlBusResolutionSummary() const;
     void queueControlHostFrame(const QByteArray& frame, const QString& summary, const QString& stage, quint32 commandId = 0, quint32 canId = 0, quint8 bus = 0);
+    void handleHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
     void sendControlHeartbeat(const QString& reason);
     void sendControlSession(quint8 action, const QString& reason);
     void maintainControlLeaseAndHeartbeat(bool forceHeartbeat = false, bool forceLeaseRenew = false);

@@ -25,7 +25,13 @@ CoreViewSeverity severityFromJson(const QJsonObject& object) {
 
 CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
     : QObject(parent)
-    , m_ipc(&m_viewStore, this) {}
+    , m_ipc(&m_viewStore, this) {
+    connect(&m_ipc,
+            &CoreIpcServerRuntime::hostFrameRequested,
+            this,
+            &CaptureCoreProcessRuntime::handleHostFrameRequested,
+            Qt::QueuedConnection);
+}
 
 CaptureCoreProcessRuntime::~CaptureCoreProcessRuntime() {
     stopTransport();
@@ -161,6 +167,11 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
                                                    {QStringLiteral("raw_queue_overrun_bytes"), trace.value(QStringLiteral("drain_queue_overrun_bytes")).toVariant().toString()}});
             },
             Qt::QueuedConnection);
+    connect(drain,
+            &CanMonitorTransport::SerialDrainRuntime::hostFrameWriteResult,
+            this,
+            &CaptureCoreProcessRuntime::publishHostFrameWriteResult,
+            Qt::QueuedConnection);
     connect(pipeline,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::coreViewChanged,
             this,
@@ -203,6 +214,7 @@ void CaptureCoreProcessRuntime::teardownTransportRuntime() {
     m_drainQueue.clear();
     m_captureQueue.clear();
     m_pendingMirrorRequests.clear();
+    m_pendingHostFrameRequests.clear();
     m_transportRuntimeStarted = false;
 }
 
@@ -271,6 +283,28 @@ void CaptureCoreProcessRuntime::applyPipelineSnapshot(quint64 requestId,
                                          payload,
                                          severityFromJson(snapshot),
                                          cheapCounts));
+}
+
+void CaptureCoreProcessRuntime::handleHostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary) {
+    if (frame.isEmpty()) {
+        m_ipc.publishHostFrameWriteResult(requestId, false, summary, 0);
+        return;
+    }
+    if (!m_drainRuntime || !m_transportRuntimeStarted || !m_transportConnected) {
+        m_ipc.publishHostFrameWriteResult(requestId, false, QStringLiteral("%1 | core transport not connected").arg(summary), 0);
+        return;
+    }
+    m_pendingHostFrameRequests.enqueue(requestId);
+    QMetaObject::invokeMethod(m_drainRuntime,
+                              "sendHostFrame",
+                              Qt::QueuedConnection,
+                              Q_ARG(QByteArray, frame),
+                              Q_ARG(QString, summary));
+}
+
+void CaptureCoreProcessRuntime::publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten) {
+    const quint64 requestId = m_pendingHostFrameRequests.isEmpty() ? 0 : m_pendingHostFrameRequests.dequeue();
+    m_ipc.publishHostFrameWriteResult(requestId, ok, summary, bytesWritten);
 }
 
 } // namespace CanMonitorCore

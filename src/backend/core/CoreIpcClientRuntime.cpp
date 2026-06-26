@@ -52,6 +52,12 @@ bool CoreIpcClientRuntime::requestViewWithId(quint64 requestId, const QString& v
                                          {QStringLiteral("limit"), limit}});
 }
 
+quint64 CoreIpcClientRuntime::sendHostFrame(const QByteArray& frame, const QString& summary) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("host_frame")},
+                                   {QStringLiteral("frame_base64"), QString::fromLatin1(frame.toBase64())},
+                                   {QStringLiteral("summary"), summary}});
+}
+
 void CoreIpcClientRuntime::readMessages() {
     m_buffer += m_socket.readAll();
     constexpr qsizetype kMaxBufferedBytes = 1024 * 1024;
@@ -94,6 +100,13 @@ void CoreIpcClientRuntime::handleMessage(const QJsonObject& message) {
                                   message.value(QStringLiteral("changed")).toBool(),
                                   message.value(QStringLiteral("snapshot")).toObject(),
                                   message.value(QStringLiteral("change")).toObject());
+        return;
+    }
+    if (type == QStringLiteral("host_frame_write_result")) {
+        emit hostFrameWriteResult(requestId,
+                                  message.value(QStringLiteral("ok")).toBool(),
+                                  message.value(QStringLiteral("summary")).toString(),
+                                  message.value(QStringLiteral("bytes_written")).toVariant().toULongLong());
         return;
     }
     if (type == QStringLiteral("error")) {

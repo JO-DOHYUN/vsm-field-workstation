@@ -66,6 +66,19 @@ void CoreIpcServerRuntime::publishViewChanged(const ViewChanged& change) {
     }
 }
 
+void CoreIpcServerRuntime::publishHostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten) {
+    QJsonObject message{{QStringLiteral("message_type"), QStringLiteral("host_frame_write_result")},
+                        {QStringLiteral("request_id"), QString::number(requestId)},
+                        {QStringLiteral("ok"), ok},
+                        {QStringLiteral("summary"), summary},
+                        {QStringLiteral("bytes_written"), QString::number(bytesWritten)}};
+    for (const auto& client : std::as_const(m_clients)) {
+        if (client) {
+            sendObject(client, message);
+        }
+    }
+}
+
 void CoreIpcServerRuntime::acceptConnection() {
     while (QLocalSocket* socket = m_server.nextPendingConnection()) {
         m_clients.push_back(socket);
@@ -123,6 +136,17 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
     const QString type = message.value(QStringLiteral("message_type")).toString();
     if (type == QStringLiteral("ping")) {
         sendObject(socket, baseResponse(message, QStringLiteral("pong")));
+        return;
+    }
+    if (type == QStringLiteral("host_frame")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        const QByteArray frame = QByteArray::fromBase64(message.value(QStringLiteral("frame_base64")).toString().toLatin1());
+        const QString summary = message.value(QStringLiteral("summary")).toString();
+        if (frame.isEmpty()) {
+            sendObject(socket, errorResponse(message, QStringLiteral("empty_host_frame"), summary));
+            return;
+        }
+        emit hostFrameRequested(requestId, frame, summary);
         return;
     }
     if (type != QStringLiteral("get_view")) {

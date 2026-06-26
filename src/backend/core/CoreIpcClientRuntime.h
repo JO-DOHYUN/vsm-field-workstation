@@ -18,12 +18,14 @@ public:
     quint64 ping();
     quint64 requestView(const QString& viewName, quint64 sinceSeq, int limit);
     bool requestViewWithId(quint64 requestId, const QString& viewName, quint64 sinceSeq, int limit);
+    quint64 sendHostFrame(const QByteArray& frame, const QString& summary);
 
 signals:
     void connectedChanged(bool connected);
     void pongReceived(quint64 requestId);
     void viewChanged(const QJsonObject& change);
     void viewSnapshotReceived(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
+    void hostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten);
     void errorReceived(quint64 requestId, const QString& error, const QString& detail);
 
 private:

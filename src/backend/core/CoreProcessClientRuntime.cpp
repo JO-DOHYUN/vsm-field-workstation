@@ -90,6 +90,20 @@ bool CoreProcessClientRuntime::requestView(const CoreViewClientRuntime::ViewRequ
     return m_client.requestViewWithId(request.requestId, request.viewName, request.sinceSeq, request.limit);
 }
 
+bool CoreProcessClientRuntime::sendHostFrame(const QByteArray& frame, const QString& summary, QString* errorOut) {
+    if (frame.isEmpty()) {
+        if (errorOut) *errorOut = QStringLiteral("empty core process host frame");
+        return false;
+    }
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.sendHostFrame(frame, summary);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
 bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const QStringList& extraArgs, QString* errorOut) {
     if (m_process.state() != QProcess::NotRunning) stop();
 
@@ -131,6 +145,9 @@ void CoreProcessClientRuntime::connectClientSignals() {
             &CoreIpcClientRuntime::viewSnapshotReceived,
             this,
             &CoreProcessClientRuntime::viewSnapshotReady);
+    connect(&m_client, &CoreIpcClientRuntime::hostFrameWriteResult, this, [this](quint64, bool ok, const QString& summary, quint64 bytesWritten) {
+        emit hostFrameWriteResult(ok, summary, bytesWritten);
+    });
     connect(&m_client, &CoreIpcClientRuntime::errorReceived, this, [this](quint64, const QString& error, const QString& detail) {
         const QString message = detail.isEmpty() ? error : QStringLiteral("%1: %2").arg(error, detail);
         emit errorOccurred(QStringLiteral("core IPC error: %1").arg(message));

@@ -83,6 +83,26 @@ private slots:
         runtime.stop();
         QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);
     }
+
+    void reportsHostFrameFailureWhenCoreTransportIsNotStarted() {
+        CanMonitorCore::CoreProcessClientRuntime runtime;
+        QSignalSpy writeSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::hostFrameWriteResult);
+
+        QString error;
+        QVERIFY2(runtime.startServerOnly(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE), &error), qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.isIpcConnected(), 5000);
+
+        const QByteArray frame = QByteArray::fromHex("a55a010b000100000000");
+        QVERIFY(runtime.sendHostFrame(frame, QStringLiteral("unit host frame"), &error));
+        QTRY_COMPARE_WITH_TIMEOUT(writeSpy.size(), 1, 5000);
+        const auto args = writeSpy.takeFirst();
+        QCOMPARE(args.at(0).toBool(), false);
+        QVERIFY(args.at(1).toString().contains(QStringLiteral("core transport not connected")));
+        QCOMPARE(args.at(2).toULongLong(), quint64(0));
+
+        runtime.stop();
+        QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);
+    }
 };
 
 QTEST_MAIN(CoreProcessClientRuntimeTest)
