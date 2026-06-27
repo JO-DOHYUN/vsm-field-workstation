@@ -93,6 +93,8 @@ Debug/Gateway는 production capture를 대체하지 않는다.
 - debug artifact PASS는 production `capture.stream/index` PASS를 대체하지 않는다.
 
 ## Migration Rule
+Live/capture-core 변경은 [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]의 owner/consumer/drop policy와 금지 경계를 먼저 만족해야 한다.
+
 기능 구현 중 편의를 위해 AppController나 Qt signal 경로에 Core 책임을 임시로 쌓지 않는다.
 새 live/capture 기능은 먼저 data plane owner, view owner, tap 여부를 정하고 들어간다.
 

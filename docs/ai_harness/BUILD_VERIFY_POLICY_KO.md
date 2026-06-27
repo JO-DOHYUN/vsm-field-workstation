@@ -71,11 +71,13 @@ Minimum completion evidence:
 - Release build passes.
 - Full `ctest` passes.
 - Startup smoke passes if app/runtime wiring changed.
+- `py -3 scripts/check_vsm_boundary_rules.py --mode transition` is run and its owner-boundary debt is reported for broad live/capture-core slices.
 - If hardware/HIL is unavailable, report memory fix as structurally implemented but HIL-unverified.
 - If hardware/HIL is available, run `docs/runbooks/VSM_CAPTURE_CORE_MEMORY_VERIFY_KO.md` matrix at least through 10m, and 1h before field-final claim.
 
 Never claim capture-core memory completion if `TypedRecordList` remains the main live fanout object, if full typed batches can accumulate in Qt queued events outside telemetry, or if private memory grows linearly in a 10m/1h run.
 Never claim long-run VSM architecture completion if UI receives raw/typed stream directly, if a `GetView`/view query performs full capture scan on demand, or if debug/gateway/tap writer paths execute in normal live mode.
+Never claim final 2+1 architecture closure until `py -3 scripts/check_vsm_boundary_rules.py --mode strict` passes or every remaining finding is explicitly removed from the production path.
 
 ## Reporting Rule
 

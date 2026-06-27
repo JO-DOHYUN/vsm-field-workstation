@@ -25,7 +25,20 @@ Use this skill when the task can affect long-run memory, queue backpressure, raw
 2. `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
 3. `docs/architecture/VSM_TRUTH_FIRST_LOAD_ARCHITECTURE_KO.md`
 4. `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`
-5. `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
+5. `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
+6. `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
+
+## Mandatory Refactor Order
+1. Write the data-flow path being changed.
+2. Define owner, consumer, and drop policy for each data type.
+3. Search the existing code for owner violations before editing behavior.
+4. Add boundary DTOs/descriptors before moving functionality.
+5. Move the function behind the new owner boundary.
+6. Delete the old route in the same slice unless explicitly listed as transitional debt.
+7. Add a regression guard: unit test, integration test, or `scripts/check_vsm_boundary_rules.py` result.
+
+Do not start with a patch that only moves methods/classes. A slice that leaves
+the old owner/data-flow path active is not complete.
 
 ## Architecture Target
 The live path must converge to the Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane architecture in
@@ -78,6 +91,7 @@ SerialDrainRuntime
 snapshots, graph buckets, and transport summaries are derived materialized views.
 
 ## Implementation Rules
+- Run `py -3 scripts/check_vsm_boundary_rules.py --mode transition` before broad live-path edits and use the output as the owner-debt checklist.
 - Replace per-frame owning objects with `TypedFrameRef`, `CanRxLite`, and critical evidence lite DTOs.
 - Prefer descriptor queues over payload-copy queues.
 - Use batch writes for `capture.stream`, `capture.index`, raw ledger segment/index.
@@ -89,6 +103,13 @@ snapshots, graph buckets, and transport summaries are derived materialized views
 - Debug/gateway/tap paths must be default-off and must not run in the normal live production path.
 - Add telemetry before claiming improvement.
 - Do not hide memory growth by reducing evidence fidelity.
+
+## Hard Forbidden Boundaries
+- Do not pass `TypedRecordList` as a shared live object between UI, analysis, projection, raw ledger, and capture writer.
+- Do not let `AppController` assemble transport raw state or queue ownership state from diagnostics payloads.
+- Do not update runtime state from diagnostics payloads; diagnostics are display/report evidence only.
+- Do not use UI projection as timing truth, analysis truth, or CAN loss truth.
+- Do not pass storage `frameBytes` through the live display path.
 
 ## Required Telemetry
 - process private bytes and working set
