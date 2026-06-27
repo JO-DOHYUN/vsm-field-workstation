@@ -201,29 +201,6 @@ void RawFrameTableModel::appendFrames(const FrameRecordList& frames) {
                          m_sessionPath);
 }
 
-void RawFrameTableModel::appendTypedRecords(const TypedRecordList& records) {
-    FrameRecordList frames;
-    for (const TypedRecord& record : records) {
-        if (record.isType(TypedRecordType::CanRxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (can && !can->txAudit) frames.push_back(frameFromCanRaw(record, *can));
-            continue;
-        }
-        if (!record.isType(TypedRecordType::CanRxSegment)) continue;
-        const auto header = decodeTypedCanRxSegmentHeader(record);
-        if (!header) return;
-        FrameRecordList segmentFrames;
-        segmentFrames.reserve(header->frameCount);
-        for (qsizetype index = 0; index < header->frameCount; ++index) {
-            const auto entry = decodeTypedCanRxSegmentEntry(record, index);
-            if (!entry) return;
-            segmentFrames.push_back(frameFromSegmentEntry(record, *entry));
-        }
-        frames.append(segmentFrames);
-    }
-    appendFrames(frames);
-}
-
 void RawFrameTableModel::applyCommittedFrames(const FrameRecordList& frames,
                                               quint64 firstSeq,
                                               quint64 lastSeq,

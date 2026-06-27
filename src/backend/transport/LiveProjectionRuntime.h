@@ -27,7 +27,7 @@ public:
     };
 
     struct IngestResult {
-        TypedRecordList criticalRecords;
+        QVector<TypedRecord> criticalRecords;
         FrameRecordList projectedFrames;
         Status status;
         bool statusDue = false;
@@ -37,7 +37,6 @@ public:
 
     void reset();
     IngestResult ingestRecord(const TypedRecord& record);
-    IngestResult ingest(const TypedRecordList& records);
     Status status() const { return m_status; }
 
 private:
@@ -50,7 +49,7 @@ private:
     static quint64 controlEvidenceKey(quint8 bus, quint32 canId);
     bool queueSampledControlEvidence(QHash<quint64, TypedRecord>& bucket, quint64 key, const TypedRecord& record);
     bool controlEvidenceFlushDue() const;
-    void flushPendingControlEvidence(TypedRecordList& out);
+    void flushPendingControlEvidence(QVector<TypedRecord>& out);
     bool statusDue(bool sampledThisBatch);
 
     int m_maxFramesPerBatch = 256;

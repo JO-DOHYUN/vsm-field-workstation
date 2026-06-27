@@ -65,9 +65,6 @@ public slots:
 signals:
     void stateChanged(bool connected, const QString& message);
     void errorOccurred(const QString& message);
-    void framesReceived(const FrameRecordList& frames);
-    void rawFramesReceived(const FrameRecordList& frames);
-    void rawTypedRecordsReceived(const TypedRecordList& records);
     void rawLedgerReset(bool ok, const QString& path, const QString& error);
     void rawLedgerBatchCommitted(const FrameRecordList& frames,
                                  quint64 firstSeq,
@@ -82,7 +79,6 @@ signals:
                                       quint64 writeFailures,
                                       const QString& lastError);
     void statsReceived(const StatsRecord& st);
-    void typedRecordsReceived(const TypedRecordList& records);
     void typedProjectionStatusChanged(quint64 observedCanRxFrames,
                                       quint64 projectedCanRxFrames,
                                       quint64 sampledCanRxFrames,
@@ -163,19 +159,10 @@ private:
     void emitTypedStatus(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
     void emitTypedStorageUpdate(const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate& update);
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
-    void queueProjectedFrames(const FrameRecordList& frames);
-    void flushQueuedProjectionFrames(bool force = false);
     void queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch);
     void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushQueuedRawLedgerRecords(bool force = false);
     void flushRawLedgerHandoffSync();
-    void queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch);
-    void queueAnalysisFrames(const FrameRecordList& frames);
-    void scheduleAnalysisDispatch();
-    void dispatchAnalysisFrames();
-    void queueCaptureWriterRecords(const TypedRecordList& records);
-    void scheduleCaptureWriterDispatch();
-    void dispatchCaptureWriterRecords();
     void flushCaptureWriterHandoffSync();
     void emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
     void emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status);
@@ -186,7 +173,7 @@ private:
     void shutdownDrainRuntime();
     void ensureTypedPipelineRuntime();
     void shutdownTypedPipelineRuntime();
-    void handleTypedRecordBatch(const TypedRecordList& batch);
+    void handleTypedRecord(TypedRecord&& record);
     void ensureAnalysisRuntime();
     void shutdownAnalysisRuntime();
     void resetAnalysisWorker();
@@ -214,8 +201,6 @@ private:
     QTcpSocket* m_tcp = nullptr;
     CanMonitorTransport::LegacyIngressRuntime m_legacyIngress;
     CanMonitorTransport::TypedEvidencePipelineRuntime m_typedPipeline;
-    CanMonitorTransport::LiveProjectionRuntime m_liveProjection;
-    CanMonitorTransport::LiveTruthRuntime m_liveTruth;
     CanMonitorTransport::HostTxRuntime m_hostTx;
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
     QThread m_drainThread;
@@ -230,16 +215,9 @@ private:
     CanMonitorTransport::TypedCaptureWriterWorkerRuntime* m_captureWriterWorker = nullptr;
     QThread m_rawLedgerThread;
     CanMonitorTransport::RawLedgerWriterRuntime* m_rawLedgerWorker = nullptr;
-    QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
     FrameRecordList m_pendingRawLedgerFrames;
-    TypedCaptureFrameList m_pendingCaptureWriterFrames;
-    FrameRecordList m_pendingAnalysisFrames;
-    QElapsedTimer m_projectionFlushClock;
     QElapsedTimer m_drainStatusClock;
-    int m_projectionFlushTimerId = 0;
     int m_rawLedgerFlushTimerId = 0;
-    quint64 m_projectionQueueSampledFrames = 0;
-    quint64 m_projectionQueueDroppedFrames = 0;
     CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;
     CanMonitorTransport::TypedEvidencePipelineRuntime::Status m_pipelineStatus;
     QJsonObject m_pipelineCaptureDiagnostics;
@@ -262,24 +240,16 @@ private:
     quint64 m_rawLedgerWriteMaxUs = 0;
     quint64 m_rawLedgerWriteFailures = 0;
     QString m_rawLedgerLastError;
-    quint64 m_pendingCaptureWriterBytes = 0;
-    quint64 m_pendingCaptureWriterMaxBytes = 0;
     quint64 m_captureWriterHandoffOverrunBytes = 0;
     quint64 m_analysisHandoffOverrunFrames = 0;
     quint64 m_rawLedgerDispatchInFlightFrames = 0;
-    quint64 m_analysisDispatchInFlightFrames = 0;
-    quint64 m_captureWriterDispatchInFlightRecords = 0;
     CanMonitorTransport::LivePathTelemetry m_livePathTelemetry;
     CanMonitorTransport::DrainEventTelemetry m_drainEventTelemetry;
     QJsonObject m_drainRuntimeEventTrace;
     QJsonObject m_pipelineLivePathTrace;
     QJsonObject m_pipelineDrainEventTrace;
     bool m_drainPumpScheduled = false;
-    bool m_captureWriterDispatchScheduled = false;
-    bool m_captureWriterDispatchInFlight = false;
     bool m_rawLedgerDispatchInFlight = false;
-    bool m_analysisDispatchScheduled = false;
-    bool m_analysisDispatchInFlight = false;
     bool m_typedCaptureEnabled = false;
     bool m_connected = false;
     QElapsedTimer m_typedHandshakeClock;

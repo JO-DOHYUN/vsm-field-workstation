@@ -80,7 +80,6 @@ public:
     Q_INVOKABLE void resetFilters();
 
     void appendFrames(const FrameRecordList& frames);
-    void appendTypedRecords(const TypedRecordList& records);
     void resetLedgerState(const QString& sessionPath = QString(), const QString& error = QString());
     void applyCommittedFrames(const FrameRecordList& frames,
                               quint64 firstSeq,

@@ -21,10 +21,6 @@ public:
     };
 
     void reset();
-    TypedIngressRuntime::IngestResult ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
-                                                   qint64 handshakeElapsedMs,
-                                                   quint64 parseBacklogBytes,
-                                                   bool includeFrameBytes = false);
     TypedIngressRuntime::IngestResult ingestBlocksEach(const QVector<DrainByteQueue::Block>& blocks,
                                                        qint64 handshakeElapsedMs,
                                                        quint64 parseBacklogBytes,

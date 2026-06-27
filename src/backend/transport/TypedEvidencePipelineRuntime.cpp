@@ -9,37 +9,6 @@ void TypedEvidencePipelineRuntime::reset() {
     m_status = {};
 }
 
-TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocks(const QVector<DrainByteQueue::Block>& blocks,
-                                                                             qint64 handshakeElapsedMs,
-                                                                             quint64 parseBacklogBytes,
-                                                                             bool includeFrameBytes) {
-    TypedIngressRuntime::IngestResult aggregate;
-    m_status.parseBacklogBytes = parseBacklogBytes;
-    if (blocks.isEmpty()) {
-        aggregate.status = m_ingress.ingest(QByteArray(), handshakeElapsedMs, includeFrameBytes).status;
-        return aggregate;
-    }
-
-    QElapsedTimer timer;
-    timer.start();
-    for (const DrainByteQueue::Block& block : blocks) {
-        m_status.ingestedBlocks += 1;
-        m_status.ingestedBytes += quint64(block.bytes.size());
-        auto result = m_ingress.ingest(block.bytes, handshakeElapsedMs, includeFrameBytes);
-        aggregate.recordBatches += result.recordBatches;
-        aggregate.errors += result.errors;
-        aggregate.capabilityFirstSeen = aggregate.capabilityFirstSeen || result.capabilityFirstSeen;
-        if (result.capabilityFirstSeen) {
-            aggregate.capabilityElapsedMs = result.capabilityElapsedMs;
-            aggregate.capabilityBytes = result.capabilityBytes;
-        }
-        aggregate.statusDue = aggregate.statusDue || result.statusDue;
-        aggregate.status = result.status;
-    }
-    m_status.parserBatchMaxMs = std::max<quint64>(m_status.parserBatchMaxMs, quint64(timer.elapsed()));
-    return aggregate;
-}
-
 TypedIngressRuntime::IngestResult TypedEvidencePipelineRuntime::ingestBlocksEach(const QVector<DrainByteQueue::Block>& blocks,
                                                                                  qint64 handshakeElapsedMs,
                                                                                  quint64 parseBacklogBytes,

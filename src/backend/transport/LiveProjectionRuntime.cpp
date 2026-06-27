@@ -55,124 +55,6 @@ void LiveProjectionRuntime::reset() {
     m_pendingControlFeedbackRxByKey.clear();
 }
 
-LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingest(const TypedRecordList& records) {
-    IngestResult result;
-    result.status = m_status;
-    if (records.isEmpty()) return result;
-
-    QHash<quint64, int> frameIndexByKey;
-    FrameRecordList coalescedFrames;
-    coalescedFrames.reserve(std::min(int(records.size()), m_maxFramesPerBatch));
-
-    quint64 observedCanRxInBatch = 0;
-    bool sampledControlEvidenceInBatch = false;
-    for (const TypedRecord& record : records) {
-        auto processCanRx = [&](quint8 bus, quint32 canId, const quint8 data[8], const FrameRecord& frame) {
-            ++m_status.observedCanRxFrames;
-            ++observedCanRxInBatch;
-            if (bus == 0) ++m_status.observedBus0CanRxFrames;
-            else if (bus == 1) ++m_status.observedBus1CanRxFrames;
-
-            if (isControlCanId(canId)) {
-                ++m_status.observedControlEvidenceRecords;
-                sampledControlEvidenceInBatch |= queueSampledControlEvidence(
-                    m_pendingControlFeedbackRxByKey,
-                    controlEvidenceKey(bus, canId),
-                    record);
-            }
-
-            const quint64 key = projectionKey(bus, frame.ext, frame.rtr, canId);
-            auto existing = frameIndexByKey.find(key);
-            if (existing != frameIndexByKey.end()) {
-                coalescedFrames[*existing] = frame;
-            } else {
-                frameIndexByKey.insert(key, coalescedFrames.size());
-                coalescedFrames.push_back(frame);
-            }
-            Q_UNUSED(data);
-        };
-
-        if (record.isType(TypedRecordType::CanRxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (!can) continue;
-            processCanRx(can->bus, can->canId, can->data, toFrameRecord(record, *can));
-            continue;
-        }
-
-        if (record.isType(TypedRecordType::CanRxSegment)) {
-            const auto header = decodeTypedCanRxSegmentHeader(record);
-            if (!header) continue;
-            for (qsizetype index = 0; index < header->frameCount; ++index) {
-                const auto entry = decodeTypedCanRxSegmentEntry(record, index);
-                if (!entry) continue;
-                processCanRx(entry->bus, entry->canId, entry->data, toFrameRecordFromSegmentEntry(record, *entry));
-            }
-            continue;
-        }
-
-        if (record.isType(TypedRecordType::ControlAck)) {
-            const auto ack = decodeTypedControlAck(record);
-            if (!ack) continue;
-            ++m_status.observedControlEvidenceRecords;
-            if (ack->status == 0) {
-                result.criticalRecords.push_back(record);
-                ++m_status.projectedControlEvidenceRecords;
-            } else {
-                sampledControlEvidenceInBatch |= queueSampledControlEvidence(
-                    m_pendingAcceptedControlAckByKey,
-                    controlEvidenceKey(ack->targetBus, ack->targetCanId),
-                    record);
-            }
-            continue;
-        }
-
-        if (record.isType(TypedRecordType::CanTxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (!can) continue;
-            ++m_status.observedControlEvidenceRecords;
-            sampledControlEvidenceInBatch |= queueSampledControlEvidence(
-                m_pendingControlTxByKey,
-                controlEvidenceKey(can->bus, can->canId),
-                record);
-            continue;
-        }
-
-        if (isAlwaysCriticalRecord(record)) {
-            result.criticalRecords.push_back(record);
-        }
-    }
-
-    if (coalescedFrames.size() > m_maxFramesPerBatch) {
-        std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-            return a.tExtUs < b.tExtUs;
-        });
-        const int removeCount = coalescedFrames.size() - m_maxFramesPerBatch;
-        coalescedFrames.erase(coalescedFrames.begin(), coalescedFrames.begin() + removeCount);
-        m_status.workerDroppedCanRxFrames += quint64(removeCount);
-    }
-
-    std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-        return a.tExtUs < b.tExtUs;
-    });
-
-    result.projectedFrames = coalescedFrames;
-    if (controlEvidenceFlushDue()) {
-        flushPendingControlEvidence(result.criticalRecords);
-    }
-    m_status.projectedCanRxFrames += quint64(result.projectedFrames.size());
-    if (observedCanRxInBatch > quint64(result.projectedFrames.size())) {
-        m_status.sampledCanRxFrames += observedCanRxInBatch - quint64(result.projectedFrames.size());
-    }
-    m_status.lastInputRecords = records.size();
-    m_status.lastOutputFrames = result.projectedFrames.size();
-    m_status.lastOutputCriticalRecords = result.criticalRecords.size();
-
-    result.status = m_status;
-    result.statusDue = statusDue(observedCanRxInBatch > quint64(result.projectedFrames.size()) ||
-                                 sampledControlEvidenceInBatch);
-    return result;
-}
-
 LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const TypedRecord& record) {
     IngestResult result;
     result.status = m_status;
@@ -359,7 +241,7 @@ bool LiveProjectionRuntime::controlEvidenceFlushDue() const {
         || m_controlEvidenceTimer.elapsed() >= kControlEvidenceProjectionIntervalMs;
 }
 
-void LiveProjectionRuntime::flushPendingControlEvidence(TypedRecordList& out) {
+void LiveProjectionRuntime::flushPendingControlEvidence(QVector<TypedRecord>& out) {
     const QVector<TypedRecord> acceptedAcks = takeSortedRecords(m_pendingAcceptedControlAckByKey);
     const QVector<TypedRecord> txAudits = takeSortedRecords(m_pendingControlTxByKey);
     const QVector<TypedRecord> feedbackFrames = takeSortedRecords(m_pendingControlFeedbackRxByKey);

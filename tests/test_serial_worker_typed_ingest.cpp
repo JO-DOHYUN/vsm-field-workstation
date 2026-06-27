@@ -60,7 +60,6 @@ class SerialWorkerTypedIngestTest : public QObject {
 private slots:
     void initTestCase() {
         qRegisterMetaType<TypedRecord>("TypedRecord");
-        qRegisterMetaType<TypedRecordList>("TypedRecordList");
         qRegisterMetaType<FrameRecordList>("FrameRecordList");
     }
 
@@ -68,58 +67,32 @@ private slots:
         SerialWorker worker;
         worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
 
-        QSignalSpy typedSpy(&worker, &SerialWorker::typedRecordsReceived);
         QSignalSpy statusSpy(&worker, &SerialWorker::typedTransportStatusChanged);
-        QSignalSpy projectionSpy(&worker, &SerialWorker::framesReceived);
-        QSignalSpy projectionStatusSpy(&worker, &SerialWorker::typedProjectionStatusChanged);
 
         const QByteArray frame = makeTypedFrame(TypedRecordType::CanRxRaw, 10, makeCanPayload(5000, 2));
         worker.ingestBytesForTest(frame.left(12));
-        QCOMPARE(typedSpy.size(), 0);
-        QCOMPARE(projectionSpy.size(), 0);
+        QCOMPARE(statusSpy.size(), 0);
 
         worker.ingestBytesForTest(frame.mid(12));
-        QCOMPARE(typedSpy.size(), 0);
-        QTRY_COMPARE(projectionSpy.size(), 1);
-        QVERIFY(projectionStatusSpy.size() >= 1);
         QVERIFY(statusSpy.size() >= 1);
-
-        const auto frames = qvariant_cast<FrameRecordList>(projectionSpy.takeFirst().at(0));
-        QCOMPARE(frames.size(), 1);
-        QCOMPARE(frames.first().tExtUs, quint64(5000));
-        QCOMPARE(frames.first().bus, quint8(2));
-        QCOMPARE(frames.first().canId, quint32(0x530));
 
         const auto status = statusSpy.takeLast();
         QCOMPARE(status.at(0).toULongLong(), quint64(1));
         QCOMPARE(status.at(2).toULongLong(), quint64(0));
         QCOMPARE(status.at(3).toULongLong(), quint64(0));
-
-        const auto projectionStatus = projectionStatusSpy.takeLast();
-        QCOMPARE(projectionStatus.at(0).toULongLong(), quint64(1));
-        QCOMPARE(projectionStatus.at(1).toULongLong(), quint64(1));
-        QCOMPARE(projectionStatus.at(2).toULongLong(), quint64(0));
     }
 
     void typedModeReportsCrcFailureAndRecovers() {
         SerialWorker worker;
         worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
 
-        QSignalSpy typedSpy(&worker, &SerialWorker::typedRecordsReceived);
         QSignalSpy statusSpy(&worker, &SerialWorker::typedTransportStatusChanged);
-        QSignalSpy projectionSpy(&worker, &SerialWorker::framesReceived);
 
         QByteArray bad = makeTypedFrame(TypedRecordType::CanRxRaw, 20, makeCanPayload(6000, 0));
         bad[18] = char(quint8(bad[18]) ^ 0x55);
         const QByteArray good = makeTypedFrame(TypedRecordType::CanRxRaw, 21, makeCanPayload(7000, 1));
 
         worker.ingestBytesForTest(bad + good);
-
-        QCOMPARE(typedSpy.size(), 0);
-        QTRY_COMPARE(projectionSpy.size(), 1);
-        const auto frames = qvariant_cast<FrameRecordList>(projectionSpy.takeFirst().at(0));
-        QCOMPARE(frames.size(), 1);
-        QCOMPARE(frames.first().seq, quint8(21));
 
         QVERIFY(statusSpy.size() >= 1);
         const auto status = statusSpy.takeLast();
@@ -128,52 +101,7 @@ private slots:
         QCOMPARE(status.at(2).toULongLong(), quint64(1));
     }
 
-    void liveProjectionQueuesLatestFramePerKeyBetweenFlushes() {
-        SerialWorker worker;
-        worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
-
-        QSignalSpy projectionSpy(&worker, &SerialWorker::framesReceived);
-        QSignalSpy projectionStatusSpy(&worker, &SerialWorker::typedProjectionStatusChanged);
-
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 40, makeCanPayload(1000, 1)));
-        QTRY_COMPARE(projectionSpy.size(), 1);
-        projectionSpy.clear();
-        projectionStatusSpy.clear();
-
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 41, makeCanPayload(2000, 1)));
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 42, makeCanPayload(3000, 1)));
-
-        QTRY_COMPARE(projectionSpy.size(), 1);
-        const auto frames = qvariant_cast<FrameRecordList>(projectionSpy.takeFirst().at(0));
-        QCOMPARE(frames.size(), 1);
-        QCOMPARE(frames.first().tExtUs, quint64(3000));
-        QCOMPARE(frames.first().seq, quint8(42));
-
-        QVERIFY(projectionStatusSpy.size() >= 1);
-        const auto projectionStatus = projectionStatusSpy.takeLast();
-        QVERIFY(projectionStatus.at(2).toULongLong() >= quint64(1));
-    }
-
-    void liveTruthStatusObservesTypedCanRxWithoutFrameFanout() {
-        SerialWorker worker;
-        worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
-
-        QSignalSpy truthStatusSpy(&worker, &SerialWorker::typedTruthStatusChanged);
-
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 50, makeCanPayload(1000, 1)));
-        QTRY_COMPARE(truthStatusSpy.size(), 1);
-
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 51, makeCanPayload(1100, 1)));
-        worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 52, makeCanPayload(1200, 1)));
-
-        const auto status = truthStatusSpy.takeLast();
-        QVERIFY(status.at(0).toULongLong() >= quint64(1));
-        QCOMPARE(status.at(3).toULongLong(), quint64(0));
-        QVERIFY(status.at(4).toULongLong() >= quint64(1));
-        QCOMPARE(status.at(11).toULongLong(), quint64(0));
-    }
-
-    void typedStorageWritesFinalizedEvidenceSession() {
+    void serialWorkerDirectIngestDoesNotOwnTypedCaptureTruth() {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
 
@@ -209,20 +137,8 @@ private slots:
 
         TypedReplayReader reader;
         QString error;
-        QVERIFY2(reader.loadFile(sessionDir + QStringLiteral("/capture.stream"), &error), qPrintable(error));
-        QCOMPARE(reader.records().size(), 2);
-        QCOMPARE(reader.records().at(0).record.header.seq, quint16(1));
-        QCOMPARE(reader.records().at(1).record.header.seq, quint16(2));
-        QCOMPARE(reader.summary().typeCounts.value(quint8(TypedRecordType::CanRxRaw)), quint64(1));
-        QCOMPARE(reader.summary().typeCounts.value(quint8(TypedRecordType::CanTxRaw)), quint64(1));
-        QCOMPARE(reader.summary().firstMonoUs, quint64(1000));
-        QCOMPARE(reader.summary().lastMonoUs, quint64(2000));
-
-        TypedReplayReader sessionReader;
-        QVERIFY2(sessionReader.loadPath(sessionDir, &error), qPrintable(error));
-        QCOMPARE(sessionReader.summary().diagnosticsPresent, true);
-        QCOMPARE(sessionReader.summary().liveParserFrames, quint64(2));
-        QCOMPARE(sessionReader.summary().liveParserSeqGaps, quint64(0));
+        QVERIFY(!reader.loadFile(sessionDir + QStringLiteral("/capture.stream"), &error));
+        QVERIFY(error.contains(QStringLiteral("No valid typed replay records")));
     }
 
     void stopFinalizesActiveTypedStorageSession() {

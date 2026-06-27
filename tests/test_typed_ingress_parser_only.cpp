@@ -34,13 +34,17 @@ private slots:
         QByteArray capability(kTypedCapabilityPayloadSize, char(0));
         const QByteArray frame = makeTypedFrame(TypedRecordType::Capability, 1, capability);
 
-        auto partial = runtime.ingest(frame.left(8), 10);
-        QCOMPARE(partial.recordBatches.size(), 0);
+        QVector<TypedRecord> records;
+        auto partial = runtime.ingestEach(frame.left(8), 10, false, [&records](TypedRecord&& record) {
+            records.push_back(std::move(record));
+        });
+        QCOMPARE(records.size(), 0);
 
-        auto result = runtime.ingest(frame.mid(8), 11);
-        QCOMPARE(result.recordBatches.size(), 1);
-        QCOMPARE(result.recordBatches.first().size(), 1);
-        QCOMPARE(result.recordBatches.first().first().header.recordType, static_cast<quint8>(TypedRecordType::Capability));
+        auto result = runtime.ingestEach(frame.mid(8), 11, false, [&records](TypedRecord&& record) {
+            records.push_back(std::move(record));
+        });
+        QCOMPARE(records.size(), 1);
+        QCOMPARE(records.first().header.recordType, static_cast<quint8>(TypedRecordType::Capability));
         QCOMPARE(result.capabilityFirstSeen, true);
         QCOMPARE(result.capabilityElapsedMs, qint64(11));
         QCOMPARE(result.status.frames, quint64(1));

@@ -31,7 +31,6 @@ public:
     };
 
     struct IngestResult {
-        QVector<TypedRecordList> recordBatches;
         QStringList errors;
         bool capabilityFirstSeen = false;
         qint64 capabilityElapsedMs = -1;
@@ -42,7 +41,6 @@ public:
 
     void resetStreamState();
 
-    IngestResult ingest(const QByteArray& bytes, qint64 handshakeElapsedMs, bool includeFrameBytes = false);
     IngestResult ingestEach(const QByteArray& bytes,
                             qint64 handshakeElapsedMs,
                             bool includeFrameBytes,

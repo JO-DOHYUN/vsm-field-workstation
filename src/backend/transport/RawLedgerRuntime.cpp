@@ -114,44 +114,6 @@ RawLedgerRuntime::AppendResult RawLedgerRuntime::appendFrames(const FrameRecordL
     return appendSegmentPayloads(payloads);
 }
 
-RawLedgerRuntime::AppendResult RawLedgerRuntime::appendTypedRecords(const TypedRecordList& records) {
-    AppendResult result;
-    if (records.isEmpty()) {
-        result.ok = true;
-        result.totalRows = rowCount();
-        result.segmentBytes = segmentBytes();
-        return result;
-    }
-    if (!m_file.isOpen() && !reset()) {
-        result.error = m_lastError;
-        return result;
-    }
-
-    QVector<QPair<QByteArray, quint16>> payloads;
-    payloads.reserve(records.size());
-    for (const TypedRecord& record : records) {
-        QByteArray segmentPayload;
-        if (record.isType(TypedRecordType::CanRxSegment)) {
-            if (!decodeTypedCanRxSegmentHeader(record)) continue;
-            segmentPayload = QByteArray(record.payload.constData(), record.payload.size());
-        } else if (record.isType(TypedRecordType::CanRxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (!can) continue;
-            segmentPayload = makeSegmentPayloadFromCanRaw(record, *can);
-        } else {
-            continue;
-        }
-        payloads.push_back(qMakePair(std::move(segmentPayload), record.header.seq));
-    }
-    if (payloads.isEmpty()) {
-        result.ok = true;
-        result.totalRows = rowCount();
-        result.segmentBytes = segmentBytes();
-        return result;
-    }
-    return appendSegmentPayloads(payloads);
-}
-
 std::optional<RawLedgerRuntime::Row> RawLedgerRuntime::readRow(quint64 row) const {
     if (row >= rowCount() || !m_file.isOpen()) return noteReadFailure(false);
     const auto cached = m_cache.constFind(row);
@@ -250,19 +212,6 @@ QByteArray RawLedgerRuntime::makeSegmentPayloadFromFrame(const FrameRecord& fram
     payload.append(char(frame.bus));
     payload.append(reinterpret_cast<const char*>(frame.data), 8);
     return payload;
-}
-
-QByteArray RawLedgerRuntime::makeSegmentPayloadFromCanRaw(const TypedRecord& record, const TypedCanRawRecord& can) {
-    FrameRecord frame;
-    frame.tExtUs = can.monoUs;
-    frame.canId = can.canId;
-    frame.ext = can.extended;
-    frame.rtr = can.rtr;
-    frame.dlc = can.dlc;
-    frame.bus = can.bus;
-    frame.seq = quint8(record.header.seq & 0xFF);
-    std::memcpy(frame.data, can.data, sizeof(frame.data));
-    return makeSegmentPayloadFromFrame(frame);
 }
 
 QByteArray RawLedgerRuntime::encodeBlock(const QByteArray& segmentPayload, quint16 typedSeq) {

@@ -56,7 +56,6 @@ public:
 
     bool reset(const QString& label = QString());
     AppendResult appendFrames(const FrameRecordList& frames);
-    AppendResult appendTypedRecords(const TypedRecordList& records);
     std::optional<Row> readRow(quint64 row) const;
     Diagnostics diagnostics() const;
 
@@ -76,7 +75,6 @@ private:
     };
 
     static QByteArray makeSegmentPayloadFromFrame(const FrameRecord& frame);
-    static QByteArray makeSegmentPayloadFromCanRaw(const TypedRecord& record, const TypedCanRawRecord& can);
     static QByteArray encodeBlock(const QByteArray& segmentPayload, quint16 typedSeq);
     static std::optional<Row> decodeRowFromPayload(const QByteArray& segmentPayload, quint16 typedSeq, quint16 frameIndex);
     AppendResult appendSegmentPayloads(const QVector<QPair<QByteArray, quint16>>& payloads);

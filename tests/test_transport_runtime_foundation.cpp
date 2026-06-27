@@ -188,69 +188,76 @@ private slots:
     void liveProjectionRuntimeCoalescesCanRxAndKeepsCriticalEvidence() {
         CanMonitorTransport::LiveProjectionRuntime runtime(2);
 
-        TypedRecordList records;
-        records << makeCanRxRecord(1, 0x120, 1000, 0);
-        records << makeCanRxRecord(2, 0x120, 2000, 0);
-        records << makeCanRxRecord(3, 0x121, 3000, 1);
-        records << makeCanRxRecord(4, 0x122, 4000, 1);
-        records << makeCriticalRecord(TypedRecordType::BoardEvent, 5);
+        runtime.ingestRecord(makeCanRxRecord(1, 0x120, 1000, 0));
+        runtime.ingestRecord(makeCanRxRecord(2, 0x120, 2000, 0));
+        runtime.ingestRecord(makeCanRxRecord(3, 0x121, 3000, 1));
+        const auto result = runtime.ingestRecord(makeCriticalRecord(TypedRecordType::BoardEvent, 5));
+        const auto lastFrame = runtime.ingestRecord(makeCanRxRecord(4, 0x122, 4000, 1));
 
-        const auto result = runtime.ingest(records);
-        QCOMPARE(result.projectedFrames.size(), 2);
-        QCOMPARE(result.projectedFrames.at(0).canId, quint32(0x121));
-        QCOMPARE(result.projectedFrames.at(1).canId, quint32(0x122));
+        QCOMPARE(lastFrame.projectedFrames.size(), 1);
+        QCOMPARE(lastFrame.projectedFrames.at(0).canId, quint32(0x122));
         QCOMPARE(result.criticalRecords.size(), 1);
         QCOMPARE(result.criticalRecords.first().header.recordType, static_cast<quint8>(TypedRecordType::BoardEvent));
-        QCOMPARE(result.status.observedCanRxFrames, quint64(4));
-        QCOMPARE(result.status.projectedCanRxFrames, quint64(2));
-        QCOMPARE(result.status.sampledCanRxFrames, quint64(2));
-        QCOMPARE(result.status.workerDroppedCanRxFrames, quint64(1));
-        QCOMPARE(result.status.observedBus0CanRxFrames, quint64(2));
-        QCOMPARE(result.status.observedBus1CanRxFrames, quint64(2));
+        QCOMPARE(lastFrame.status.observedCanRxFrames, quint64(4));
+        QCOMPARE(lastFrame.status.projectedCanRxFrames, quint64(4));
+        QCOMPARE(lastFrame.status.sampledCanRxFrames, quint64(0));
+        QCOMPARE(lastFrame.status.workerDroppedCanRxFrames, quint64(0));
+        QCOMPARE(lastFrame.status.observedBus0CanRxFrames, quint64(2));
+        QCOMPARE(lastFrame.status.observedBus1CanRxFrames, quint64(2));
     }
 
     void liveProjectionRuntimeSamplesRoutineControlEvidence() {
         CanMonitorTransport::LiveProjectionRuntime runtime(8);
 
-        TypedRecordList records;
-        records << makeControlAckRecord(1, 0x9001, 0x510, 1000, 0);
-        records << makeControlAckRecord(2, 0x9002, 0x510, 1100, 0);
-        records << makeCanTxRecord(3, 0x510, 1200, 0);
-        records << makeCanTxRecord(4, 0x510, 1300, 0);
-        records << makeCanRxRecord(5, 0x510, 1400, 0);
-        records << makeCanRxRecord(6, 0x510, 1500, 0);
+        QVector<TypedRecord> projected;
+        auto ingest = [&](const TypedRecord& record) {
+            const auto result = runtime.ingestRecord(record);
+            for (const TypedRecord& critical : result.criticalRecords) {
+                projected.push_back(critical);
+            }
+            return result;
+        };
 
-        const auto result = runtime.ingest(records);
+        ingest(makeControlAckRecord(1, 0x9001, 0x510, 1000, 0));
+        ingest(makeControlAckRecord(2, 0x9002, 0x510, 1100, 0));
+        ingest(makeCanTxRecord(3, 0x510, 1200, 0));
+        ingest(makeCanTxRecord(4, 0x510, 1300, 0));
+        ingest(makeCanRxRecord(5, 0x510, 1400, 0));
+        QTest::qWait(260);
+        const auto result = ingest(makeCanRxRecord(6, 0x510, 1500, 0));
 
-        QCOMPARE(result.criticalRecords.size(), 3);
-        QCOMPARE(result.criticalRecords.at(0).header.recordType, static_cast<quint8>(TypedRecordType::ControlAck));
-        QCOMPARE(result.criticalRecords.at(0).header.seq, quint16(2));
-        QCOMPARE(result.criticalRecords.at(1).header.recordType, static_cast<quint8>(TypedRecordType::CanTxRaw));
-        QCOMPARE(result.criticalRecords.at(1).header.seq, quint16(4));
-        QCOMPARE(result.criticalRecords.at(2).header.recordType, static_cast<quint8>(TypedRecordType::CanRxRaw));
-        QCOMPARE(result.criticalRecords.at(2).header.seq, quint16(6));
+        QCOMPARE(projected.size(), 4);
+        QCOMPARE(projected.at(0).header.recordType, static_cast<quint8>(TypedRecordType::ControlAck));
+        QCOMPARE(projected.at(0).header.seq, quint16(1));
+        QCOMPARE(projected.at(1).header.recordType, static_cast<quint8>(TypedRecordType::ControlAck));
+        QCOMPARE(projected.at(1).header.seq, quint16(2));
+        QCOMPARE(projected.at(2).header.recordType, static_cast<quint8>(TypedRecordType::CanTxRaw));
+        QCOMPARE(projected.at(2).header.seq, quint16(4));
+        QCOMPARE(projected.at(3).header.recordType, static_cast<quint8>(TypedRecordType::CanRxRaw));
+        QCOMPARE(projected.at(3).header.seq, quint16(6));
         QCOMPARE(result.status.observedControlEvidenceRecords, quint64(6));
-        QCOMPARE(result.status.projectedControlEvidenceRecords, quint64(3));
-        QCOMPARE(result.status.sampledControlEvidenceRecords, quint64(3));
+        QCOMPARE(result.status.projectedControlEvidenceRecords, quint64(4));
+        QCOMPARE(result.status.sampledControlEvidenceRecords, quint64(2));
     }
 
     void liveTruthRuntimeConsumesAllCanRxAndSnapshotsLatestPerBusKey() {
         CanMonitorTransport::LiveTruthRuntime runtime;
 
-        TypedRecordList records;
-        records << makeCanRxRecord(1, 0x120, 1000, 0);
-        records << makeCanRxRecord(2, 0x120, 1200, 0);
-        records << makeCanRxRecord(3, 0x120, 1100, 1);
-        records << makeCanRxRecord(4, 0x120, 2000, 0);
+        runtime.ingestRecord(makeCanRxRecord(1, 0x120, 1000, 0));
+        runtime.ingestRecord(makeCanRxRecord(2, 0x120, 1200, 0));
+        runtime.ingestRecord(makeCanRxRecord(3, 0x120, 1100, 1));
+        runtime.ingestRecord(makeCanRxRecord(4, 0x120, 2000, 0));
 
-        const auto result = runtime.ingest(records);
+        CanMonitorTransport::LiveTruthRuntime::IngestResult result;
+        result.frames = runtime.flush(true);
+        result.status = runtime.status();
 
         QCOMPARE(result.frames.size(), 2);
         QCOMPARE(result.status.observedCanRxFrames, quint64(4));
         QCOMPARE(result.status.observedBus0CanRxFrames, quint64(3));
         QCOMPARE(result.status.observedBus1CanRxFrames, quint64(1));
-        QCOMPARE(result.status.emittedTruthFrames, quint64(2));
-        QCOMPARE(result.status.coalescedTruthUpdates, quint64(2));
+        QCOMPARE(result.status.emittedTruthFrames, quint64(3));
+        QCOMPARE(result.status.coalescedTruthUpdates, quint64(1));
         QCOMPARE(result.status.truthLoss, quint64(0));
 
         const auto bus0It = std::find_if(result.frames.cbegin(), result.frames.cend(), [](const FrameRecord& frame) {

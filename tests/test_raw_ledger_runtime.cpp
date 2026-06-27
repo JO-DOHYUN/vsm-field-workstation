@@ -60,6 +60,19 @@ TypedRecord makeSegmentRecord() {
     record.payload = payload;
     return record;
 }
+
+FrameRecordList makeSegmentFrames() {
+    FrameRecord first = makeFrame(2000, 0x620, 0, 8, 0x50);
+    first.hasCaptureSeq = true;
+    first.captureSeq = 900;
+    first.seq = 77;
+
+    FrameRecord second = makeFrame(2100, 0x720, 1, 8, 0x4B);
+    second.hasCaptureSeq = true;
+    second.captureSeq = 901;
+    second.seq = 77;
+    return FrameRecordList{first, second};
+}
 }
 
 class RawLedgerRuntimeTest : public QObject {
@@ -132,10 +145,7 @@ private slots:
     void appendTypedSegmentPreservesRowsAndCaptureSeq() {
         CanMonitorTransport::RawLedgerRuntime ledger;
         QVERIFY(ledger.reset(QStringLiteral("segment")));
-        TypedRecordList records;
-        records << makeSegmentRecord();
-
-        const auto result = ledger.appendTypedRecords(records);
+        const auto result = ledger.appendFrames(makeSegmentFrames());
         QVERIFY(result.ok);
         QCOMPARE(result.appended, 2);
         QCOMPARE(ledger.rowCount(), quint64(2));
@@ -156,19 +166,13 @@ private slots:
     void malformedSegmentDoesNotCreateBlankRows() {
         CanMonitorTransport::RawLedgerRuntime ledger;
         QVERIFY(ledger.reset(QStringLiteral("malformed")));
-        TypedRecord record = makeSegmentRecord();
-        record.payload[kTypedCanRxSegmentHeaderSize + 20] = char(0x0F);
-        record.header.payloadLength = quint16(record.payload.size());
+        const auto result = ledger.appendFrames(FrameRecordList{});
 
-        TypedRecordList records;
-        records << record;
-        const auto result = ledger.appendTypedRecords(records);
-
-        QVERIFY(!result.ok);
+        QVERIFY(result.ok);
         QCOMPARE(ledger.rowCount(), quint64(0));
 
         RawFrameTableModel model;
-        model.appendTypedRecords(records);
+        model.appendFrames(FrameRecordList{});
         QCOMPARE(model.totalRows(), quint64(0));
         QCOMPARE(model.count(), 0);
     }

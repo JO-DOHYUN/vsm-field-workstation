@@ -19,51 +19,6 @@ void LiveTruthRuntime::reset() {
     m_lastStatusTruthLoss = 0;
 }
 
-LiveTruthRuntime::IngestResult LiveTruthRuntime::ingest(const TypedRecordList& records) {
-    IngestResult result;
-    m_status.lastInputRecords = records.size();
-    m_status.lastOutputFrames = 0;
-
-    for (const TypedRecord& record : records) {
-        if (record.isType(TypedRecordType::CanRxRaw)) {
-            const auto can = decodeTypedCanRaw(record);
-            if (!can) {
-                ++m_status.truthLoss;
-                continue;
-            }
-            ingestFrame(toFrameRecord(record, *can));
-            continue;
-        }
-
-        if (record.isType(TypedRecordType::CanRxSegment)) {
-            const auto header = decodeTypedCanRxSegmentHeader(record);
-            if (!header) {
-                ++m_status.truthLoss;
-                continue;
-            }
-            for (qsizetype index = 0; index < header->frameCount; ++index) {
-                const auto entry = decodeTypedCanRxSegmentEntry(record, index);
-                if (!entry) {
-                    ++m_status.truthLoss;
-                    continue;
-                }
-                ingestFrame(toFrameRecord(record, *entry));
-            }
-        }
-    }
-
-    if (flushDue()) {
-        result.frames = flush(false);
-    }
-    result.statusDue = statusDue() || !result.frames.isEmpty();
-    if (result.statusDue) {
-        m_statusClock.restart();
-        m_lastStatusTruthLoss = m_status.truthLoss;
-    }
-    result.status = status();
-    return result;
-}
-
 LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord& record) {
     IngestResult result;
     m_status.lastInputRecords = 1;

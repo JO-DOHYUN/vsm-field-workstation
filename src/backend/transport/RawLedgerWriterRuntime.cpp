@@ -21,29 +21,6 @@ void RawLedgerWriterRuntime::reset(const QString& label) {
     emitStatus();
 }
 
-void RawLedgerWriterRuntime::appendRecords(TypedRecordList records) {
-    QElapsedTimer timer;
-    timer.start();
-    const auto result = m_ledger.appendTypedRecords(records);
-    const quint64 elapsedUs = quint64(timer.nsecsElapsed() / 1000);
-    m_writeMaxUs = std::max(m_writeMaxUs, elapsedUs);
-    ++m_batchCount;
-
-    if (!result.ok) {
-        ++m_writeFailures;
-        m_lastError = result.error;
-    } else if (result.appended > 0) {
-        emit batchCommitted(result.committedFrames,
-                            result.firstSeq,
-                            result.lastSeq,
-                            result.totalRows,
-                            result.segmentBytes,
-                            m_ledger.sessionPath());
-    }
-    emitStatus();
-    emit batchFinished();
-}
-
 void RawLedgerWriterRuntime::appendFrames(FrameRecordList frames) {
     QElapsedTimer timer;
     timer.start();
