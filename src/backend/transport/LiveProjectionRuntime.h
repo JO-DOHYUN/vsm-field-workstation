@@ -36,6 +36,7 @@ public:
     explicit LiveProjectionRuntime(int maxFramesPerBatch = 256);
 
     void reset();
+    IngestResult ingestRecord(const TypedRecord& record);
     IngestResult ingest(const TypedRecordList& records);
     Status status() const { return m_status; }
 

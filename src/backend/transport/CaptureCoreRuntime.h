@@ -69,7 +69,8 @@ public:
 
 private:
     void appendCanRxFrames(const TypedRecord& record, FrameRecordList& out) const;
-    void ingestBatch(TypedRecordList&& batch, Result& result);
+    void ingestRecordForViews(const TypedRecord& record, FrameRecordList& liveLatestFrames, Result& result);
+    void pushCaptureBatch(TypedRecordList&& batch, Result& result);
     void ingestCriticalRecord(const TypedRecord& record, Result& result);
     void updateLiveLatestView(const FrameRecordList& frames, Result& result);
     void updateStatusViews(const Result& ingestResult, Result& out);

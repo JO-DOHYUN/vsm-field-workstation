@@ -173,6 +173,113 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingest(const TypedRec
     return result;
 }
 
+LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const TypedRecord& record) {
+    IngestResult result;
+    result.status = m_status;
+
+    QHash<quint64, int> frameIndexByKey;
+    FrameRecordList coalescedFrames;
+    coalescedFrames.reserve(1);
+
+    quint64 observedCanRxInBatch = 0;
+    bool sampledControlEvidenceInBatch = false;
+    auto processCanRx = [&](quint8 bus, quint32 canId, const quint8 data[8], const FrameRecord& frame) {
+        ++m_status.observedCanRxFrames;
+        ++observedCanRxInBatch;
+        if (bus == 0) ++m_status.observedBus0CanRxFrames;
+        else if (bus == 1) ++m_status.observedBus1CanRxFrames;
+
+        if (isControlCanId(canId)) {
+            ++m_status.observedControlEvidenceRecords;
+            sampledControlEvidenceInBatch |= queueSampledControlEvidence(
+                m_pendingControlFeedbackRxByKey,
+                controlEvidenceKey(bus, canId),
+                record);
+        }
+
+        const quint64 key = projectionKey(bus, frame.ext, frame.rtr, canId);
+        auto existing = frameIndexByKey.find(key);
+        if (existing != frameIndexByKey.end()) {
+            coalescedFrames[*existing] = frame;
+        } else {
+            frameIndexByKey.insert(key, coalescedFrames.size());
+            coalescedFrames.push_back(frame);
+        }
+        Q_UNUSED(data);
+    };
+
+    if (record.isType(TypedRecordType::CanRxRaw)) {
+        const auto can = decodeTypedCanRaw(record);
+        if (can) {
+            processCanRx(can->bus, can->canId, can->data, toFrameRecord(record, *can));
+        }
+    } else if (record.isType(TypedRecordType::CanRxSegment)) {
+        const auto header = decodeTypedCanRxSegmentHeader(record);
+        if (header) {
+            coalescedFrames.reserve(std::min<int>(header->frameCount, m_maxFramesPerBatch));
+            for (qsizetype index = 0; index < header->frameCount; ++index) {
+                const auto entry = decodeTypedCanRxSegmentEntry(record, index);
+                if (!entry) continue;
+                processCanRx(entry->bus, entry->canId, entry->data, toFrameRecordFromSegmentEntry(record, *entry));
+            }
+        }
+    } else if (record.isType(TypedRecordType::ControlAck)) {
+        const auto ack = decodeTypedControlAck(record);
+        if (ack) {
+            ++m_status.observedControlEvidenceRecords;
+            if (ack->status == 0) {
+                result.criticalRecords.push_back(record);
+                ++m_status.projectedControlEvidenceRecords;
+            } else {
+                sampledControlEvidenceInBatch |= queueSampledControlEvidence(
+                    m_pendingAcceptedControlAckByKey,
+                    controlEvidenceKey(ack->targetBus, ack->targetCanId),
+                    record);
+            }
+        }
+    } else if (record.isType(TypedRecordType::CanTxRaw)) {
+        const auto can = decodeTypedCanRaw(record);
+        if (can) {
+            ++m_status.observedControlEvidenceRecords;
+            sampledControlEvidenceInBatch |= queueSampledControlEvidence(
+                m_pendingControlTxByKey,
+                controlEvidenceKey(can->bus, can->canId),
+                record);
+        }
+    } else if (isAlwaysCriticalRecord(record)) {
+        result.criticalRecords.push_back(record);
+    }
+
+    if (coalescedFrames.size() > m_maxFramesPerBatch) {
+        std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+            return a.tExtUs < b.tExtUs;
+        });
+        const int removeCount = coalescedFrames.size() - m_maxFramesPerBatch;
+        coalescedFrames.erase(coalescedFrames.begin(), coalescedFrames.begin() + removeCount);
+        m_status.workerDroppedCanRxFrames += quint64(removeCount);
+    }
+    std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
+        return a.tExtUs < b.tExtUs;
+    });
+
+    result.projectedFrames = coalescedFrames;
+    if (controlEvidenceFlushDue()) {
+        flushPendingControlEvidence(result.criticalRecords);
+    }
+    m_status.projectedCanRxFrames += quint64(result.projectedFrames.size());
+    if (observedCanRxInBatch > quint64(result.projectedFrames.size())) {
+        m_status.sampledCanRxFrames += observedCanRxInBatch - quint64(result.projectedFrames.size());
+    }
+    m_status.lastInputRecords = 1;
+    m_status.lastOutputFrames = result.projectedFrames.size();
+    m_status.lastOutputCriticalRecords = result.criticalRecords.size();
+
+    result.status = m_status;
+    result.statusDue = statusDue(observedCanRxInBatch > quint64(result.projectedFrames.size()) ||
+                                 sampledControlEvidenceInBatch);
+    return result;
+}
+
 bool LiveProjectionRuntime::isAlwaysCriticalRecord(const TypedRecord& record) {
     switch (record.header.type()) {
     case TypedRecordType::BoardEvent:

@@ -32,6 +32,7 @@ public:
     };
 
     void reset();
+    IngestResult ingestRecord(const TypedRecord& record);
     IngestResult ingest(const TypedRecordList& records);
     FrameRecordList flush(bool force = false);
 

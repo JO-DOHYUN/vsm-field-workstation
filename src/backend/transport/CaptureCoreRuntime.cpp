@@ -227,24 +227,29 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
                                                             qint64 handshakeElapsedMs,
                                                             quint64 parseBacklogBytes) {
     Result out;
-    TypedRecordList localBatch;
-    localBatch.reserve(kCoreLocalBatchSize);
-    auto flushLocalBatch = [this, &localBatch, &out]() {
-        if (localBatch.isEmpty()) return;
-        ingestBatch(std::move(localBatch), out);
-        localBatch.clear();
-        localBatch.reserve(kCoreLocalBatchSize);
+    FrameRecordList liveLatestFrames;
+    TypedRecordList captureBatch;
+    captureBatch.reserve(kCoreLocalBatchSize);
+    auto flushCaptureBatch = [this, &captureBatch, &out]() {
+        if (captureBatch.isEmpty()) return;
+        pushCaptureBatch(std::move(captureBatch), out);
+        captureBatch.clear();
+        captureBatch.reserve(kCoreLocalBatchSize);
     };
 
     auto result = m_pipeline.ingestBlocksEach(blocks,
                                               handshakeElapsedMs,
                                               parseBacklogBytes,
                                               m_options.captureRecords,
-                                              [&localBatch, &flushLocalBatch](TypedRecord&& record) {
-                                                  localBatch.push_back(std::move(record));
-                                                  if (localBatch.size() >= kCoreLocalBatchSize) flushLocalBatch();
+                                              [this, &captureBatch, &flushCaptureBatch, &liveLatestFrames, &out](TypedRecord&& record) {
+                                                  ingestRecordForViews(record, liveLatestFrames, out);
+                                                  if (m_options.captureRecords && m_captureQueue) {
+                                                      captureBatch.push_back(std::move(record));
+                                                      if (captureBatch.size() >= kCoreLocalBatchSize) flushCaptureBatch();
+                                                  }
                                               });
-    flushLocalBatch();
+    flushCaptureBatch();
+    updateLiveLatestView(liveLatestFrames, out);
     out.capabilityFirstSeen = result.capabilityFirstSeen;
     out.capabilityElapsedMs = result.capabilityElapsedMs;
     out.capabilityBytes = result.capabilityBytes;
@@ -255,45 +260,48 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
     return out;
 }
 
-void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
-    if (batch.isEmpty()) return;
-
+void CaptureCoreRuntime::ingestRecordForViews(const TypedRecord& record,
+                                              FrameRecordList& liveLatestFrames,
+                                              Result& result) {
     if (m_options.emitCanRxFrames) {
-        for (const TypedRecord& record : batch) {
-            appendCanRxFrames(record, result.analysisFrames.frames);
+        const qsizetype before = result.analysisFrames.frames.size();
+        appendCanRxFrames(record, result.analysisFrames.frames);
+        for (qsizetype i = before; i < result.analysisFrames.frames.size(); ++i) {
+            result.rawLedgerFrames.frames.push_back(result.analysisFrames.frames.at(i));
         }
-        result.rawLedgerFrames.frames = result.analysisFrames.frames;
     }
 
-    const auto projection = m_liveProjection.ingest(batch);
+    const auto projection = m_liveProjection.ingestRecord(record);
     if (!projection.criticalRecords.isEmpty()) {
-        for (const TypedRecord& record : projection.criticalRecords) {
-            ingestCriticalRecord(record, result);
+        for (const TypedRecord& criticalRecord : projection.criticalRecords) {
+            ingestCriticalRecord(criticalRecord, result);
         }
     }
-    updateLiveLatestView(projection.projectedFrames, result);
+    liveLatestFrames += projection.projectedFrames;
     if (projection.statusDue) {
         result.projectionStatusDue = true;
         result.projectionStatus = projection.status;
     }
 
     if (m_options.consumeTruth) {
-        const auto truth = m_liveTruth.ingest(batch);
+        const auto truth = m_liveTruth.ingestRecord(record);
         if (truth.statusDue) {
             result.truthStatusDue = true;
             result.truthStatus = truth.status;
         }
     }
+}
 
-    if (m_options.captureRecords && m_captureQueue) {
-        auto push = m_captureQueue->push(std::move(batch));
-        result.captureDrainNeeded = result.captureDrainNeeded || push.shouldScheduleDrain;
-        if (!push.accepted && push.records > 0) {
-            result.captureHandoffOverrun = true;
-            result.captureHandoffError = push.error;
-            result.captureHandoffOverrunRecords += push.records;
-            result.captureHandoffOverrunBytes += push.bytes;
-        }
+void CaptureCoreRuntime::pushCaptureBatch(TypedRecordList&& batch, Result& result) {
+    if (batch.isEmpty() || !m_options.captureRecords || !m_captureQueue) return;
+
+    auto push = m_captureQueue->push(std::move(batch));
+    result.captureDrainNeeded = result.captureDrainNeeded || push.shouldScheduleDrain;
+    if (!push.accepted && push.records > 0) {
+        result.captureHandoffOverrun = true;
+        result.captureHandoffError = push.error;
+        result.captureHandoffOverrunRecords += push.records;
+        result.captureHandoffOverrunBytes += push.bytes;
     }
 }
 

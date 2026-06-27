@@ -64,6 +64,46 @@ LiveTruthRuntime::IngestResult LiveTruthRuntime::ingest(const TypedRecordList& r
     return result;
 }
 
+LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord& record) {
+    IngestResult result;
+    m_status.lastInputRecords = 1;
+    m_status.lastOutputFrames = 0;
+
+    if (record.isType(TypedRecordType::CanRxRaw)) {
+        const auto can = decodeTypedCanRaw(record);
+        if (can) {
+            ingestFrame(toFrameRecord(record, *can));
+        } else {
+            ++m_status.truthLoss;
+        }
+    } else if (record.isType(TypedRecordType::CanRxSegment)) {
+        const auto header = decodeTypedCanRxSegmentHeader(record);
+        if (header) {
+            for (qsizetype index = 0; index < header->frameCount; ++index) {
+                const auto entry = decodeTypedCanRxSegmentEntry(record, index);
+                if (!entry) {
+                    ++m_status.truthLoss;
+                    continue;
+                }
+                ingestFrame(toFrameRecord(record, *entry));
+            }
+        } else {
+            ++m_status.truthLoss;
+        }
+    }
+
+    if (flushDue()) {
+        result.frames = flush(false);
+    }
+    result.statusDue = statusDue() || !result.frames.isEmpty();
+    if (result.statusDue) {
+        m_statusClock.restart();
+        m_lastStatusTruthLoss = m_status.truthLoss;
+    }
+    result.status = status();
+    return result;
+}
+
 FrameRecordList LiveTruthRuntime::flush(bool force) {
     if (m_pendingFramesByKey.isEmpty()) return {};
     if (!force && m_flushClock.isValid() && m_flushClock.elapsed() < kTruthFlushIntervalMs) return {};
