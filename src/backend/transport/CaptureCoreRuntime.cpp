@@ -235,15 +235,38 @@ void CaptureCoreRuntime::updateLiveLatestView(const FrameRecordList& frames, Res
 
 void CaptureCoreRuntime::updateStatusViews(const Result& ingestResult, Result& out) {
     if (ingestResult.typedStatusDue || ingestResult.projectionStatusDue || ingestResult.truthStatusDue) {
+        const auto projection = m_liveProjection.status();
+        const auto truth = m_liveTruth.status();
         QJsonObject payload;
         payload.insert(QStringLiteral("typed_frames"), QString::number(ingestResult.typedStatus.frames));
+        payload.insert(QStringLiteral("typed_bytes_dropped"), QString::number(ingestResult.typedStatus.bytesDropped));
         payload.insert(QStringLiteral("typed_crc_failures"), QString::number(ingestResult.typedStatus.crcFailures));
         payload.insert(QStringLiteral("typed_length_failures"), QString::number(ingestResult.typedStatus.lengthFailures));
+        payload.insert(QStringLiteral("typed_version_warnings"), QString::number(ingestResult.typedStatus.versionWarnings));
         payload.insert(QStringLiteral("typed_seq_gaps"), QString::number(ingestResult.typedStatus.seqGaps));
-        payload.insert(QStringLiteral("projection_observed_can_rx"), QString::number(m_liveProjection.status().observedCanRxFrames));
-        payload.insert(QStringLiteral("projection_projected_can_rx"), QString::number(m_liveProjection.status().projectedCanRxFrames));
-        payload.insert(QStringLiteral("truth_observed_can_rx"), QString::number(m_liveTruth.status().observedCanRxFrames));
-        payload.insert(QStringLiteral("truth_loss"), QString::number(m_liveTruth.status().truthLoss));
+        payload.insert(QStringLiteral("projection_observed_can_rx"), QString::number(projection.observedCanRxFrames));
+        payload.insert(QStringLiteral("projection_projected_can_rx"), QString::number(projection.projectedCanRxFrames));
+        payload.insert(QStringLiteral("projection_sampled_can_rx"), QString::number(projection.sampledCanRxFrames));
+        payload.insert(QStringLiteral("projection_dropped_can_rx"), QString::number(projection.workerDroppedCanRxFrames));
+        payload.insert(QStringLiteral("projection_observed_bus0_can_rx"), QString::number(projection.observedBus0CanRxFrames));
+        payload.insert(QStringLiteral("projection_observed_bus1_can_rx"), QString::number(projection.observedBus1CanRxFrames));
+        payload.insert(QStringLiteral("projection_observed_control"), QString::number(projection.observedControlEvidenceRecords));
+        payload.insert(QStringLiteral("projection_projected_control"), QString::number(projection.projectedControlEvidenceRecords));
+        payload.insert(QStringLiteral("projection_sampled_control"), QString::number(projection.sampledControlEvidenceRecords));
+        payload.insert(QStringLiteral("projection_last_input_records"), projection.lastInputRecords);
+        payload.insert(QStringLiteral("projection_last_output_frames"), projection.lastOutputFrames);
+        payload.insert(QStringLiteral("truth_observed_can_rx"), QString::number(truth.observedCanRxFrames));
+        payload.insert(QStringLiteral("truth_emitted_frames"), QString::number(truth.emittedTruthFrames));
+        payload.insert(QStringLiteral("truth_coalesced_updates"), QString::number(truth.coalescedTruthUpdates));
+        payload.insert(QStringLiteral("truth_observed_bus0_can_rx"), QString::number(truth.observedBus0CanRxFrames));
+        payload.insert(QStringLiteral("truth_observed_bus1_can_rx"), QString::number(truth.observedBus1CanRxFrames));
+        payload.insert(QStringLiteral("truth_flush_count"), QString::number(truth.flushCount));
+        payload.insert(QStringLiteral("truth_pending_keys"), truth.pendingKeys);
+        payload.insert(QStringLiteral("truth_max_pending_keys"), truth.maxPendingKeys);
+        payload.insert(QStringLiteral("truth_last_input_records"), truth.lastInputRecords);
+        payload.insert(QStringLiteral("truth_last_output_frames"), truth.lastOutputFrames);
+        payload.insert(QStringLiteral("truth_last_flush_ms"), truth.lastFlushMs);
+        payload.insert(QStringLiteral("truth_loss"), QString::number(truth.truthLoss));
 
         QJsonObject counts;
         counts.insert(QStringLiteral("typed_frames"), QString::number(ingestResult.typedStatus.frames));

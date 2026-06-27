@@ -278,7 +278,13 @@ void SerialDrainRuntime::emitDrainStatus(bool force) {
                             snapshot.capacityBytes,
                             snapshot.overrunBytes,
                             snapshot.contentionCount);
-    emit drainEventTraceChanged(m_eventTelemetry.toJson(QDateTime::currentMSecsSinceEpoch()));
+    QJsonObject trace = m_eventTelemetry.toJson(QDateTime::currentMSecsSinceEpoch());
+    insertCounter(trace, QStringLiteral("drain_bytes_total"), m_bytesTotal);
+    insertCounter(trace, QStringLiteral("ready_read_count"), m_readyReadCount);
+    insertCounter(trace, QStringLiteral("ready_read_max_us"), m_readyReadMaxUs);
+    insertCounter(trace, QStringLiteral("drain_burst_max_bytes"), m_drainBurstMaxBytes);
+    insertCounter(trace, QStringLiteral("drain_queue_contention_count"), snapshot.contentionCount);
+    emit drainEventTraceChanged(trace);
 }
 
 void SerialDrainRuntime::emitBytesAvailableCoalesced() {

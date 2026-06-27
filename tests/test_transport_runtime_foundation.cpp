@@ -513,6 +513,48 @@ private slots:
         QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth emit 12/1300")));
     }
 
+    void transportSessionMapsCoreTransportSummary() {
+        CanMonitorTransport::TransportSession session;
+        session.setConnected(true);
+
+        QJsonObject drainTrace;
+        drainTrace.insert(QStringLiteral("drain_bytes_total"), QStringLiteral("12345"));
+        drainTrace.insert(QStringLiteral("ready_read_count"), QStringLiteral("7"));
+        drainTrace.insert(QStringLiteral("ready_read_max_us"), QStringLiteral("91"));
+        drainTrace.insert(QStringLiteral("drain_burst_max_bytes"), QStringLiteral("4096"));
+        drainTrace.insert(QStringLiteral("drain_queue_used_bytes"), QStringLiteral("64"));
+        drainTrace.insert(QStringLiteral("drain_queue_max_used_bytes"), QStringLiteral("512"));
+        drainTrace.insert(QStringLiteral("drain_queue_capacity_bytes"), QStringLiteral("16777216"));
+        drainTrace.insert(QStringLiteral("drain_queue_overrun_bytes"), QStringLiteral("0"));
+        drainTrace.insert(QStringLiteral("drain_queue_contention_count"), QStringLiteral("2"));
+
+        QJsonObject payload;
+        payload.insert(QStringLiteral("typed_frames"), QStringLiteral("42"));
+        payload.insert(QStringLiteral("typed_bytes_dropped"), QStringLiteral("3"));
+        payload.insert(QStringLiteral("typed_crc_failures"), QStringLiteral("1"));
+        payload.insert(QStringLiteral("typed_length_failures"), QStringLiteral("0"));
+        payload.insert(QStringLiteral("typed_version_warnings"), QStringLiteral("2"));
+        payload.insert(QStringLiteral("typed_seq_gaps"), QStringLiteral("4"));
+        payload.insert(QStringLiteral("projection_projected_can_rx"), QStringLiteral("11"));
+        payload.insert(QStringLiteral("projection_sampled_can_rx"), QStringLiteral("5"));
+        payload.insert(QStringLiteral("projection_dropped_can_rx"), QStringLiteral("1"));
+        payload.insert(QStringLiteral("truth_observed_can_rx"), QStringLiteral("12"));
+        payload.insert(QStringLiteral("truth_emitted_frames"), QStringLiteral("10"));
+        payload.insert(QStringLiteral("truth_pending_keys"), 2);
+        payload.insert(QStringLiteral("truth_loss"), QStringLiteral("0"));
+        payload.insert(QStringLiteral("drain_event_trace"), drainTrace);
+
+        session.updateCoreTransportSummary(payload);
+        const QVariantList rows = session.rows();
+        QVERIFY(rows.at(1).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("frames 42")));
+        QVERIFY(rows.at(1).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("drop 3")));
+        QVERIFY(rows.at(2).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("bytes 12345 reads 7")));
+        QVERIFY(rows.at(2).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("ready_max_us 91")));
+        QVERIFY(rows.at(9).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("observed 12 emitted 10")));
+        QVERIFY(rows.at(11).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("projected 11")));
+        QCOMPARE(session.parserFaultCount(), quint64(10));
+    }
+
     void transportRuntimeOwnsWorkerThreadAndQueuesModeChanges() {
         CanMonitorTransport::TransportRuntime runtime;
         SerialWorker* worker = runtime.createWorker();

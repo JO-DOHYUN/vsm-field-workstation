@@ -14,7 +14,7 @@ private slots:
         QVERIFY(request1.has_value());
         QCOMPARE(request1->viewName, QStringLiteral("live_latest"));
         QCOMPARE(request1->sinceSeq, quint64(0));
-        QCOMPARE(request1->limit, 8);
+        QCOMPARE(request1->limit, 32);
 
         const QJsonObject change2 = makeChange(QStringLiteral("live_latest"), 11);
         auto request2 = client.noteViewChanged(change2);

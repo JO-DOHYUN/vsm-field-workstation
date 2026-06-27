@@ -320,6 +320,67 @@ void TransportSession::updateDrainPipeline(quint64 bytesTotal,
     m_captureWriteMaxMs = captureWriteMaxMs;
 }
 
+void TransportSession::updateCoreTransportSummary(const QJsonObject& payload) {
+    if (payload.contains(QStringLiteral("typed_frames")) ||
+        payload.contains(QStringLiteral("typed_crc_failures")) ||
+        payload.contains(QStringLiteral("typed_length_failures"))) {
+        updateTypedStatus(traceCounter(payload, QStringLiteral("typed_frames")),
+                          traceCounter(payload, QStringLiteral("typed_bytes_dropped")),
+                          traceCounter(payload, QStringLiteral("typed_crc_failures")),
+                          traceCounter(payload, QStringLiteral("typed_length_failures")),
+                          traceCounter(payload, QStringLiteral("typed_version_warnings")),
+                          traceCounter(payload, QStringLiteral("typed_seq_gaps")));
+    }
+
+    if (payload.contains(QStringLiteral("projection_projected_can_rx")) ||
+        payload.contains(QStringLiteral("projection_sampled_can_rx")) ||
+        payload.contains(QStringLiteral("projection_dropped_can_rx"))) {
+        m_projectedFrames = traceCounter(payload, QStringLiteral("projection_projected_can_rx"));
+        m_sampledProjectionFrames = traceCounter(payload, QStringLiteral("projection_sampled_can_rx"));
+        m_droppedProjectionFrames = traceCounter(payload, QStringLiteral("projection_dropped_can_rx"));
+        m_observedControlEvidenceRecords = traceCounter(payload, QStringLiteral("projection_observed_control"));
+        m_projectedControlEvidenceRecords = traceCounter(payload, QStringLiteral("projection_projected_control"));
+        m_sampledControlEvidenceRecords = traceCounter(payload, QStringLiteral("projection_sampled_control"));
+    }
+
+    if (payload.contains(QStringLiteral("truth_observed_can_rx")) ||
+        payload.contains(QStringLiteral("truth_emitted_frames")) ||
+        payload.contains(QStringLiteral("truth_loss"))) {
+        updateLiveTruth(traceCounter(payload, QStringLiteral("truth_observed_can_rx")),
+                        traceCounter(payload, QStringLiteral("truth_emitted_frames")),
+                        traceCounter(payload, QStringLiteral("truth_coalesced_updates")),
+                        traceCounter(payload, QStringLiteral("truth_observed_bus0_can_rx")),
+                        traceCounter(payload, QStringLiteral("truth_observed_bus1_can_rx")),
+                        traceCounter(payload, QStringLiteral("truth_flush_count")),
+                        int(traceCounter(payload, QStringLiteral("truth_pending_keys"))),
+                        int(traceCounter(payload, QStringLiteral("truth_max_pending_keys"))),
+                        int(traceCounter(payload, QStringLiteral("truth_last_input_records"))),
+                        int(traceCounter(payload, QStringLiteral("truth_last_output_frames"))),
+                        int(traceCounter(payload, QStringLiteral("truth_last_flush_ms"))),
+                        traceCounter(payload, QStringLiteral("truth_loss")));
+    }
+
+    const QJsonObject drain = payload.value(QStringLiteral("drain_event_trace")).toObject();
+    if (!drain.isEmpty()) {
+        updateDrainEventTrace(drain);
+        updateDrainPipeline(traceCounter(drain, QStringLiteral("drain_bytes_total")),
+                            traceCounter(drain, QStringLiteral("ready_read_count")),
+                            traceCounter(drain, QStringLiteral("ready_read_max_us")),
+                            traceCounter(drain, QStringLiteral("drain_burst_max_bytes")),
+                            traceCounter(drain, QStringLiteral("drain_queue_used_bytes")),
+                            traceCounter(drain, QStringLiteral("drain_queue_max_used_bytes")),
+                            traceCounter(drain, QStringLiteral("drain_queue_capacity_bytes")),
+                            traceCounter(drain, QStringLiteral("drain_queue_overrun_bytes")),
+                            traceCounter(drain, QStringLiteral("drain_queue_contention_count")),
+                            traceCounter(drain, QStringLiteral("parse_backlog_bytes")),
+                            traceCounter(drain, QStringLiteral("parser_batch_max_ms")),
+                            traceCounter(drain, QStringLiteral("capture_writer_queue_bytes")),
+                            traceCounter(drain, QStringLiteral("capture_writer_max_queue_bytes")),
+                            traceCounter(drain, QStringLiteral("capture_writer_overrun_bytes")),
+                            traceCounter(drain, QStringLiteral("capture_write_max_ms")));
+    }
+}
+
 void TransportSession::updateAnalysisQueue(quint64 queuedFrames,
                                            quint64 maxQueuedFrames,
                                            quint64 capacityFrames,

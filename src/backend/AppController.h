@@ -983,6 +983,7 @@ private:
     void appendPendingLiveFrames(const FrameRecordList& frames);
     QJsonObject livePathTraceObject();
     QJsonObject drainEventTraceObject();
+    void applyCoreTransportSummaryPayload(const QJsonObject& payload);
     void handleCoreViewChanged(const QJsonObject& change);
     void handleCoreViewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request);

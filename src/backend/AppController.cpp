@@ -1942,6 +1942,39 @@ QJsonObject AppController::drainEventTraceObject() {
     return out;
 }
 
+void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload) {
+    m_transportSession.updateCoreTransportSummary(payload);
+
+    if (payload.contains(QStringLiteral("typed_frames")) ||
+        payload.contains(QStringLiteral("typed_crc_failures")) ||
+        payload.contains(QStringLiteral("typed_length_failures"))) {
+        m_typedRecordCount = std::max(m_typedRecordCount, jsonU64Value(payload, QStringLiteral("typed_frames")));
+        m_typedBytesDropped = jsonU64Value(payload, QStringLiteral("typed_bytes_dropped"));
+        m_typedCrcFailures = jsonU64Value(payload, QStringLiteral("typed_crc_failures"));
+        m_typedLengthFailures = jsonU64Value(payload, QStringLiteral("typed_length_failures"));
+        m_typedVersionWarnings = jsonU64Value(payload, QStringLiteral("typed_version_warnings"));
+        m_typedSeqGaps = jsonU64Value(payload, QStringLiteral("typed_seq_gaps"));
+    }
+
+    if (payload.contains(QStringLiteral("projection_projected_can_rx")) ||
+        payload.contains(QStringLiteral("projection_sampled_can_rx")) ||
+        payload.contains(QStringLiteral("projection_dropped_can_rx"))) {
+        m_liveProjectionObservedFrames = jsonU64Value(payload, QStringLiteral("projection_observed_can_rx"));
+        m_liveProjectionProjectedFrames = jsonU64Value(payload, QStringLiteral("projection_projected_can_rx"));
+        m_liveProjectionWorkerSampledFrames = jsonU64Value(payload, QStringLiteral("projection_sampled_can_rx"));
+        m_liveProjectionWorkerDroppedFrames = jsonU64Value(payload, QStringLiteral("projection_dropped_can_rx"));
+        m_liveProjectionObservedControlEvidenceRecords = jsonU64Value(payload, QStringLiteral("projection_observed_control"));
+        m_liveProjectionProjectedControlEvidenceRecords = jsonU64Value(payload, QStringLiteral("projection_projected_control"));
+        m_liveProjectionSampledControlEvidenceRecords = jsonU64Value(payload, QStringLiteral("projection_sampled_control"));
+    }
+
+    const QJsonObject drainTrace = payload.value(QStringLiteral("drain_event_trace")).toObject();
+    if (!drainTrace.isEmpty()) {
+        m_workerDrainEventTrace = drainTrace;
+        m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+    }
+}
+
 void AppController::dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request) {
     if (!request.valid) return;
     if (m_coreProcessMode && m_coreProcessClient.isIpcConnected()) {
@@ -1977,6 +2010,7 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("transport_summary")) {
         const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
+        applyCoreTransportSummaryPayload(payload);
         const QString transport = payload.value(QStringLiteral("transport")).toString();
         const bool serialConnected = transport == QStringLiteral("connected");
         if (m_connected != serialConnected) {
@@ -2009,12 +2043,22 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("live_latest")) {
         const QJsonArray rows = result.snapshot.value(QStringLiteral("payload")).toObject().value(QStringLiteral("frames")).toArray();
+        ++m_livePathTelemetry.appSnapshotReceive;
+        m_livePathTelemetry.appSnapshotLastReceiveWallMs = QDateTime::currentMSecsSinceEpoch();
+        QElapsedTimer applyTimer;
+        applyTimer.start();
+        ++m_livePathTelemetry.appSnapshotAck;
         FrameRecordList frames;
         frames.reserve(rows.size());
         for (const QJsonValue& value : rows) {
             const auto frame = frameFromCoreLiveLatestRow(value.toObject());
             if (frame) frames.push_back(*frame);
         }
+        ++m_livePathTelemetry.appSnapshotApply;
+        m_livePathTelemetry.appSnapshotApplyRows += quint64(frames.size());
+        m_livePathTelemetry.appSnapshotLastApplyWallMs = QDateTime::currentMSecsSinceEpoch();
+        m_livePathTelemetry.appSnapshotApplyMaxMs =
+            std::max<qint64>(m_livePathTelemetry.appSnapshotApplyMaxMs, applyTimer.elapsed());
         if (!frames.isEmpty()) {
             m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
             appendPendingLiveFrames(frames);

@@ -107,6 +107,7 @@ public:
                              quint64 truthLoss);
     void updateLivePathTrace(const QJsonObject& trace);
     void updateDrainEventTrace(const QJsonObject& trace);
+    void updateCoreTransportSummary(const QJsonObject& payload);
     void noteBoardEvent(quint16 code, quint16 detail, quint32 counter, quint64 monoUs);
 
     QString level() const;
