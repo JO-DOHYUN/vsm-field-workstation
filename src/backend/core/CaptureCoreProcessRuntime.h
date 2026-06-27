@@ -56,6 +56,7 @@ private:
     void updatePipelineTransportSummary(const QJsonObject& payload,
                                         CoreViewSeverity severity,
                                         const QJsonObject& cheapCounts);
+    void ingestCriticalRecords(const TypedRecordList& records);
     void publishChange(const ViewChanged& change);
     void requestPipelineViewMirror(const QJsonObject& change);
     void applyPipelineSnapshot(quint64 requestId,
@@ -127,7 +128,14 @@ private:
     quint64 m_rawLedgerLastWriteFailures = 0;
     QJsonObject m_pipelineTransportPayload;
     QJsonObject m_pipelineTransportCheapCounts;
+    QJsonObject m_coreEvidenceTransportPayload;
+    QJsonObject m_coreEvidenceCheapCounts;
     CoreViewSeverity m_pipelineTransportSeverity = CoreViewSeverity::Ok;
+    CoreViewSeverity m_coreEvidenceSeverity = CoreViewSeverity::Ok;
+    quint64 m_boardEventTotal = 0;
+    quint64 m_mcp2515EventTotal = 0;
+    quint64 m_boardEventFatalTotal = 0;
+    QHash<quint16, quint64> m_mcp2515Details;
     bool m_rawLedgerDispatchInFlight = false;
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;

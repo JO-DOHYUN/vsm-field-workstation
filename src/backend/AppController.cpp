@@ -431,6 +431,128 @@ std::optional<FrameRecord> frameFromCoreLiveLatestRow(const QJsonObject& row) {
     return frame;
 }
 
+std::optional<TypedBoardHealthRecord> boardHealthFromCoreJson(const QJsonObject& object) {
+    if (object.isEmpty() || !object.contains(QStringLiteral("mono_us"))) return std::nullopt;
+    TypedBoardHealthRecord out;
+    out.monoUs = jsonU64Value(object, QStringLiteral("mono_us"));
+    out.canRxTotal = quint32(jsonU64Value(object, QStringLiteral("can_rx_total")));
+    out.canDroppedTotal = quint32(jsonU64Value(object, QStringLiteral("can_dropped_total")));
+    out.canFifoOverflowTotal = quint32(jsonU64Value(object, QStringLiteral("can_fifo_overflow_total")));
+    out.serialRecordTxTotal = quint32(jsonU64Value(object, QStringLiteral("serial_record_tx_total")));
+    out.queueDepth = quint32(jsonU64Value(object, QStringLiteral("queue_depth")));
+    out.encoderFaultEvents = quint32(jsonU64Value(object, QStringLiteral("encoder_fault_events")));
+    out.encoderWrapEvents = quint32(jsonU64Value(object, QStringLiteral("encoder_wrap_events")));
+    out.encoderPosition = object.value(QStringLiteral("encoder_position")).toString().toLongLong();
+    out.safetyState = quint8(std::clamp(object.value(QStringLiteral("safety_state")).toInt(0), 0, 255));
+    out.inputs = quint8(std::clamp(object.value(QStringLiteral("inputs")).toInt(0), 0, 255));
+    out.encoderTimerOk = quint8(std::clamp(object.value(QStringLiteral("encoder_timer_ok")).toInt(0), 0, 255));
+    out.flags = quint8(std::clamp(object.value(QStringLiteral("flags")).toInt(0), 0, 255));
+    out.faultFlags = quint32(jsonU64Value(object, QStringLiteral("fault_flags")));
+    out.hasExtendedTransportCounters = object.value(QStringLiteral("has_extended_transport_counters")).toBool(false);
+    out.serialEnqueueFailTotal = quint32(jsonU64Value(object, QStringLiteral("serial_enqueue_fail_total")));
+    out.serialRingClearTotal = quint32(jsonU64Value(object, QStringLiteral("serial_ring_clear_total")));
+    out.serialRingClearedBytesTotal = quint32(jsonU64Value(object, QStringLiteral("serial_ring_cleared_bytes_total")));
+    out.serialBackpressureTotal = quint32(jsonU64Value(object, QStringLiteral("serial_backpressure_total")));
+    out.serialTxHighWaterBytes = quint32(jsonU64Value(object, QStringLiteral("serial_tx_high_water_bytes")));
+    out.sharedCanQueueHighWater = quint32(jsonU64Value(object, QStringLiteral("shared_can_queue_high_water")));
+    out.mcpDrainBudgetHitTotal = quint32(jsonU64Value(object, QStringLiteral("mcp_drain_budget_hit_total")));
+    out.canSegmentEnqueueFailTotal = quint32(jsonU64Value(object, QStringLiteral("can_segment_enqueue_fail_total")));
+    out.hasUplinkPoolCounters = object.value(QStringLiteral("has_uplink_pool_counters")).toBool(false);
+    out.uplinkLargePoolUsedBlocks = quint32(jsonU64Value(object, QStringLiteral("uplink_large_pool_used_blocks")));
+    out.uplinkLargePoolCapacityBlocks = quint32(jsonU64Value(object, QStringLiteral("uplink_large_pool_capacity_blocks")));
+    out.uplinkLargePoolCanReserveUsedBlocks = quint32(jsonU64Value(object, QStringLiteral("uplink_large_pool_can_reserve_used_blocks")));
+    out.canTruthDescriptorQueueHighWater = quint32(jsonU64Value(object, QStringLiteral("can_truth_descriptor_queue_high_water")));
+    out.uplinkPoolAllocFailTotal = quint32(jsonU64Value(object, QStringLiteral("uplink_pool_alloc_fail_total")));
+    out.canTruthPoolAllocFailTotal = quint32(jsonU64Value(object, QStringLiteral("can_truth_pool_alloc_fail_total")));
+    out.uplinkDescriptorHighWaterTotal = quint32(jsonU64Value(object, QStringLiteral("uplink_descriptor_high_water_total")));
+    out.diagnosticSuppressedTotal = quint32(jsonU64Value(object, QStringLiteral("diagnostic_suppressed_total")));
+    return out;
+}
+
+std::optional<TypedCapabilityRecord> capabilityFromCoreJson(const QJsonObject& object) {
+    if (object.isEmpty() || !object.contains(QStringLiteral("protocol_version"))) return std::nullopt;
+    TypedCapabilityRecord out;
+    out.monoUs = jsonU64Value(object, QStringLiteral("mono_us"));
+    out.protocolVersion = quint8(std::clamp(object.value(QStringLiteral("protocol_version")).toInt(0), 0, 255));
+    out.profileMajor = quint8(std::clamp(object.value(QStringLiteral("profile_major")).toInt(0), 0, 255));
+    out.profileMinor = quint8(std::clamp(object.value(QStringLiteral("profile_minor")).toInt(0), 0, 255));
+    out.monoUnit = quint8(std::clamp(object.value(QStringLiteral("mono_unit")).toInt(0), 0, 255));
+    out.canQueueSize = quint32(jsonU64Value(object, QStringLiteral("can_queue_size")));
+    out.encoderPpr = quint32(jsonU64Value(object, QStringLiteral("encoder_ppr")));
+    out.encoderFrequencyLimit = quint32(jsonU64Value(object, QStringLiteral("encoder_frequency_limit")));
+    out.supportsCanRxRaw = object.value(QStringLiteral("supports_can_rx_raw")).toBool(false);
+    out.supportsCanTxRaw = object.value(QStringLiteral("supports_can_tx_raw")).toBool(false);
+    out.supportsEncEdgeRaw = object.value(QStringLiteral("supports_enc_edge_raw")).toBool(false);
+    out.supportsEncDerived = object.value(QStringLiteral("supports_enc_derived")).toBool(false);
+    out.supportsAdcSample = object.value(QStringLiteral("supports_adc_sample")).toBool(false);
+    out.supportsBoardHealth = object.value(QStringLiteral("supports_board_health")).toBool(false);
+    out.supportsBoardEvent = object.value(QStringLiteral("supports_board_event")).toBool(false);
+    out.adcChannels = quint8(std::clamp(object.value(QStringLiteral("adc_channels")).toInt(0), 0, 255));
+    out.adcResolutionBits = quint8(std::clamp(object.value(QStringLiteral("adc_resolution_bits")).toInt(0), 0, 255));
+    out.adcPeriodMs = quint8(std::clamp(object.value(QStringLiteral("adc_period_ms")).toInt(0), 0, 255));
+    out.laneCapabilityFlags = quint8(std::clamp(object.value(QStringLiteral("lane_capability_flags")).toInt(0), 0, 255));
+    out.limitationFlags = quint8(std::clamp(object.value(QStringLiteral("limitation_flags")).toInt(0), 0, 255));
+    out.busCount = quint8(std::clamp(object.value(QStringLiteral("bus_count")).toInt(0), 0, 255));
+    out.busDescriptorSize = quint8(std::clamp(object.value(QStringLiteral("bus_descriptor_size")).toInt(0), 0, 255));
+    out.capabilityV2Flags = quint16(jsonU64Value(object, QStringLiteral("capability_v2_flags")));
+    out.supportedUplinkRecords = quint32(jsonU64Value(object, QStringLiteral("supported_uplink_records")));
+    out.supportedDownlinkRecords = quint32(jsonU64Value(object, QStringLiteral("supported_downlink_records")));
+    out.safetyFeatureFlags = quint32(jsonU64Value(object, QStringLiteral("safety_feature_flags")));
+    out.policyHash = quint32(jsonU64Value(object, QStringLiteral("policy_hash")));
+    out.firmwareBuildId = quint32(jsonU64Value(object, QStringLiteral("firmware_build_id")));
+    out.hostTxQueueSize = quint16(jsonU64Value(object, QStringLiteral("host_tx_queue_size")));
+    out.capabilityV3Flags = quint16(jsonU64Value(object, QStringLiteral("capability_v3_flags")));
+    const QJsonArray buses = object.value(QStringLiteral("buses")).toArray();
+    out.buses.reserve(buses.size());
+    for (const QJsonValue& value : buses) {
+        const QJsonObject busObject = value.toObject();
+        TypedCapabilityBusDescriptor bus;
+        bus.busId = quint8(std::clamp(busObject.value(QStringLiteral("bus_id")).toInt(0), 0, 255));
+        bus.roleHint = quint8(std::clamp(busObject.value(QStringLiteral("role_hint")).toInt(0), 0, 255));
+        bus.backend = quint8(std::clamp(busObject.value(QStringLiteral("backend")).toInt(0), 0, 255));
+        bus.transceiver = quint8(std::clamp(busObject.value(QStringLiteral("transceiver")).toInt(0), 0, 255));
+        bus.rxSupported = busObject.value(QStringLiteral("rx_supported")).toBool(false);
+        bus.txSupported = busObject.value(QStringLiteral("tx_supported")).toBool(false);
+        bus.controlTxAllowed = busObject.value(QStringLiteral("control_tx_allowed")).toBool(false);
+        bus.classicCanSupported = busObject.value(QStringLiteral("classic_can_supported")).toBool(false);
+        bus.canFdSupported = busObject.value(QStringLiteral("can_fd_supported")).toBool(false);
+        bus.maxLiveDlc = quint8(std::clamp(busObject.value(QStringLiteral("max_live_dlc")).toInt(0), 0, 255));
+        bus.nominalBitrate = quint32(jsonU64Value(busObject, QStringLiteral("nominal_bitrate")));
+        bus.dataBitrate = quint32(jsonU64Value(busObject, QStringLiteral("data_bitrate")));
+        bus.terminationPolicy = quint8(std::clamp(busObject.value(QStringLiteral("termination_policy")).toInt(0), 0, 255));
+        bus.isolationPolicy = quint8(std::clamp(busObject.value(QStringLiteral("isolation_policy")).toInt(0), 0, 255));
+        out.buses.push_back(bus);
+    }
+    return out;
+}
+
+std::optional<TypedBoardEventRecord> boardEventFromCoreJson(const QJsonObject& object) {
+    if (object.isEmpty() || !object.contains(QStringLiteral("code"))) return std::nullopt;
+    TypedBoardEventRecord out;
+    out.monoUs = jsonU64Value(object, QStringLiteral("mono_us"));
+    out.code = quint16(jsonU64Value(object, QStringLiteral("code")));
+    out.detail = quint16(jsonU64Value(object, QStringLiteral("detail")));
+    out.counter = quint32(jsonU64Value(object, QStringLiteral("counter")));
+    return out;
+}
+
+std::optional<TypedControlAckRecord> controlAckFromCoreJson(const QJsonObject& object) {
+    if (object.isEmpty() || !object.contains(QStringLiteral("command_id"))) return std::nullopt;
+    TypedControlAckRecord out;
+    out.monoUs = jsonU64Value(object, QStringLiteral("mono_us"));
+    out.commandId = quint32(jsonU64Value(object, QStringLiteral("command_id")));
+    out.status = quint8(std::clamp(object.value(QStringLiteral("status")).toInt(0), 0, 255));
+    out.reason = quint8(std::clamp(object.value(QStringLiteral("reason")).toInt(0), 0, 255));
+    out.targetBus = quint8(std::clamp(object.value(QStringLiteral("target_bus")).toInt(0), 0, 255));
+    out.targetDlcFlags = quint8(std::clamp(object.value(QStringLiteral("target_dlc_flags")).toInt(0), 0, 255));
+    out.targetCanId = quint32(jsonU64Value(object, QStringLiteral("target_can_id")));
+    out.targetExtended = object.value(QStringLiteral("target_extended")).toBool(false);
+    out.targetRtr = object.value(QStringLiteral("target_rtr")).toBool(false);
+    out.counter = quint32(jsonU64Value(object, QStringLiteral("counter")));
+    out.rejectedTotal = quint32(jsonU64Value(object, QStringLiteral("rejected_total")));
+    return out;
+}
+
 quint64 framePayloadFingerprint(const FrameRecord& fr) {
     quint64 fingerprint = quint64(fr.canId) ^ (quint64(fr.dlc) << 29) ^ (quint64(fr.bus) << 37);
     for (int i = 0; i < 8; ++i) {
@@ -1944,6 +2066,11 @@ QJsonObject AppController::drainEventTraceObject() {
 
 void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload) {
     m_transportSession.updateCoreTransportSummary(payload);
+    const quint64 nowWallMs = quint64(QDateTime::currentMSecsSinceEpoch());
+    const bool previousBoardAlive = m_evidenceRuntime.boardAlive();
+    const bool previousControlCapable = m_evidenceRuntime.controlCapable();
+    bool evidenceChanged = false;
+    bool controlStateMaybeChanged = false;
 
     if (payload.contains(QStringLiteral("typed_frames")) ||
         payload.contains(QStringLiteral("typed_crc_failures")) ||
@@ -1954,6 +2081,161 @@ void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload)
         m_typedLengthFailures = jsonU64Value(payload, QStringLiteral("typed_length_failures"));
         m_typedVersionWarnings = jsonU64Value(payload, QStringLiteral("typed_version_warnings"));
         m_typedSeqGaps = jsonU64Value(payload, QStringLiteral("typed_seq_gaps"));
+    }
+
+    if (const auto capability = capabilityFromCoreJson(payload.value(QStringLiteral("capability")).toObject())) {
+        m_evidenceRuntime.ingestCapability(*capability, nowWallMs);
+        const QString previousBusSummary = m_controlBusSummary;
+        const bool previousBusAllowed = controlTargetBusAllowed();
+        const int previousTargetBus = controlTargetBus();
+        updateControlBusCapability(*capability);
+        evidenceChanged = true;
+        controlStateMaybeChanged = controlStateMaybeChanged ||
+            previousBusSummary != m_controlBusSummary ||
+            previousBusAllowed != controlTargetBusAllowed() ||
+            previousTargetBus != controlTargetBus();
+    }
+
+    if (const auto health = boardHealthFromCoreJson(payload.value(QStringLiteral("board_health")).toObject())) {
+        m_evidenceRuntime.ingestBoardHealth(*health, nowWallMs);
+
+        StatsRecord typedStats = m_lastStats;
+        typedStats.tExtUs = health->monoUs;
+        typedStats.droppedTotal = health->canDroppedTotal;
+        typedStats.fifoOverflowTotal = health->canFifoOverflowTotal;
+        if (m_lastTypedHealthMonoUs > 0 && health->monoUs > m_lastTypedHealthMonoUs) {
+            const quint64 elapsedUs = health->monoUs - m_lastTypedHealthMonoUs;
+            const quint64 rxDelta = u32CounterDelta(health->canRxTotal, m_lastTypedHealthCanRxTotal);
+            const quint64 txDelta = u32CounterDelta(health->serialRecordTxTotal, m_lastTypedHealthSerialTxTotal);
+            typedStats.rxFps1s = boundedFpsFromDelta(quint32(std::min<quint64>(rxDelta, std::numeric_limits<quint32>::max())), elapsedUs);
+            typedStats.txFps1s = boundedFpsFromDelta(quint32(std::min<quint64>(txDelta, std::numeric_limits<quint32>::max())), elapsedUs);
+        }
+
+        const quint64 streamRxCount = std::max(m_liveProjectionObservedFrames,
+                                               jsonU64Value(payload, QStringLiteral("truth_observed_can_rx")));
+        if (!m_typedRxHealthParityAnchored) {
+            m_typedRxHealthParityAnchored = true;
+            m_typedRxHealthAnchorBoardTotal = health->canRxTotal;
+            m_typedRxHealthAnchorStreamCount = streamRxCount;
+            m_typedRxHealthBoardDelta = 0;
+            m_typedRxHealthStreamDelta = 0;
+            m_typedRxHealthMissing = 0;
+        } else {
+            m_typedRxHealthBoardDelta = u32CounterDelta(health->canRxTotal, m_typedRxHealthAnchorBoardTotal);
+            m_typedRxHealthStreamDelta = streamRxCount >= m_typedRxHealthAnchorStreamCount
+                ? (streamRxCount - m_typedRxHealthAnchorStreamCount)
+                : 0;
+            m_typedRxHealthMissing = qint64(m_typedRxHealthBoardDelta) - qint64(m_typedRxHealthStreamDelta);
+        }
+
+        m_lastStats = typedStats;
+        m_lastTypedHealthMonoUs = health->monoUs;
+        m_lastTypedHealthCanRxTotal = health->canRxTotal;
+        m_lastTypedHealthSerialTxTotal = health->serialRecordTxTotal;
+        m_lastTypedHealthHasUplinkCounters = health->hasExtendedTransportCounters;
+        m_lastTypedHealthUplinkCounters = {};
+        if (health->hasExtendedTransportCounters) {
+            m_lastTypedHealthUplinkCounters.present = true;
+            m_lastTypedHealthUplinkCounters.serialEnqueueFailTotal = health->serialEnqueueFailTotal;
+            m_lastTypedHealthUplinkCounters.serialRingClearTotal = health->serialRingClearTotal;
+            m_lastTypedHealthUplinkCounters.serialRingClearedBytesTotal = health->serialRingClearedBytesTotal;
+            m_lastTypedHealthUplinkCounters.serialBackpressureTotal = health->serialBackpressureTotal;
+            m_lastTypedHealthUplinkCounters.serialTxHighWaterBytes = health->serialTxHighWaterBytes;
+            m_lastTypedHealthUplinkCounters.sharedCanQueueHighWater = health->sharedCanQueueHighWater;
+            m_lastTypedHealthUplinkCounters.mcpDrainBudgetHitTotal = health->mcpDrainBudgetHitTotal;
+            m_lastTypedHealthUplinkCounters.canSegmentEnqueueFailTotal = health->canSegmentEnqueueFailTotal;
+            m_lastTypedHealthUplinkCounters.hasPoolCounters = health->hasUplinkPoolCounters;
+            m_lastTypedHealthUplinkCounters.uplinkLargePoolUsedBlocks = health->uplinkLargePoolUsedBlocks;
+            m_lastTypedHealthUplinkCounters.uplinkLargePoolCapacityBlocks = health->uplinkLargePoolCapacityBlocks;
+            m_lastTypedHealthUplinkCounters.uplinkLargePoolCanReserveUsedBlocks = health->uplinkLargePoolCanReserveUsedBlocks;
+            m_lastTypedHealthUplinkCounters.canTruthDescriptorQueueHighWater = health->canTruthDescriptorQueueHighWater;
+            m_lastTypedHealthUplinkCounters.uplinkPoolAllocFailTotal = health->uplinkPoolAllocFailTotal;
+            m_lastTypedHealthUplinkCounters.canTruthPoolAllocFailTotal = health->canTruthPoolAllocFailTotal;
+            m_lastTypedHealthUplinkCounters.uplinkDescriptorHighWaterTotal = health->uplinkDescriptorHighWaterTotal;
+            m_lastTypedHealthUplinkCounters.diagnosticSuppressedTotal = health->diagnosticSuppressedTotal;
+        }
+        m_lastLiveStatsWallMs = qint64(nowWallMs);
+        ensureTimeAnchorForFrame(QStringLiteral("live"), health->monoUs);
+        if (health->monoUs > m_liveLatestUs) m_liveLatestUs = health->monoUs;
+        syncLiveBusHealthAlarms();
+        requestLiveStatsRefresh(false);
+        evidenceChanged = true;
+    }
+
+    if (const auto boardEvent = boardEventFromCoreJson(payload.value(QStringLiteral("last_board_event")).toObject())) {
+        if (boardEvent->counter != 0 && boardEvent->counter != m_coreLastBoardEventCounter) {
+            m_coreLastBoardEventCounter = boardEvent->counter;
+            m_transportSession.noteBoardEvent(boardEvent->code, boardEvent->detail, boardEvent->counter, boardEvent->monoUs);
+            requestLiveStatsRefresh(false);
+            if (boardEvent->code == 12 || boardEvent->code == 17) {
+                const QString detailHex = QStringLiteral("0x%1")
+                    .arg(boardEvent->detail, 4, 16, QLatin1Char('0'))
+                    .toUpper();
+                appendControlEvidenceEvent(QStringLiteral("BOARD_EVENT"),
+                                           QStringLiteral("error"),
+                                           QStringLiteral("Actual CAN TX failed before audit"),
+                                           QStringLiteral("NO CAN_TX_RAW: %1 detail %2 counter %3")
+                                               .arg(boardEventCodeText(boardEvent->code), detailHex)
+                                               .arg(boardEvent->counter));
+                refreshControlStatus(QStringLiteral("Control TX failed: %1").arg(boardEventCodeText(boardEvent->code)));
+                controlStateMaybeChanged = true;
+            }
+        }
+    }
+
+    if (const auto ack = controlAckFromCoreJson(payload.value(QStringLiteral("last_control_ack")).toObject())) {
+        if (ack->counter != 0 && ack->counter != m_coreLastControlAckCounter) {
+            m_coreLastControlAckCounter = ack->counter;
+            if (ack->status != 0 && isControlCommandCanId(ack->targetCanId)) {
+                m_controlAudit.rememberAcceptedAck(ack->targetCanId, ack->commandId);
+            }
+            m_controlAudit.noteAck(ack->status != 0);
+            const bool ackUiDue = m_controlAudit.ackUiDue(ack->status == 0, qint64(nowWallMs));
+            if (ackUiDue) {
+                appendControlEvidenceEvent(QStringLiteral("CONTROL_ACK"),
+                                           ack->status == 0 ? QStringLiteral("error") : QStringLiteral("info"),
+                                           ack->status == 0 ? QStringLiteral("보드 요청 거부") : QStringLiteral("보드 요청 수락"),
+                                           QStringLiteral("ACK #%1 %2 reason %3 BUS %4 %5 %6%7")
+                                               .arg(ack->commandId)
+                                               .arg(controlAckStatusText(ack->status))
+                                               .arg(controlAckReasonText(ack->reason))
+                                               .arg(ack->targetBus)
+                                               .arg(idText(ack->targetCanId))
+                                               .arg(controlAckDlcText(ack->targetDlcFlags))
+                                               .arg(controlAckEvidenceHint(ack->status, ack->reason)),
+                                           ack->commandId,
+                                           ack->targetCanId,
+                                           ack->targetBus);
+                controlStateMaybeChanged = true;
+            }
+        }
+    }
+
+    const QJsonObject txAudit = payload.value(QStringLiteral("last_can_tx_audit")).toObject();
+    if (!txAudit.isEmpty()) {
+        const quint32 auditTotal = quint32(jsonU64Value(txAudit, QStringLiteral("total")));
+        const quint32 canId = quint32(jsonU64Value(txAudit, QStringLiteral("can_id")));
+        const quint8 bus = quint8(std::clamp(txAudit.value(QStringLiteral("bus")).toInt(0), 0, 255));
+        if (auditTotal != 0 && auditTotal != m_coreLastCanTxAuditTotal && isControlCommandCanId(canId)) {
+            m_coreLastCanTxAuditTotal = auditTotal;
+            const quint32 matchedCommandId = m_controlAudit.takeAcceptedCommandId(canId);
+            m_controlAudit.noteTxAudit(matchedCommandId > 0);
+            if (m_controlAudit.txAuditUiDue(matchedCommandId == 0, qint64(nowWallMs))) {
+                appendControlEvidenceEvent(QStringLiteral("CAN_TX_RAW"),
+                                           matchedCommandId > 0 ? QStringLiteral("ok") : QStringLiteral("warn"),
+                                           matchedCommandId > 0
+                                               ? QStringLiteral("실제 CAN 송신 audit 확인")
+                                               : QStringLiteral("ACK 매칭 없는 CAN_TX_RAW audit"),
+                                           QStringLiteral("AUDIT TX BUS %1 %2 DLC %3")
+                                               .arg(bus)
+                                               .arg(idText(canId))
+                                               .arg(txAudit.value(QStringLiteral("dlc")).toInt(0)),
+                                           matchedCommandId,
+                                           canId,
+                                           bus);
+                controlStateMaybeChanged = true;
+            }
+        }
     }
 
     if (payload.contains(QStringLiteral("projection_projected_can_rx")) ||
@@ -1973,6 +2255,23 @@ void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload)
         m_workerDrainEventTrace = drainTrace;
         m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     }
+
+    const bool boardAliveChanged = previousBoardAlive != m_evidenceRuntime.boardAlive();
+    const bool controlCapableChanged = previousControlCapable != m_evidenceRuntime.controlCapable();
+    if (m_controlRuntime.armed() && !m_evidenceRuntime.controlCapable()) {
+        m_controlRuntime.setArmed(false);
+        m_controlKeepaliveTimer.stop();
+        refreshControlStatus(QStringLiteral("Control disarmed: %1").arg(m_evidenceRuntime.reason()));
+        controlStateMaybeChanged = true;
+    }
+    const bool typedUiDue = m_lastTypedEvidenceNotifyWallMs <= 0
+        || (qint64(nowWallMs) - m_lastTypedEvidenceNotifyWallMs) >= kTypedEvidenceUiMinIntervalMs;
+    if (evidenceChanged || boardAliveChanged || controlCapableChanged || typedUiDue) {
+        m_lastTypedEvidenceNotifyWallMs = qint64(nowWallMs);
+        emit typedEvidenceChanged();
+    }
+    if (controlStateMaybeChanged || boardAliveChanged || controlCapableChanged) emit controlStateChanged();
+    if (evidenceChanged) requestDerivedSummaryRefresh(false);
 }
 
 void AppController::dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request) {

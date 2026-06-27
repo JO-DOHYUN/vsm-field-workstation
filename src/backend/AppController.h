@@ -1397,6 +1397,9 @@ private:
     CanMonitorPerf::UiResponsivenessRuntime m_uiResponsiveness;
     CanMonitorCore::CoreProcessClientRuntime m_coreProcessClient;
     bool m_coreProcessMode = false;
+    quint32 m_coreLastBoardEventCounter = 0;
+    quint32 m_coreLastControlAckCounter = 0;
+    quint32 m_coreLastCanTxAuditTotal = 0;
     QProcess* m_verificationProcess = nullptr;
     QString m_verificationRunnerStatus = QStringLiteral("검증 실행기 대기");
     QString m_verificationRunnerArtifactPath;
