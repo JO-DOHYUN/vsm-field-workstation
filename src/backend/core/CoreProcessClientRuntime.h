@@ -79,12 +79,16 @@ private:
     void readStandardOutput();
     void readStandardError();
     void connectIpc();
+    bool queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut);
+    void sendPendingTransportStartIfReady();
     static QString makeServerName();
 
     QProcess m_process;
     CoreIpcClientRuntime m_client;
     QByteArray m_stdoutBuffer;
     QString m_serverName;
+    QString m_pendingTransportMode;
+    QString m_pendingTransportEndpoint;
     QString m_lastMessage = QStringLiteral("core process idle");
     bool m_startupSeen = false;
 };

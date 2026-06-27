@@ -19,6 +19,10 @@ QJsonObject buildInfoJson() {
 constexpr int kCoreRawLedgerPendingFrameCap = 4096;
 constexpr int kCoreRawLedgerTailViewCap = 1024;
 
+CoreViewSeverity maxSeverity(CoreViewSeverity lhs, CoreViewSeverity rhs) {
+    return static_cast<int>(lhs) >= static_cast<int>(rhs) ? lhs : rhs;
+}
+
 CoreViewSeverity severityFromJson(const QJsonObject& object) {
     CoreViewSeverity severity = CoreViewSeverity::Ok;
     coreViewSeverityFromString(object.value(QStringLiteral("severity")).toString(), &severity);
@@ -122,6 +126,8 @@ QString CaptureCoreProcessRuntime::serverName() const {
 
 void CaptureCoreProcessRuntime::startSerial(const QString& portName) {
     ensureTransportRuntime();
+    m_transportConnected = false;
+    m_transportMessage = QStringLiteral("opening serial: %1").arg(portName);
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("opening_serial")},
                                        {QStringLiteral("endpoint"), portName},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")}},
@@ -135,6 +141,8 @@ void CaptureCoreProcessRuntime::startSerial(const QString& portName) {
 
 void CaptureCoreProcessRuntime::startGatewayTcp(const QString& endpoint) {
     ensureTransportRuntime();
+    m_transportConnected = false;
+    m_transportMessage = QStringLiteral("opening gateway TCP: %1").arg(endpoint);
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("opening_gateway_tcp")},
                                        {QStringLiteral("endpoint"), endpoint},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")}},
@@ -603,6 +611,9 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
     m_rawLedgerDroppedHandoffFrames = 0;
     m_rawLedgerLastTotalRows = 0;
     m_rawLedgerLastSegmentBytes = 0;
+    m_pipelineTransportPayload = QJsonObject{};
+    m_pipelineTransportCheapCounts = QJsonObject{};
+    m_pipelineTransportSeverity = CoreViewSeverity::Ok;
     updateCoreHealth(QStringLiteral("ready"));
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")},
@@ -635,7 +646,42 @@ void CaptureCoreProcessRuntime::updateCoreHealth(const QString& state, CoreViewS
 void CaptureCoreProcessRuntime::updateTransportSummary(const QJsonObject& payload,
                                                        CoreViewSeverity severity,
                                                        const QJsonObject& cheapCounts) {
-    publishChange(m_viewStore.updateView(CoreViewName::TransportSummary, payload, severity, cheapCounts));
+    QJsonObject mergedPayload = m_pipelineTransportPayload;
+    for (auto it = payload.constBegin(); it != payload.constEnd(); ++it) {
+        mergedPayload.insert(it.key(), it.value());
+    }
+    if (!mergedPayload.contains(QStringLiteral("transport"))) {
+        mergedPayload.insert(QStringLiteral("transport"),
+                             m_transportConnected
+                                 ? QStringLiteral("connected")
+                                 : (m_transportRuntimeStarted ? QStringLiteral("idle") : QStringLiteral("idle")));
+    }
+    if (!mergedPayload.contains(QStringLiteral("message")) && !m_transportMessage.isEmpty()) {
+        mergedPayload.insert(QStringLiteral("message"), m_transportMessage);
+    }
+    mergedPayload.insert(QStringLiteral("serial_owner"), QStringLiteral("core"));
+
+    QJsonObject mergedCounts = m_pipelineTransportCheapCounts;
+    for (auto it = cheapCounts.constBegin(); it != cheapCounts.constEnd(); ++it) {
+        mergedCounts.insert(it.key(), it.value());
+    }
+    publishChange(m_viewStore.updateView(CoreViewName::TransportSummary,
+                                         mergedPayload,
+                                         maxSeverity(severity, m_pipelineTransportSeverity),
+                                         mergedCounts));
+}
+
+void CaptureCoreProcessRuntime::updatePipelineTransportSummary(const QJsonObject& payload,
+                                                               CoreViewSeverity severity,
+                                                               const QJsonObject& cheapCounts) {
+    m_pipelineTransportPayload = payload;
+    m_pipelineTransportPayload.remove(QStringLiteral("transport"));
+    m_pipelineTransportPayload.remove(QStringLiteral("message"));
+    m_pipelineTransportPayload.remove(QStringLiteral("serial_owner"));
+    m_pipelineTransportPayload.remove(QStringLiteral("capture_active"));
+    m_pipelineTransportCheapCounts = cheapCounts;
+    m_pipelineTransportSeverity = severity;
+    updateTransportSummary(QJsonObject{}, CoreViewSeverity::Ok, QJsonObject{});
 }
 
 void CaptureCoreProcessRuntime::publishChange(const ViewChanged& change) {
@@ -673,6 +719,10 @@ void CaptureCoreProcessRuntime::applyPipelineSnapshot(quint64 requestId,
 
     const QJsonObject payload = snapshot.value(QStringLiteral("payload")).toObject();
     const QJsonObject cheapCounts = change.value(QStringLiteral("cheap_counts")).toObject();
+    if (viewName == CoreViewName::TransportSummary) {
+        updatePipelineTransportSummary(payload, severityFromJson(snapshot), cheapCounts);
+        return;
+    }
     publishChange(m_viewStore.updateView(viewName,
                                          payload,
                                          severityFromJson(snapshot),

@@ -49,6 +49,9 @@ bool CoreProcessClientRuntime::startSerial(const QString& executablePath, const 
         if (errorOut) errorOut->clear();
         return true;
     }
+    if (isActive()) {
+        return queuePendingTransportStart(QStringLiteral("serial"), endpoint, errorOut);
+    }
     return startProcess(executablePath, {QStringLiteral("--port"), endpoint}, errorOut);
 }
 
@@ -62,6 +65,9 @@ bool CoreProcessClientRuntime::startGatewayTcp(const QString& executablePath, co
         m_client.startTransport(QStringLiteral("gateway_tcp"), normalized);
         if (errorOut) errorOut->clear();
         return true;
+    }
+    if (isActive()) {
+        return queuePendingTransportStart(QStringLiteral("gateway_tcp"), normalized, errorOut);
     }
     return startProcess(executablePath, {QStringLiteral("--gateway"), normalized}, errorOut);
 }
@@ -86,6 +92,8 @@ bool CoreProcessClientRuntime::stopTransport(QString* errorOut) {
 
 void CoreProcessClientRuntime::stop() {
     m_client.disconnectFromServer();
+    m_pendingTransportMode.clear();
+    m_pendingTransportEndpoint.clear();
     if (m_process.state() == QProcess::NotRunning) return;
     m_process.terminate();
     if (!m_process.waitForFinished(1500)) {
@@ -226,6 +234,8 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     m_serverName = makeServerName();
     m_stdoutBuffer.clear();
     m_startupSeen = false;
+    m_pendingTransportMode.clear();
+    m_pendingTransportEndpoint.clear();
     m_lastMessage = QStringLiteral("starting core process");
 
     QStringList args{QStringLiteral("--server"), m_serverName};
@@ -248,6 +258,9 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
 void CoreProcessClientRuntime::connectClientSignals() {
     connect(&m_client, &CoreIpcClientRuntime::connectedChanged, this, [this](bool connected) {
         m_lastMessage = connected ? QStringLiteral("core IPC connected") : QStringLiteral("core IPC disconnected");
+        if (connected) {
+            sendPendingTransportStartIfReady();
+        }
         emit stateChanged(isActive(), m_lastMessage);
     });
     connect(&m_client, &CoreIpcClientRuntime::viewChanged, this, &CoreProcessClientRuntime::viewChanged);
@@ -315,6 +328,27 @@ void CoreProcessClientRuntime::connectIpc() {
     if (!m_startupSeen) {
         QTimer::singleShot(250, this, &CoreProcessClientRuntime::connectIpc);
     }
+}
+
+bool CoreProcessClientRuntime::queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut) {
+    if (mode.trimmed().isEmpty() || endpoint.trimmed().isEmpty()) {
+        if (errorOut) *errorOut = QStringLiteral("invalid pending core transport start");
+        return false;
+    }
+    m_pendingTransportMode = mode;
+    m_pendingTransportEndpoint = endpoint;
+    connectIpc();
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
+void CoreProcessClientRuntime::sendPendingTransportStartIfReady() {
+    if (!m_client.isConnected() || m_pendingTransportMode.isEmpty() || m_pendingTransportEndpoint.isEmpty()) {
+        return;
+    }
+    m_client.startTransport(m_pendingTransportMode, m_pendingTransportEndpoint);
+    m_pendingTransportMode.clear();
+    m_pendingTransportEndpoint.clear();
 }
 
 QString CoreProcessClientRuntime::makeServerName() {
