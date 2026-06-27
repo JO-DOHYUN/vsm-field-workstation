@@ -1,6 +1,7 @@
 #include "core/CaptureCoreProcessRuntime.h"
 
 #include "backend/BuildMetadata.h"
+#include "backend/ModelPack.h"
 #include "backend/TypedRecords.h"
 
 #include <QCoreApplication>
@@ -206,6 +207,11 @@ CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
             this,
             &CaptureCoreProcessRuntime::handleCaptureStopRequested,
             Qt::QueuedConnection);
+    connect(&m_ipc,
+            &CoreIpcServerRuntime::analysisModelRequested,
+            this,
+            &CaptureCoreProcessRuntime::handleAnalysisModelRequested,
+            Qt::QueuedConnection);
 }
 
 CaptureCoreProcessRuntime::~CaptureCoreProcessRuntime() {
@@ -363,6 +369,11 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
             &CaptureCoreProcessRuntime::queueRawLedgerFrames,
             Qt::QueuedConnection);
     connect(pipeline,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::canRxFramesReady,
+            this,
+            &CaptureCoreProcessRuntime::queueAnalysisFrames,
+            Qt::QueuedConnection);
+    connect(pipeline,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::criticalRecordsReady,
             this,
             &CaptureCoreProcessRuntime::ingestCriticalRecords,
@@ -412,6 +423,7 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
     m_drainThread.setObjectName(QStringLiteral("vsm-core-drain"));
     m_pipelineThread.setObjectName(QStringLiteral("vsm-core-pipeline"));
     ensureRawLedgerRuntime();
+    ensureAnalysisRuntime();
     m_drainThread.start(QThread::TimeCriticalPriority);
     m_pipelineThread.start(QThread::HighPriority);
     QMetaObject::invokeMethod(pipeline,
@@ -425,6 +437,7 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
 void CaptureCoreProcessRuntime::teardownTransportRuntime() {
     shutdownCaptureWriterRuntime();
     shutdownRawLedgerRuntime();
+    shutdownAnalysisRuntime();
     if (m_drainRuntime) {
         QMetaObject::invokeMethod(m_drainRuntime,
                                   &CanMonitorTransport::SerialDrainRuntime::stop,
@@ -610,6 +623,117 @@ void CaptureCoreProcessRuntime::shutdownRawLedgerRuntime() {
     m_rawLedgerDispatchInFlight = false;
 }
 
+void CaptureCoreProcessRuntime::ensureAnalysisRuntime() {
+    if (m_analysisRuntime) return;
+
+    auto* worker = new CanMonitorAnalysis::AnalysisWorkerRuntime();
+    m_analysisRuntime = worker;
+    worker->moveToThread(&m_analysisThread);
+    connect(&m_analysisThread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(worker,
+            &CanMonitorAnalysis::AnalysisWorkerRuntime::snapshotReady,
+            this,
+            &CaptureCoreProcessRuntime::publishAnalysisSnapshot,
+            Qt::QueuedConnection);
+    connect(worker,
+            &CanMonitorAnalysis::AnalysisWorkerRuntime::statusChanged,
+            this,
+            &CaptureCoreProcessRuntime::updateAnalysisStatus,
+            Qt::QueuedConnection);
+    connect(worker,
+            &CanMonitorAnalysis::AnalysisWorkerRuntime::errorOccurred,
+            this,
+            [this](const QString& message) {
+                emit errorOccurred(message);
+            },
+            Qt::QueuedConnection);
+    m_analysisThread.setObjectName(QStringLiteral("vsm-core-analysis"));
+    m_analysisThread.start(QThread::HighPriority);
+    QMetaObject::invokeMethod(worker, &CanMonitorAnalysis::AnalysisWorkerRuntime::reset, Qt::QueuedConnection);
+}
+
+void CaptureCoreProcessRuntime::shutdownAnalysisRuntime() {
+    if (m_analysisRuntime) {
+        QMetaObject::invokeMethod(m_analysisRuntime,
+                                  &CanMonitorAnalysis::AnalysisWorkerRuntime::reset,
+                                  Qt::BlockingQueuedConnection);
+    }
+    if (m_analysisThread.isRunning()) {
+        m_analysisThread.quit();
+        m_analysisThread.wait(3000);
+    }
+    m_analysisRuntime = nullptr;
+}
+
+void CaptureCoreProcessRuntime::queueAnalysisFrames(const FrameRecordList& frames) {
+    if (frames.isEmpty()) return;
+    ensureAnalysisRuntime();
+    QMetaObject::invokeMethod(m_analysisRuntime,
+                              [worker = QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime>(m_analysisRuntime),
+                               frames]() mutable {
+                                  if (worker) worker->enqueueFrames(std::move(frames));
+                              },
+                              Qt::QueuedConnection);
+}
+
+void CaptureCoreProcessRuntime::publishAnalysisSnapshot(const QString& source,
+                                                        const QString& level,
+                                                        const QString& summary,
+                                                        const QVariantList& diagnostics,
+                                                        const QVariantList& timingRows,
+                                                        const QVariantList& valueRows,
+                                                        const QVariantList& alarmRows) {
+    if (source != QStringLiteral("live")) return;
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("source"), source);
+    payload.insert(QStringLiteral("level"), level.isEmpty() ? QStringLiteral("OK") : level);
+    payload.insert(QStringLiteral("summary"), summary);
+    payload.insert(QStringLiteral("diagnostics"), QJsonArray::fromVariantList(diagnostics));
+    payload.insert(QStringLiteral("timing_rows"), QJsonArray::fromVariantList(timingRows));
+    payload.insert(QStringLiteral("value_rows"), QJsonArray::fromVariantList(valueRows));
+    payload.insert(QStringLiteral("alarm_rows"), QJsonArray::fromVariantList(alarmRows));
+    payload.insert(QStringLiteral("timing_row_count"), timingRows.size());
+    payload.insert(QStringLiteral("value_row_count"), valueRows.size());
+    payload.insert(QStringLiteral("alarm_row_count"), alarmRows.size());
+
+    QJsonObject counts;
+    counts.insert(QStringLiteral("timing_rows"), timingRows.size());
+    counts.insert(QStringLiteral("value_rows"), valueRows.size());
+    counts.insert(QStringLiteral("alarm_rows"), alarmRows.size());
+    const CoreViewSeverity severity = level == QStringLiteral("ERR")
+        ? CoreViewSeverity::Error
+        : (level == QStringLiteral("WARN") ? CoreViewSeverity::Warn : CoreViewSeverity::Ok);
+    publishChange(m_viewStore.updateView(CoreViewName::AnalysisSnapshot, payload, severity, counts));
+}
+
+void CaptureCoreProcessRuntime::updateAnalysisStatus(quint64 queuedFrames,
+                                                     quint64 maxQueuedFrames,
+                                                     quint64 capacityFrames,
+                                                     quint64 enqueuedFrames,
+                                                     quint64 processedFrames,
+                                                     quint64 overrunFrames,
+                                                     quint64 pumpCount,
+                                                     quint64 pumpMaxMs,
+                                                     quint64 snapshotMaxMs,
+                                                     quint64 truthLoss) {
+    m_analysisTransportPayload = QJsonObject{{QStringLiteral("analysis_queue_frames"), QString::number(queuedFrames)},
+                                             {QStringLiteral("analysis_max_queue_frames"), QString::number(maxQueuedFrames)},
+                                             {QStringLiteral("analysis_capacity_frames"), QString::number(capacityFrames)},
+                                             {QStringLiteral("analysis_enqueued_frames"), QString::number(enqueuedFrames)},
+                                             {QStringLiteral("analysis_processed_frames"), QString::number(processedFrames)},
+                                             {QStringLiteral("analysis_overrun_frames"), QString::number(overrunFrames)},
+                                             {QStringLiteral("analysis_pump_count"), QString::number(pumpCount)},
+                                             {QStringLiteral("analysis_pump_max_ms"), QString::number(pumpMaxMs)},
+                                             {QStringLiteral("analysis_snapshot_max_ms"), QString::number(snapshotMaxMs)},
+                                             {QStringLiteral("analysis_truth_loss"), QString::number(truthLoss)}};
+    m_analysisTransportCheapCounts = QJsonObject{{QStringLiteral("analysis_queue_frames"), QString::number(queuedFrames)},
+                                                 {QStringLiteral("analysis_overrun_frames"), QString::number(overrunFrames)},
+                                                 {QStringLiteral("analysis_truth_loss"), QString::number(truthLoss)}};
+    m_analysisSeverity = (overrunFrames > 0 || truthLoss > 0) ? CoreViewSeverity::Error : CoreViewSeverity::Ok;
+    updateTransportSummary(QJsonObject{}, CoreViewSeverity::Ok, QJsonObject{});
+}
+
 void CaptureCoreProcessRuntime::queueRawLedgerFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     ensureRawLedgerRuntime();
@@ -730,8 +854,11 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
     m_pipelineTransportCheapCounts = QJsonObject{};
     m_coreEvidenceTransportPayload = QJsonObject{};
     m_coreEvidenceCheapCounts = QJsonObject{};
+    m_analysisTransportPayload = QJsonObject{};
+    m_analysisTransportCheapCounts = QJsonObject{};
     m_pipelineTransportSeverity = CoreViewSeverity::Ok;
     m_coreEvidenceSeverity = CoreViewSeverity::Ok;
+    m_analysisSeverity = CoreViewSeverity::Ok;
     m_boardEventTotal = 0;
     m_mcp2515EventTotal = 0;
     m_boardEventFatalTotal = 0;
@@ -772,6 +899,9 @@ void CaptureCoreProcessRuntime::updateTransportSummary(const QJsonObject& payloa
     for (auto it = m_coreEvidenceTransportPayload.constBegin(); it != m_coreEvidenceTransportPayload.constEnd(); ++it) {
         mergedPayload.insert(it.key(), it.value());
     }
+    for (auto it = m_analysisTransportPayload.constBegin(); it != m_analysisTransportPayload.constEnd(); ++it) {
+        mergedPayload.insert(it.key(), it.value());
+    }
     for (auto it = payload.constBegin(); it != payload.constEnd(); ++it) {
         mergedPayload.insert(it.key(), it.value());
     }
@@ -790,12 +920,15 @@ void CaptureCoreProcessRuntime::updateTransportSummary(const QJsonObject& payloa
     for (auto it = m_coreEvidenceCheapCounts.constBegin(); it != m_coreEvidenceCheapCounts.constEnd(); ++it) {
         mergedCounts.insert(it.key(), it.value());
     }
+    for (auto it = m_analysisTransportCheapCounts.constBegin(); it != m_analysisTransportCheapCounts.constEnd(); ++it) {
+        mergedCounts.insert(it.key(), it.value());
+    }
     for (auto it = cheapCounts.constBegin(); it != cheapCounts.constEnd(); ++it) {
         mergedCounts.insert(it.key(), it.value());
     }
     publishChange(m_viewStore.updateView(CoreViewName::TransportSummary,
                                          mergedPayload,
-                                         maxSeverity(maxSeverity(severity, m_pipelineTransportSeverity), m_coreEvidenceSeverity),
+                                         maxSeverity(maxSeverity(maxSeverity(severity, m_pipelineTransportSeverity), m_coreEvidenceSeverity), m_analysisSeverity),
                                          mergedCounts));
 }
 
@@ -909,6 +1042,47 @@ void CaptureCoreProcessRuntime::ingestCriticalRecords(const TypedRecordList& rec
     m_coreEvidenceCheapCounts = counts;
     m_coreEvidenceSeverity = severity;
     updateTransportSummary(QJsonObject{}, CoreViewSeverity::Ok, QJsonObject{});
+}
+
+void CaptureCoreProcessRuntime::handleAnalysisModelRequested(quint64 requestId, const QString& modelPath, bool modelEnabled) {
+    Q_UNUSED(requestId);
+    ensureAnalysisRuntime();
+
+    CanMonitorAnalysis::AnalysisRuntime::Config config;
+    config.modelEnabled = false;
+    config.maxStateKeys = 8192;
+    config.maxRowsPerSnapshot = 1600;
+
+    if (modelEnabled && !modelPath.trimmed().isEmpty()) {
+        CanModel::ModelPack pack;
+        QString error;
+        if (CanModel::ModelPackLoader::loadFile(modelPath, &pack, &error)) {
+            config.modelEnabled = true;
+            config.rules = pack.rules;
+            config.signalMessages = pack.messages;
+            updateCoreHealth(QStringLiteral("analysis_model_loaded"));
+        } else {
+            emit errorOccurred(QStringLiteral("core analysis model load failed: %1").arg(error));
+            publishChange(m_viewStore.updateView(CoreViewName::AnalysisSnapshot,
+                                                 QJsonObject{{QStringLiteral("source"), QStringLiteral("live")},
+                                                             {QStringLiteral("level"), QStringLiteral("WARN")},
+                                                             {QStringLiteral("summary"), QStringLiteral("core analysis model unavailable")},
+                                                             {QStringLiteral("error"), error},
+                                                             {QStringLiteral("diagnostics"), QJsonArray{}},
+                                                             {QStringLiteral("timing_rows"), QJsonArray{}},
+                                                             {QStringLiteral("value_rows"), QJsonArray{}},
+                                                             {QStringLiteral("alarm_rows"), QJsonArray{}}},
+                                                 CoreViewSeverity::Warn,
+                                                 QJsonObject{{QStringLiteral("model_error"), true}}));
+        }
+    }
+
+    QMetaObject::invokeMethod(m_analysisRuntime,
+                              [worker = QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime>(m_analysisRuntime),
+                               config]() {
+                                  if (worker) worker->setConfig(config);
+                              },
+                              Qt::QueuedConnection);
 }
 
 void CaptureCoreProcessRuntime::publishChange(const ViewChanged& change) {

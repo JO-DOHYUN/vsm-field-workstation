@@ -141,6 +141,12 @@ quint64 CoreIpcClientRuntime::stopCapture(const QString& inactivePath, const QJs
                                    {QStringLiteral("diagnostics"), diagnostics}});
 }
 
+quint64 CoreIpcClientRuntime::setAnalysisModel(const QString& modelPath, bool modelEnabled) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("set_analysis_model")},
+                                   {QStringLiteral("model_path"), modelPath},
+                                   {QStringLiteral("model_enabled"), modelEnabled}});
+}
+
 void CoreIpcClientRuntime::readMessages() {
     m_buffer += m_socket.readAll();
     constexpr qsizetype kMaxBufferedBytes = 1024 * 1024;

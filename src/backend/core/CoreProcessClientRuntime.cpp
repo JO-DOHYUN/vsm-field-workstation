@@ -222,6 +222,16 @@ bool CoreProcessClientRuntime::stopCapture(const QString& inactivePath, const QJ
     return true;
 }
 
+bool CoreProcessClientRuntime::setAnalysisModel(const QString& modelPath, bool modelEnabled, QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.setAnalysisModel(modelPath, modelEnabled);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
 bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const QStringList& extraArgs, QString* errorOut) {
     if (m_process.state() != QProcess::NotRunning) stop();
 

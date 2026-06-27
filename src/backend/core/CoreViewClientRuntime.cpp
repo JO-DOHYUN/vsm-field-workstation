@@ -11,6 +11,7 @@ CoreViewClientRuntime::CoreViewClientRuntime() {
     setPolicy(CoreViewName::RawLedgerTail, 256, true);
     setPolicy(CoreViewName::TransportSummary, 1, true);
     setPolicy(CoreViewName::CaptureProgress, 1, true);
+    setPolicy(CoreViewName::AnalysisSnapshot, 1, true);
     setPolicy(CoreViewName::FatalDiagnostics, 16, true);
 }
 

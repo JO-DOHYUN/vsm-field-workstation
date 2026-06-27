@@ -46,6 +46,7 @@ public:
                                       bool resetSlew);
     quint64 startCapture(const QString& sessionDir, const QJsonObject& metadata);
     quint64 stopCapture(const QString& inactivePath, const QJsonObject& diagnostics);
+    quint64 setAnalysisModel(const QString& modelPath, bool modelEnabled);
 
 signals:
     void connectedChanged(bool connected);

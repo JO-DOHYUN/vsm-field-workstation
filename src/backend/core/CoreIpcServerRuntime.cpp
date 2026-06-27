@@ -225,6 +225,13 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
                                   message.value(QStringLiteral("diagnostics")).toObject());
         return;
     }
+    if (type == QStringLiteral("set_analysis_model")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        emit analysisModelRequested(requestId,
+                                    message.value(QStringLiteral("model_path")).toString(),
+                                    message.value(QStringLiteral("model_enabled")).toBool(true));
+        return;
+    }
     if (type != QStringLiteral("get_view")) {
         sendObject(socket, errorResponse(message, QStringLiteral("unknown_message"), type));
         return;

@@ -2,6 +2,7 @@
 
 #include "core/CoreIpcServerRuntime.h"
 #include "core/CoreMaterializedViewStore.h"
+#include "analysis/AnalysisWorkerRuntime.h"
 #include "control/ControlCycleRuntime.h"
 #include "transport/DrainByteQueue.h"
 #include "transport/RawLedgerWriterRuntime.h"
@@ -18,6 +19,7 @@
 #include <QSharedPointer>
 #include <QThread>
 #include <QTimerEvent>
+#include <QVariantList>
 
 namespace CanMonitorCore {
 
@@ -57,6 +59,7 @@ private:
                                         CoreViewSeverity severity,
                                         const QJsonObject& cheapCounts);
     void ingestCriticalRecords(const TypedRecordList& records);
+    void handleAnalysisModelRequested(quint64 requestId, const QString& modelPath, bool modelEnabled);
     void publishChange(const ViewChanged& change);
     void requestPipelineViewMirror(const QJsonObject& change);
     void applyPipelineSnapshot(quint64 requestId,
@@ -80,6 +83,26 @@ private:
     void shutdownCaptureWriterRuntime();
     void ensureRawLedgerRuntime();
     void shutdownRawLedgerRuntime();
+    void ensureAnalysisRuntime();
+    void shutdownAnalysisRuntime();
+    void queueAnalysisFrames(const FrameRecordList& frames);
+    void publishAnalysisSnapshot(const QString& source,
+                                 const QString& level,
+                                 const QString& summary,
+                                 const QVariantList& diagnostics,
+                                 const QVariantList& timingRows,
+                                 const QVariantList& valueRows,
+                                 const QVariantList& alarmRows);
+    void updateAnalysisStatus(quint64 queuedFrames,
+                              quint64 maxQueuedFrames,
+                              quint64 capacityFrames,
+                              quint64 enqueuedFrames,
+                              quint64 processedFrames,
+                              quint64 overrunFrames,
+                              quint64 pumpCount,
+                              quint64 pumpMaxMs,
+                              quint64 snapshotMaxMs,
+                              quint64 truthLoss);
     void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushRawLedgerFrames(bool force = false);
     void updateRawLedgerTailView(const FrameRecordList& frames,
@@ -109,10 +132,12 @@ private:
     QThread m_pipelineThread;
     QThread m_captureWriterThread;
     QThread m_rawLedgerThread;
+    QThread m_analysisThread;
     QPointer<CanMonitorTransport::SerialDrainRuntime> m_drainRuntime;
     QPointer<CanMonitorTransport::TypedEvidencePipelineWorkerRuntime> m_pipelineRuntime;
     QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> m_captureWriterRuntime;
     QPointer<CanMonitorTransport::RawLedgerWriterRuntime> m_rawLedgerRuntime;
+    QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime> m_analysisRuntime;
     FrameRecordList m_pendingRawLedgerFrames;
     QJsonArray m_rawLedgerTailRows;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
@@ -130,8 +155,11 @@ private:
     QJsonObject m_pipelineTransportCheapCounts;
     QJsonObject m_coreEvidenceTransportPayload;
     QJsonObject m_coreEvidenceCheapCounts;
+    QJsonObject m_analysisTransportPayload;
+    QJsonObject m_analysisTransportCheapCounts;
     CoreViewSeverity m_pipelineTransportSeverity = CoreViewSeverity::Ok;
     CoreViewSeverity m_coreEvidenceSeverity = CoreViewSeverity::Ok;
+    CoreViewSeverity m_analysisSeverity = CoreViewSeverity::Ok;
     quint64 m_boardEventTotal = 0;
     quint64 m_mcp2515EventTotal = 0;
     quint64 m_boardEventFatalTotal = 0;

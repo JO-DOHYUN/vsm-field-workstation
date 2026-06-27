@@ -46,6 +46,7 @@ signals:
     void controlCycleRequested(quint64 requestId, const QString& action, const QJsonObject& payload);
     void captureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
     void captureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
+    void analysisModelRequested(quint64 requestId, const QString& modelPath, bool modelEnabled);
 
 private:
     void acceptConnection();

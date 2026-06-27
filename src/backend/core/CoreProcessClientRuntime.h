@@ -57,6 +57,7 @@ public:
                                    QString* errorOut = nullptr);
     bool startCapture(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut = nullptr);
     bool stopCapture(const QString& inactivePath, const QJsonObject& diagnostics, QString* errorOut = nullptr);
+    bool setAnalysisModel(const QString& modelPath, bool modelEnabled, QString* errorOut = nullptr);
 
 signals:
     void stateChanged(bool active, const QString& message);

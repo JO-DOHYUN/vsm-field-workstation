@@ -197,6 +197,8 @@ qt_add_executable(vsm_capture_core
     src/capture_core_main.cpp
     src/backend/BuildMetadata.h
     src/backend/BuildMetadata.cpp
+    src/backend/AppLogging.h
+    src/backend/AppLogging.cpp
     src/backend/RuntimePaths.h
     src/backend/RuntimePaths.cpp
     src/backend/FilePersistence.h
@@ -217,6 +219,19 @@ qt_add_executable(vsm_capture_core
     src/backend/TypedTransportParser.cpp
     src/backend/ControlCommandEncoder.h
     src/backend/ControlCommandEncoder.cpp
+    src/backend/ModelPack.h
+    src/backend/ModelPack.cpp
+    src/backend/ModelPackValidator.h
+    src/backend/ModelPackValidator.cpp
+    src/backend/AnalysisTypes.h
+    src/backend/TimingEvaluator.h
+    src/backend/TimingEvaluator.cpp
+    src/backend/SignalDecoder.h
+    src/backend/SignalDecoder.cpp
+    src/backend/analysis/AnalysisRuntime.h
+    src/backend/analysis/AnalysisRuntime.cpp
+    src/backend/analysis/AnalysisWorkerRuntime.h
+    src/backend/analysis/AnalysisWorkerRuntime.cpp
     src/backend/control/ControlSlewLimiter.h
     src/backend/control/ControlSlewLimiter.cpp
     src/backend/control/ControlCycleRuntime.h
@@ -255,6 +270,17 @@ qt_add_executable(vsm_capture_core
 )
 set_target_properties(vsm_capture_core PROPERTIES
     OUTPUT_NAME "vsm-capture-core"
+)
+qt_add_resources(vsm_capture_core "vsm_capture_core_data"
+    PREFIX "/"
+    FILES
+        data/vms_model_R13.json
+        data/final_vms_model_R13_rev2.json
+        data/model_pack_template.json
+        data/vms_signal_map_R13.json
+        data/vms_rules_MERGED_R13.json
+        data/vms_model_drive_turn77_canzip_final_rev3.json
+        data/vms_model_turn77_system_drive_merged_realcan_refresh2_final.json
 )
 target_include_directories(vsm_capture_core PRIVATE src src/backend)
 target_compile_definitions(vsm_capture_core

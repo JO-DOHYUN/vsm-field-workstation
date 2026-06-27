@@ -2255,6 +2255,23 @@ void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload)
         m_workerDrainEventTrace = drainTrace;
         m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     }
+    if (payload.contains(QStringLiteral("analysis_queue_frames")) ||
+        payload.contains(QStringLiteral("analysis_overrun_frames")) ||
+        payload.contains(QStringLiteral("analysis_truth_loss"))) {
+        const quint64 overrunFrames = jsonU64Value(payload, QStringLiteral("analysis_overrun_frames"));
+        const quint64 truthLoss = jsonU64Value(payload, QStringLiteral("analysis_truth_loss"));
+        m_transportSession.updateAnalysisQueue(jsonU64Value(payload, QStringLiteral("analysis_queue_frames")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_max_queue_frames")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_capacity_frames")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_enqueued_frames")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_processed_frames")),
+                                               overrunFrames,
+                                               jsonU64Value(payload, QStringLiteral("analysis_pump_count")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_pump_max_ms")),
+                                               jsonU64Value(payload, QStringLiteral("analysis_snapshot_max_ms")),
+                                               truthLoss);
+        requestTransportDiagnosticsRefresh(overrunFrames > 0 || truthLoss > 0);
+    }
 
     const bool boardAliveChanged = previousBoardAlive != m_evidenceRuntime.boardAlive();
     const bool controlCapableChanged = previousControlCapable != m_evidenceRuntime.controlCapable();
@@ -2364,6 +2381,32 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
             if (!m_liveFlushTimer.isActive()) {
                 m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
             }
+        }
+    }
+    if (result.accepted && result.changed && result.viewName == QStringLiteral("analysis_snapshot")) {
+        const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
+        const QString source = payload.value(QStringLiteral("source")).toString(QStringLiteral("live"));
+        if (source == QStringLiteral("live")) {
+            ++m_livePathTelemetry.appSnapshotReceive;
+            m_livePathTelemetry.appSnapshotLastReceiveWallMs = QDateTime::currentMSecsSinceEpoch();
+            QElapsedTimer applyTimer;
+            applyTimer.start();
+            ++m_livePathTelemetry.appSnapshotAck;
+            const QVariantList diagnostics = payload.value(QStringLiteral("diagnostics")).toArray().toVariantList();
+            const QVariantList timingRows = payload.value(QStringLiteral("timing_rows")).toArray().toVariantList();
+            const QVariantList valueRows = payload.value(QStringLiteral("value_rows")).toArray().toVariantList();
+            const QVariantList alarmRows = payload.value(QStringLiteral("alarm_rows")).toArray().toVariantList();
+            acceptLiveAnalysisRuntimeSnapshot(payload.value(QStringLiteral("level")).toString(),
+                                              payload.value(QStringLiteral("summary")).toString(),
+                                              diagnostics,
+                                              timingRows,
+                                              valueRows,
+                                              alarmRows);
+            ++m_livePathTelemetry.appSnapshotApply;
+            m_livePathTelemetry.appSnapshotApplyRows += quint64(timingRows.size() + valueRows.size() + alarmRows.size());
+            m_livePathTelemetry.appSnapshotLastApplyWallMs = QDateTime::currentMSecsSinceEpoch();
+            m_livePathTelemetry.appSnapshotApplyMaxMs =
+                std::max<qint64>(m_livePathTelemetry.appSnapshotApplyMaxMs, applyTimer.elapsed());
         }
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("raw_ledger_tail")) {
@@ -2873,6 +2916,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     m_worker = m_transportRuntime.createWorker();
     connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::stateChanged, this, [this](bool active, const QString& message) {
         if (!m_coreProcessMode) return;
+        if (m_coreProcessClient.isIpcConnected()) {
+            syncAnalysisRuntimeConfig();
+        }
         if (!active) {
             const bool changed = m_connected;
             m_connected = false;
@@ -6562,6 +6608,13 @@ void AppController::syncAnalysisRuntimeConfig() {
         QMetaObject::invokeMethod(m_worker, [worker, config]() {
             if (worker) worker->setAnalysisConfig(config);
         }, Qt::QueuedConnection);
+    }
+    if (m_coreProcessMode && m_coreProcessClient.isIpcConnected()) {
+        QString error;
+        const QString modelPath = m_modelEnabled ? m_rulesActivePath : QString();
+        if (!m_coreProcessClient.setAnalysisModel(modelPath, m_modelEnabled, &error) && !error.isEmpty()) {
+            setStatus(error);
+        }
     }
 }
 
@@ -11826,6 +11879,7 @@ bool AppController::loadModelFile(const QString& path) {
         const QFileInfo fi(normalized);
         m_rulesActiveSource = QStringLiteral("외부 모델 팩: %1").arg(fi.fileName());
     }
+    syncAnalysisRuntimeConfig();
 
     emit rulesChanged();
     emit signalDbChanged();
