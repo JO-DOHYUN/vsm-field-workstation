@@ -43,6 +43,7 @@ signals:
     void transportStartRequested(quint64 requestId, const QString& mode, const QString& endpoint);
     void transportStopRequested(quint64 requestId);
     void hostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
+    void controlCycleRequested(quint64 requestId, const QString& action, const QJsonObject& payload);
     void captureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
     void captureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
 

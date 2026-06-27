@@ -215,6 +215,12 @@ qt_add_executable(vsm_capture_core
     src/backend/TypedRecords.cpp
     src/backend/TypedTransportParser.h
     src/backend/TypedTransportParser.cpp
+    src/backend/ControlCommandEncoder.h
+    src/backend/ControlCommandEncoder.cpp
+    src/backend/control/ControlSlewLimiter.h
+    src/backend/control/ControlSlewLimiter.cpp
+    src/backend/control/ControlCycleRuntime.h
+    src/backend/control/ControlCycleRuntime.cpp
     src/backend/transport/HostTxQueue.h
     src/backend/transport/HostTxQueue.cpp
     src/backend/transport/HostTxRuntime.h

@@ -62,6 +62,11 @@ CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
             &CaptureCoreProcessRuntime::handleHostFrameRequested,
             Qt::QueuedConnection);
     connect(&m_ipc,
+            &CoreIpcServerRuntime::controlCycleRequested,
+            this,
+            &CaptureCoreProcessRuntime::handleControlCycleRequested,
+            Qt::QueuedConnection);
+    connect(&m_ipc,
             &CoreIpcServerRuntime::transportStartRequested,
             this,
             [this](quint64, const QString& mode, const QString& endpoint) {
@@ -143,6 +148,7 @@ void CaptureCoreProcessRuntime::startGatewayTcp(const QString& endpoint) {
 
 void CaptureCoreProcessRuntime::stopTransport() {
     if (!m_transportRuntimeStarted) return;
+    stopControlCycle();
     teardownTransportRuntime();
     m_transportConnected = false;
     m_transportMessage = QStringLiteral("stopped");
@@ -311,7 +317,24 @@ void CaptureCoreProcessRuntime::teardownTransportRuntime() {
     m_captureQueue.clear();
     m_pendingMirrorRequests.clear();
     m_pendingHostFrameRequests.clear();
+    stopControlCycle();
     m_transportRuntimeStarted = false;
+}
+
+void CaptureCoreProcessRuntime::timerEvent(QTimerEvent* event) {
+    if (event->timerId() == m_controlCycleTimerId) {
+        beginControlCycle();
+        return;
+    }
+    if (event->timerId() == m_controlCycleGapTimerId) {
+        if (m_controlCycleGapTimerId != 0) {
+            killTimer(m_controlCycleGapTimerId);
+            m_controlCycleGapTimerId = 0;
+        }
+        continueControlCycleBurst();
+        return;
+    }
+    QObject::timerEvent(event);
 }
 
 void CaptureCoreProcessRuntime::ensureCaptureWriterRuntime() {
@@ -661,6 +684,14 @@ void CaptureCoreProcessRuntime::handleHostFrameRequested(quint64 requestId, cons
         m_ipc.publishHostFrameWriteResult(requestId, false, summary, 0);
         return;
     }
+    sendCoreHostFrame(requestId, frame, summary);
+}
+
+void CaptureCoreProcessRuntime::sendCoreHostFrame(quint64 requestId, const QByteArray& frame, const QString& summary) {
+    if (frame.isEmpty()) {
+        m_ipc.publishHostFrameWriteResult(requestId, false, summary, 0);
+        return;
+    }
     if (!m_drainRuntime || !m_transportRuntimeStarted || !m_transportConnected) {
         m_ipc.publishHostFrameWriteResult(requestId, false, QStringLiteral("%1 | core transport not connected").arg(summary), 0);
         return;
@@ -676,6 +707,85 @@ void CaptureCoreProcessRuntime::handleHostFrameRequested(quint64 requestId, cons
 void CaptureCoreProcessRuntime::publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten) {
     const quint64 requestId = m_pendingHostFrameRequests.isEmpty() ? 0 : m_pendingHostFrameRequests.dequeue();
     m_ipc.publishHostFrameWriteResult(requestId, ok, summary, bytesWritten);
+}
+
+void CaptureCoreProcessRuntime::handleControlCycleRequested(quint64, const QString& action, const QJsonObject& payload) {
+    if (action == QStringLiteral("start")) {
+        startControlCycle(payload);
+    } else if (action == QStringLiteral("update")) {
+        updateControlCycle(payload);
+    } else if (action == QStringLiteral("stop")) {
+        stopControlCycle();
+    } else if (action == QStringLiteral("burst_once")) {
+        sendControlCycleBurstOnce(payload);
+    }
+}
+
+void CaptureCoreProcessRuntime::startControlCycle(const QJsonObject& payload) {
+    const int clampedPeriodMs = m_controlCycle.start(payload.value(QStringLiteral("signed_command")).toInt(),
+                                                     payload.value(QStringLiteral("rpm")).toInt(),
+                                                     payload.value(QStringLiteral("steering_deg")).toDouble(),
+                                                     quint8(payload.value(QStringLiteral("motor_mode")).toInt(1)),
+                                                     quint8(payload.value(QStringLiteral("driving_mode")).toInt(1)),
+                                                     quint8(payload.value(QStringLiteral("bus")).toInt()),
+                                                     payload.value(QStringLiteral("period_ms")).toInt(20),
+                                                     payload.value(QStringLiteral("frame_gap_ms")).toInt(2));
+    if (m_controlCycleTimerId != 0) killTimer(m_controlCycleTimerId);
+    m_controlCycleTimerId = startTimer(clampedPeriodMs, Qt::PreciseTimer);
+    beginControlCycle();
+}
+
+void CaptureCoreProcessRuntime::updateControlCycle(const QJsonObject& payload) {
+    m_controlCycle.update(payload.value(QStringLiteral("signed_command")).toInt(),
+                          payload.value(QStringLiteral("rpm")).toInt(),
+                          payload.value(QStringLiteral("steering_deg")).toDouble(),
+                          quint8(payload.value(QStringLiteral("motor_mode")).toInt(1)),
+                          quint8(payload.value(QStringLiteral("driving_mode")).toInt(1)),
+                          quint8(payload.value(QStringLiteral("bus")).toInt()));
+}
+
+void CaptureCoreProcessRuntime::stopControlCycle() {
+    m_controlCycle.stop();
+    if (m_controlCycleTimerId != 0) {
+        killTimer(m_controlCycleTimerId);
+        m_controlCycleTimerId = 0;
+    }
+    if (m_controlCycleGapTimerId != 0) {
+        killTimer(m_controlCycleGapTimerId);
+        m_controlCycleGapTimerId = 0;
+    }
+}
+
+void CaptureCoreProcessRuntime::sendControlCycleBurstOnce(const QJsonObject& payload) {
+    dispatchControlCycleResult(m_controlCycle.burstOnce(payload.value(QStringLiteral("signed_command")).toInt(),
+                                                        payload.value(QStringLiteral("rpm")).toInt(),
+                                                        payload.value(QStringLiteral("steering_deg")).toDouble(),
+                                                        quint8(payload.value(QStringLiteral("motor_mode")).toInt(1)),
+                                                        quint8(payload.value(QStringLiteral("driving_mode")).toInt(1)),
+                                                        quint8(payload.value(QStringLiteral("bus")).toInt()),
+                                                        payload.value(QStringLiteral("reason")).toString(),
+                                                        payload.value(QStringLiteral("reset_slew")).toBool()));
+}
+
+void CaptureCoreProcessRuntime::beginControlCycle() {
+    dispatchControlCycleResult(m_controlCycle.beginCycle());
+}
+
+void CaptureCoreProcessRuntime::continueControlCycleBurst() {
+    dispatchControlCycleResult(m_controlCycle.continuePacedBurst());
+}
+
+void CaptureCoreProcessRuntime::dispatchControlCycleResult(const CanMonitorControl::ControlCycleRuntime::CycleResult& result) {
+    for (const QString& error : result.errors) {
+        emit errorOccurred(error);
+    }
+    for (const auto& frame : result.frames) {
+        sendCoreHostFrame(0, frame.frame, frame.summary);
+    }
+    if (result.scheduleGap) {
+        if (m_controlCycleGapTimerId != 0) killTimer(m_controlCycleGapTimerId);
+        m_controlCycleGapTimerId = startTimer(result.gapMs, Qt::PreciseTimer);
+    }
 }
 
 void CaptureCoreProcessRuntime::handleCaptureStartRequested(quint64 requestId,

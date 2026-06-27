@@ -68,6 +68,67 @@ quint64 CoreIpcClientRuntime::sendHostFrame(const QByteArray& frame, const QStri
                                    {QStringLiteral("summary"), summary}});
 }
 
+quint64 CoreIpcClientRuntime::startControlCycle(int signedCommand,
+                                                int rpm,
+                                                double steeringDeg,
+                                                quint8 motorMode,
+                                                quint8 drivingMode,
+                                                quint8 bus,
+                                                int periodMs,
+                                                int frameGapMs) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("control_cycle")},
+                                   {QStringLiteral("action"), QStringLiteral("start")},
+                                   {QStringLiteral("payload"), QJsonObject{{QStringLiteral("signed_command"), signedCommand},
+                                                                           {QStringLiteral("rpm"), rpm},
+                                                                           {QStringLiteral("steering_deg"), steeringDeg},
+                                                                           {QStringLiteral("motor_mode"), int(motorMode)},
+                                                                           {QStringLiteral("driving_mode"), int(drivingMode)},
+                                                                           {QStringLiteral("bus"), int(bus)},
+                                                                           {QStringLiteral("period_ms"), periodMs},
+                                                                           {QStringLiteral("frame_gap_ms"), frameGapMs}}}});
+}
+
+quint64 CoreIpcClientRuntime::updateControlCycle(int signedCommand,
+                                                 int rpm,
+                                                 double steeringDeg,
+                                                 quint8 motorMode,
+                                                 quint8 drivingMode,
+                                                 quint8 bus) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("control_cycle")},
+                                   {QStringLiteral("action"), QStringLiteral("update")},
+                                   {QStringLiteral("payload"), QJsonObject{{QStringLiteral("signed_command"), signedCommand},
+                                                                           {QStringLiteral("rpm"), rpm},
+                                                                           {QStringLiteral("steering_deg"), steeringDeg},
+                                                                           {QStringLiteral("motor_mode"), int(motorMode)},
+                                                                           {QStringLiteral("driving_mode"), int(drivingMode)},
+                                                                           {QStringLiteral("bus"), int(bus)}}}});
+}
+
+quint64 CoreIpcClientRuntime::stopControlCycle() {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("control_cycle")},
+                                   {QStringLiteral("action"), QStringLiteral("stop")}});
+}
+
+quint64 CoreIpcClientRuntime::sendControlCycleBurstOnce(int signedCommand,
+                                                        int rpm,
+                                                        double steeringDeg,
+                                                        quint8 motorMode,
+                                                        quint8 drivingMode,
+                                                        quint8 bus,
+                                                        const QString& reason,
+                                                        bool resetSlew) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("control_cycle")},
+                                   {QStringLiteral("action"), QStringLiteral("burst_once")},
+                                   {QStringLiteral("payload"), QJsonObject{{QStringLiteral("signed_command"), signedCommand},
+                                                                           {QStringLiteral("rpm"), rpm},
+                                                                           {QStringLiteral("steering_deg"), steeringDeg},
+                                                                           {QStringLiteral("motor_mode"), int(motorMode)},
+                                                                           {QStringLiteral("driving_mode"), int(drivingMode)},
+                                                                           {QStringLiteral("bus"), int(bus)},
+                                                                           {QStringLiteral("reason"), reason},
+                                                                           {QStringLiteral("reset_slew"), resetSlew}}}});
+}
+
 quint64 CoreIpcClientRuntime::startCapture(const QString& sessionDir, const QJsonObject& metadata) {
     return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("start_capture")},
                                    {QStringLiteral("session_dir"), sessionDir},

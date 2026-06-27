@@ -128,6 +128,68 @@ bool CoreProcessClientRuntime::sendHostFrame(const QByteArray& frame, const QStr
     return true;
 }
 
+bool CoreProcessClientRuntime::startControlCycle(int signedCommand,
+                                                 int rpm,
+                                                 double steeringDeg,
+                                                 quint8 motorMode,
+                                                 quint8 drivingMode,
+                                                 quint8 bus,
+                                                 int periodMs,
+                                                 int frameGapMs,
+                                                 QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.startControlCycle(signedCommand, rpm, steeringDeg, motorMode, drivingMode, bus, periodMs, frameGapMs);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
+bool CoreProcessClientRuntime::updateControlCycle(int signedCommand,
+                                                  int rpm,
+                                                  double steeringDeg,
+                                                  quint8 motorMode,
+                                                  quint8 drivingMode,
+                                                  quint8 bus,
+                                                  QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.updateControlCycle(signedCommand, rpm, steeringDeg, motorMode, drivingMode, bus);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
+bool CoreProcessClientRuntime::stopControlCycle(QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.stopControlCycle();
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
+bool CoreProcessClientRuntime::sendControlCycleBurstOnce(int signedCommand,
+                                                         int rpm,
+                                                         double steeringDeg,
+                                                         quint8 motorMode,
+                                                         quint8 drivingMode,
+                                                         quint8 bus,
+                                                         const QString& reason,
+                                                         bool resetSlew,
+                                                         QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.sendControlCycleBurstOnce(signedCommand, rpm, steeringDeg, motorMode, drivingMode, bus, reason, resetSlew);
+    if (errorOut) errorOut->clear();
+    return true;
+}
+
 bool CoreProcessClientRuntime::startCapture(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut) {
     if (sessionDir.trimmed().isEmpty()) {
         if (errorOut) *errorOut = QStringLiteral("empty core capture session directory");

@@ -5737,13 +5737,22 @@ void AppController::updateControlWorkerCycleTarget() {
     const auto intent = m_controlRuntime.currentIntent();
     const quint8 bus = quint8(controlTargetBus());
     QString error;
-    if (!m_transportRuntime.updateControlCycle(intent.signedCommand,
-                                               intent.rpm,
-                                               intent.steeringDeg,
-                                               intent.motorMode,
-                                               intent.drivingMode,
-                                               bus,
-                                               &error)) {
+    const bool queued = m_coreProcessMode
+        ? m_coreProcessClient.updateControlCycle(intent.signedCommand,
+                                                 intent.rpm,
+                                                 intent.steeringDeg,
+                                                 intent.motorMode,
+                                                 intent.drivingMode,
+                                                 bus,
+                                                 &error)
+        : m_transportRuntime.updateControlCycle(intent.signedCommand,
+                                                intent.rpm,
+                                                intent.steeringDeg,
+                                                intent.motorMode,
+                                                intent.drivingMode,
+                                                bus,
+                                                &error);
+    if (!queued) {
         refreshControlStatus(error);
     }
 }
@@ -5765,15 +5774,26 @@ void AppController::sendControlKeepaliveTick(bool force, bool resetSlew) {
         const auto intent = m_controlRuntime.currentIntent();
         const quint8 bus = quint8(controlTargetBus());
         QString error;
-        if (!m_transportRuntime.sendControlCycleBurstOnce(intent.signedCommand,
-                                                          intent.rpm,
-                                                          intent.steeringDeg,
-                                                          intent.motorMode,
-                                                          intent.drivingMode,
-                                                          bus,
-                                                          QStringLiteral("worker forced burst"),
-                                                          resetSlew,
-                                                          &error)) {
+        const bool queued = m_coreProcessMode
+            ? m_coreProcessClient.sendControlCycleBurstOnce(intent.signedCommand,
+                                                           intent.rpm,
+                                                           intent.steeringDeg,
+                                                           intent.motorMode,
+                                                           intent.drivingMode,
+                                                           bus,
+                                                           QStringLiteral("worker forced burst"),
+                                                           resetSlew,
+                                                           &error)
+            : m_transportRuntime.sendControlCycleBurstOnce(intent.signedCommand,
+                                                           intent.rpm,
+                                                           intent.steeringDeg,
+                                                           intent.motorMode,
+                                                           intent.drivingMode,
+                                                           bus,
+                                                           QStringLiteral("worker forced burst"),
+                                                           resetSlew,
+                                                           &error);
+        if (!queued) {
             refreshControlStatus(error);
         }
     } else {
@@ -5786,15 +5806,26 @@ void AppController::startControlKeepalive() {
     const auto intent = m_controlRuntime.currentIntent();
     const quint8 bus = quint8(controlTargetBus());
     QString error;
-    if (!m_transportRuntime.startControlCycle(intent.signedCommand,
-                                              intent.rpm,
-                                              intent.steeringDeg,
-                                              intent.motorMode,
-                                              intent.drivingMode,
-                                              bus,
-                                              kControlWorkerCyclePeriodMs,
-                                              kControlBurstFrameGapMs,
-                                              &error)) {
+    const bool queued = m_coreProcessMode
+        ? m_coreProcessClient.startControlCycle(intent.signedCommand,
+                                                intent.rpm,
+                                                intent.steeringDeg,
+                                                intent.motorMode,
+                                                intent.drivingMode,
+                                                bus,
+                                                kControlWorkerCyclePeriodMs,
+                                                kControlBurstFrameGapMs,
+                                                &error)
+        : m_transportRuntime.startControlCycle(intent.signedCommand,
+                                               intent.rpm,
+                                               intent.steeringDeg,
+                                               intent.motorMode,
+                                               intent.drivingMode,
+                                               bus,
+                                               kControlWorkerCyclePeriodMs,
+                                               kControlBurstFrameGapMs,
+                                               &error);
+    if (!queued) {
         refreshControlStatus(error);
         return;
     }
@@ -5803,7 +5834,12 @@ void AppController::startControlKeepalive() {
 
 void AppController::stopControlKeepalive() {
     m_controlKeepaliveTimer.stop();
-    m_transportRuntime.stopControlCycle();
+    QString error;
+    if (m_coreProcessMode) {
+        m_coreProcessClient.stopControlCycle(&error);
+    } else {
+        m_transportRuntime.stopControlCycle(&error);
+    }
 }
 
 void AppController::applyControlKeyboardHeldState(const QString& reason, bool forceBurst) {

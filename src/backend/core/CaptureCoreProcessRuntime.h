@@ -2,6 +2,7 @@
 
 #include "core/CoreIpcServerRuntime.h"
 #include "core/CoreMaterializedViewStore.h"
+#include "control/ControlCycleRuntime.h"
 #include "transport/DrainByteQueue.h"
 #include "transport/RawLedgerWriterRuntime.h"
 #include "transport/SerialDrainRuntime.h"
@@ -16,6 +17,7 @@
 #include <QQueue>
 #include <QSharedPointer>
 #include <QThread>
+#include <QTimerEvent>
 
 namespace CanMonitorCore {
 
@@ -40,6 +42,9 @@ signals:
     void transportStateChanged(bool connected, const QString& message);
     void errorOccurred(const QString& message);
 
+protected:
+    void timerEvent(QTimerEvent* event) override;
+
 private:
     void ensureTransportRuntime();
     void teardownTransportRuntime();
@@ -56,6 +61,15 @@ private:
                                const QJsonObject& change);
     void handleHostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
     void publishHostFrameWriteResult(bool ok, const QString& summary, quint64 bytesWritten);
+    void handleControlCycleRequested(quint64 requestId, const QString& action, const QJsonObject& payload);
+    void startControlCycle(const QJsonObject& payload);
+    void updateControlCycle(const QJsonObject& payload);
+    void stopControlCycle();
+    void sendControlCycleBurstOnce(const QJsonObject& payload);
+    void beginControlCycle();
+    void continueControlCycleBurst();
+    void dispatchControlCycleResult(const CanMonitorControl::ControlCycleRuntime::CycleResult& result);
+    void sendCoreHostFrame(quint64 requestId, const QByteArray& frame, const QString& summary);
     void handleCaptureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
     void handleCaptureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);
     void ensureCaptureWriterRuntime();
@@ -99,6 +113,7 @@ private:
     QJsonArray m_rawLedgerTailRows;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
     QQueue<quint64> m_pendingHostFrameRequests;
+    CanMonitorControl::ControlCycleRuntime m_controlCycle;
     quint64 m_nextMirrorRequestId = 1;
     quint64 m_rawLedgerDroppedDisplayRows = 0;
     quint64 m_rawLedgerDroppedHandoffFrames = 0;
@@ -111,6 +126,8 @@ private:
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;
     QString m_transportMessage = QStringLiteral("idle");
+    int m_controlCycleTimerId = 0;
+    int m_controlCycleGapTimerId = 0;
 };
 
 } // namespace CanMonitorCore

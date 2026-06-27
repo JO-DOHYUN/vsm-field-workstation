@@ -195,6 +195,19 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
         emit hostFrameRequested(requestId, frame, summary);
         return;
     }
+    if (type == QStringLiteral("control_cycle")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        const QString action = message.value(QStringLiteral("action")).toString();
+        if (action != QStringLiteral("start") &&
+            action != QStringLiteral("update") &&
+            action != QStringLiteral("stop") &&
+            action != QStringLiteral("burst_once")) {
+            sendObject(socket, errorResponse(message, QStringLiteral("invalid_control_cycle_action"), action));
+            return;
+        }
+        emit controlCycleRequested(requestId, action, message.value(QStringLiteral("payload")).toObject());
+        return;
+    }
     if (type == QStringLiteral("start_capture")) {
         const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
         const QString sessionDir = message.value(QStringLiteral("session_dir")).toString();

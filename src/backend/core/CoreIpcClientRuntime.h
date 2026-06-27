@@ -21,6 +21,29 @@ public:
     quint64 startTransport(const QString& mode, const QString& endpoint);
     quint64 stopTransport();
     quint64 sendHostFrame(const QByteArray& frame, const QString& summary);
+    quint64 startControlCycle(int signedCommand,
+                              int rpm,
+                              double steeringDeg,
+                              quint8 motorMode,
+                              quint8 drivingMode,
+                              quint8 bus,
+                              int periodMs,
+                              int frameGapMs);
+    quint64 updateControlCycle(int signedCommand,
+                               int rpm,
+                               double steeringDeg,
+                               quint8 motorMode,
+                               quint8 drivingMode,
+                               quint8 bus);
+    quint64 stopControlCycle();
+    quint64 sendControlCycleBurstOnce(int signedCommand,
+                                      int rpm,
+                                      double steeringDeg,
+                                      quint8 motorMode,
+                                      quint8 drivingMode,
+                                      quint8 bus,
+                                      const QString& reason,
+                                      bool resetSlew);
     quint64 startCapture(const QString& sessionDir, const QJsonObject& metadata);
     quint64 stopCapture(const QString& inactivePath, const QJsonObject& diagnostics);
 

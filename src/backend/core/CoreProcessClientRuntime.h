@@ -29,6 +29,32 @@ public:
 
     bool requestView(const CoreViewClientRuntime::ViewRequest& request);
     bool sendHostFrame(const QByteArray& frame, const QString& summary, QString* errorOut = nullptr);
+    bool startControlCycle(int signedCommand,
+                           int rpm,
+                           double steeringDeg,
+                           quint8 motorMode,
+                           quint8 drivingMode,
+                           quint8 bus,
+                           int periodMs,
+                           int frameGapMs,
+                           QString* errorOut = nullptr);
+    bool updateControlCycle(int signedCommand,
+                            int rpm,
+                            double steeringDeg,
+                            quint8 motorMode,
+                            quint8 drivingMode,
+                            quint8 bus,
+                            QString* errorOut = nullptr);
+    bool stopControlCycle(QString* errorOut = nullptr);
+    bool sendControlCycleBurstOnce(int signedCommand,
+                                   int rpm,
+                                   double steeringDeg,
+                                   quint8 motorMode,
+                                   quint8 drivingMode,
+                                   quint8 bus,
+                                   const QString& reason,
+                                   bool resetSlew,
+                                   QString* errorOut = nullptr);
     bool startCapture(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut = nullptr);
     bool stopCapture(const QString& inactivePath, const QJsonObject& diagnostics, QString* errorOut = nullptr);
 

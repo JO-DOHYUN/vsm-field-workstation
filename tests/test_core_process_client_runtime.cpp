@@ -143,6 +143,23 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);
     }
 
+    void acceptsControlCycleCommandsOverIpc() {
+        CanMonitorCore::CoreProcessClientRuntime runtime;
+
+        QString error;
+        QVERIFY2(runtime.startServerOnly(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE), &error), qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(runtime.isIpcConnected(), 5000);
+
+        QVERIFY2(runtime.startControlCycle(100, 1000, 1.5, 1, 2, 0, 20, 2, &error), qPrintable(error));
+        QVERIFY2(runtime.updateControlCycle(0, 0, 0.0, 1, 1, 0, &error), qPrintable(error));
+        QVERIFY2(runtime.sendControlCycleBurstOnce(0, 0, 0.0, 1, 1, 0, QStringLiteral("unit burst"), true, &error),
+                 qPrintable(error));
+        QVERIFY2(runtime.stopControlCycle(&error), qPrintable(error));
+
+        runtime.stop();
+        QTRY_VERIFY_WITH_TIMEOUT(!runtime.isActive(), 3000);
+    }
+
     void startsAndStopsCoreCaptureStorage() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
         QSignalSpy storageSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::captureStorageUpdate);

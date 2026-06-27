@@ -136,6 +136,9 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/core/CaptureCoreProcessRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/ControlCommandEncoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/control/ControlSlewLimiter.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/control/ControlCycleRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxQueue.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/DrainByteQueue.cpp

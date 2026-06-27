@@ -165,6 +165,56 @@ private slots:
         client.disconnectFromServer();
         server.close();
     }
+
+    void clientRequestsControlCycleCommands() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-control-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy controlSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::controlCycleRequested);
+
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        const quint64 startId = client.startControlCycle(120, 1000, 3.5, 1, 2, 1, 20, 2);
+        QTRY_COMPARE(controlSpy.size(), 1);
+        auto args = controlSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), startId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("start"));
+        auto payload = args.at(2).toJsonObject();
+        QCOMPARE(payload.value(QStringLiteral("signed_command")).toInt(), 120);
+        QCOMPARE(payload.value(QStringLiteral("rpm")).toInt(), 1000);
+        QCOMPARE(payload.value(QStringLiteral("bus")).toInt(), 1);
+
+        const quint64 updateId = client.updateControlCycle(0, 0, 0.0, 1, 1, 1);
+        QTRY_COMPARE(controlSpy.size(), 1);
+        args = controlSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), updateId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("update"));
+
+        const quint64 burstId = client.sendControlCycleBurstOnce(50, 500, -2.0, 1, 2, 1, QStringLiteral("unit burst"), true);
+        QTRY_COMPARE(controlSpy.size(), 1);
+        args = controlSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), burstId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("burst_once"));
+        payload = args.at(2).toJsonObject();
+        QCOMPARE(payload.value(QStringLiteral("reason")).toString(), QStringLiteral("unit burst"));
+        QCOMPARE(payload.value(QStringLiteral("reset_slew")).toBool(), true);
+
+        const quint64 stopId = client.stopControlCycle();
+        QTRY_COMPARE(controlSpy.size(), 1);
+        args = controlSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), stopId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("stop"));
+
+        client.disconnectFromServer();
+        server.close();
+    }
 };
 
 QTEST_MAIN(CoreIpcRuntimeTest)
