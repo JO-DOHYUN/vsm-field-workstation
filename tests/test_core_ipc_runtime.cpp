@@ -98,6 +98,37 @@ private slots:
         server.close();
     }
 
+    void clientRequestsTransportStartStop() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-transport-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy startSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::transportStartRequested);
+        QSignalSpy stopSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::transportStopRequested);
+
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        const quint64 startId = client.startTransport(QStringLiteral("serial"), QStringLiteral("COM7"));
+        QTRY_COMPARE(startSpy.size(), 1);
+        auto args = startSpy.takeFirst();
+        QCOMPARE(args.at(0).toULongLong(), startId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("serial"));
+        QCOMPARE(args.at(2).toString(), QStringLiteral("COM7"));
+
+        const quint64 stopId = client.stopTransport();
+        QTRY_COMPARE(stopSpy.size(), 1);
+        QCOMPARE(stopSpy.takeFirst().at(0).toULongLong(), stopId);
+
+        client.disconnectFromServer();
+        server.close();
+    }
+
     void clientRequestsCaptureStartStop() {
         CanMonitorCore::CoreMaterializedViewStore store;
         const QString serverName = QStringLiteral("vsm-core-ipc-capture-test-%1-%2")

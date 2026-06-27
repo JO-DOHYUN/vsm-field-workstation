@@ -18,6 +18,8 @@ public:
     quint64 ping();
     quint64 requestView(const QString& viewName, quint64 sinceSeq, int limit);
     bool requestViewWithId(quint64 requestId, const QString& viewName, quint64 sinceSeq, int limit);
+    quint64 startTransport(const QString& mode, const QString& endpoint);
+    quint64 stopTransport();
     quint64 sendHostFrame(const QByteArray& frame, const QString& summary);
     quint64 startCapture(const QString& sessionDir, const QJsonObject& metadata);
     quint64 stopCapture(const QString& inactivePath, const QJsonObject& diagnostics);

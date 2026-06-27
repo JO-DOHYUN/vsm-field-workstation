@@ -44,6 +44,11 @@ bool CoreProcessClientRuntime::startSerial(const QString& executablePath, const 
         if (errorOut) *errorOut = QStringLiteral("empty core process serial port");
         return false;
     }
+    if (isActive() && m_client.isConnected()) {
+        m_client.startTransport(QStringLiteral("serial"), endpoint);
+        if (errorOut) errorOut->clear();
+        return true;
+    }
     return startProcess(executablePath, {QStringLiteral("--port"), endpoint}, errorOut);
 }
 
@@ -53,11 +58,30 @@ bool CoreProcessClientRuntime::startGatewayTcp(const QString& executablePath, co
         if (errorOut) *errorOut = QStringLiteral("invalid core process gateway endpoint: %1").arg(endpoint);
         return false;
     }
+    if (isActive() && m_client.isConnected()) {
+        m_client.startTransport(QStringLiteral("gateway_tcp"), normalized);
+        if (errorOut) errorOut->clear();
+        return true;
+    }
     return startProcess(executablePath, {QStringLiteral("--gateway"), normalized}, errorOut);
 }
 
 bool CoreProcessClientRuntime::startServerOnly(const QString& executablePath, QString* errorOut) {
+    if (isActive()) {
+        if (errorOut) errorOut->clear();
+        return true;
+    }
     return startProcess(executablePath, {}, errorOut);
+}
+
+bool CoreProcessClientRuntime::stopTransport(QString* errorOut) {
+    if (!m_client.isConnected()) {
+        if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
+        return false;
+    }
+    m_client.stopTransport();
+    if (errorOut) errorOut->clear();
+    return true;
 }
 
 void CoreProcessClientRuntime::stop() {

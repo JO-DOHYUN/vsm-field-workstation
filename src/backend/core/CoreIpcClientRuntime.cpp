@@ -52,6 +52,16 @@ bool CoreIpcClientRuntime::requestViewWithId(quint64 requestId, const QString& v
                                          {QStringLiteral("limit"), limit}});
 }
 
+quint64 CoreIpcClientRuntime::startTransport(const QString& mode, const QString& endpoint) {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("start_transport")},
+                                   {QStringLiteral("mode"), mode},
+                                   {QStringLiteral("endpoint"), endpoint}});
+}
+
+quint64 CoreIpcClientRuntime::stopTransport() {
+    return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("stop_transport")}});
+}
+
 quint64 CoreIpcClientRuntime::sendHostFrame(const QByteArray& frame, const QString& summary) {
     return sendMessage(QJsonObject{{QStringLiteral("message_type"), QStringLiteral("host_frame")},
                                    {QStringLiteral("frame_base64"), QString::fromLatin1(frame.toBase64())},

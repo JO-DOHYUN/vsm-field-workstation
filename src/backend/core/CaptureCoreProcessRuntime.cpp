@@ -62,6 +62,22 @@ CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
             &CaptureCoreProcessRuntime::handleHostFrameRequested,
             Qt::QueuedConnection);
     connect(&m_ipc,
+            &CoreIpcServerRuntime::transportStartRequested,
+            this,
+            [this](quint64, const QString& mode, const QString& endpoint) {
+                if (mode == QStringLiteral("gateway_tcp")) {
+                    startGatewayTcp(endpoint);
+                } else {
+                    startSerial(endpoint);
+                }
+            },
+            Qt::QueuedConnection);
+    connect(&m_ipc,
+            &CoreIpcServerRuntime::transportStopRequested,
+            this,
+            [this](quint64) { stopTransport(); },
+            Qt::QueuedConnection);
+    connect(&m_ipc,
             &CoreIpcServerRuntime::captureStartRequested,
             this,
             &CaptureCoreProcessRuntime::handleCaptureStartRequested,

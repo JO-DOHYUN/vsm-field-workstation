@@ -164,6 +164,26 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
         sendObject(socket, baseResponse(message, QStringLiteral("pong")));
         return;
     }
+    if (type == QStringLiteral("start_transport")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        const QString mode = message.value(QStringLiteral("mode")).toString();
+        const QString endpoint = message.value(QStringLiteral("endpoint")).toString().trimmed();
+        if (endpoint.isEmpty()) {
+            sendObject(socket, errorResponse(message, QStringLiteral("empty_transport_endpoint"), QString()));
+            return;
+        }
+        if (mode != QStringLiteral("serial") && mode != QStringLiteral("gateway_tcp")) {
+            sendObject(socket, errorResponse(message, QStringLiteral("invalid_transport_mode"), mode));
+            return;
+        }
+        emit transportStartRequested(requestId, mode, endpoint);
+        return;
+    }
+    if (type == QStringLiteral("stop_transport")) {
+        const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
+        emit transportStopRequested(requestId);
+        return;
+    }
     if (type == QStringLiteral("host_frame")) {
         const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
         const QByteArray frame = QByteArray::fromBase64(message.value(QStringLiteral("frame_base64")).toString().toLatin1());

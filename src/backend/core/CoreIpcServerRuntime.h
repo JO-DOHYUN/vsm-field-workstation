@@ -40,6 +40,8 @@ signals:
     void clientConnected();
     void clientDisconnected();
     void protocolError(const QString& error);
+    void transportStartRequested(quint64 requestId, const QString& mode, const QString& endpoint);
+    void transportStopRequested(quint64 requestId);
     void hostFrameRequested(quint64 requestId, const QByteArray& frame, const QString& summary);
     void captureStartRequested(quint64 requestId, const QString& sessionDir, const QJsonObject& metadata);
     void captureStopRequested(quint64 requestId, const QString& inactivePath, const QJsonObject& diagnostics);

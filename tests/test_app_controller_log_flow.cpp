@@ -92,6 +92,7 @@ class AppControllerLogFlowTest : public QObject {
 private slots:
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
+        qputenv("CAN_MONITOR_DISABLE_CORE_PROCESS", QByteArrayLiteral("1"));
     }
 
     void controlEvidenceStatsStartAtZero() {
