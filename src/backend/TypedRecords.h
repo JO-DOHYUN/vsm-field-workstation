@@ -67,6 +67,14 @@ struct TypedRecord {
 
 using TypedRecordList = QVector<TypedRecord>;
 
+struct TypedCaptureFrame {
+    TypedFrameHeader header;
+    QByteArray frameBytes;
+    quint64 monoUs = 0;
+};
+
+using TypedCaptureFrameList = QVector<TypedCaptureFrame>;
+
 struct TypedCanRawRecord {
     bool txAudit = false;
     quint64 monoUs = 0;

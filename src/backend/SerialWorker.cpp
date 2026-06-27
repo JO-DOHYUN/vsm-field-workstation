@@ -228,7 +228,7 @@ bool SerialWorker::setTypedStorage(bool enable, const QString& sessionDir, const
             return false;
         }
         resetRawLedger(QStringLiteral("typed_capture"));
-        m_pendingCaptureWriterRecords.clear();
+        m_pendingCaptureWriterFrames.clear();
         if (m_captureRecordQueue) m_captureRecordQueue->clear();
         m_pendingCaptureWriterBytes = 0;
         m_pendingCaptureWriterMaxBytes = 0;
@@ -897,8 +897,10 @@ void SerialWorker::queueCaptureWriterRecords(const TypedRecordList& records) {
         return;
     }
 
-    m_pendingCaptureWriterRecords.reserve(m_pendingCaptureWriterRecords.size() + records.size());
-    for (const TypedRecord& record : records) m_pendingCaptureWriterRecords.push_back(record);
+    m_pendingCaptureWriterFrames.reserve(m_pendingCaptureWriterFrames.size() + records.size());
+    for (const TypedRecord& record : records) {
+        m_pendingCaptureWriterFrames.push_back(TypedCaptureFrame{record.header, record.frameBytes, typedRecordMonoUs(record)});
+    }
     m_pendingCaptureWriterBytes += incomingBytes;
     m_pendingCaptureWriterMaxBytes = std::max(m_pendingCaptureWriterMaxBytes, m_pendingCaptureWriterBytes);
     scheduleCaptureWriterDispatch();
@@ -907,7 +909,7 @@ void SerialWorker::queueCaptureWriterRecords(const TypedRecordList& records) {
 void SerialWorker::scheduleCaptureWriterDispatch() {
     if (m_captureWriterDispatchScheduled ||
         m_captureWriterDispatchInFlight ||
-        m_pendingCaptureWriterRecords.isEmpty()) {
+        m_pendingCaptureWriterFrames.isEmpty()) {
         return;
     }
     m_captureWriterDispatchScheduled = true;
@@ -916,25 +918,25 @@ void SerialWorker::scheduleCaptureWriterDispatch() {
 
 void SerialWorker::dispatchCaptureWriterRecords() {
     m_captureWriterDispatchScheduled = false;
-    if (m_captureWriterDispatchInFlight || m_pendingCaptureWriterRecords.isEmpty() || !m_captureWriterWorker) return;
+    if (m_captureWriterDispatchInFlight || m_pendingCaptureWriterFrames.isEmpty() || !m_captureWriterWorker) return;
 
-    const int takeCount = std::min<int>(m_pendingCaptureWriterRecords.size(), kCaptureWriterHandoffDispatchRecords);
-    TypedRecordList records;
-    records.reserve(takeCount);
+    const int takeCount = std::min<int>(m_pendingCaptureWriterFrames.size(), kCaptureWriterHandoffDispatchRecords);
+    TypedCaptureFrameList frames;
+    frames.reserve(takeCount);
     quint64 bytes = 0;
     for (int index = 0; index < takeCount; ++index) {
-        const TypedRecord& record = m_pendingCaptureWriterRecords.at(index);
-        bytes += quint64(record.frameBytes.size());
-        records.push_back(record);
+        const TypedCaptureFrame& frame = m_pendingCaptureWriterFrames.at(index);
+        bytes += quint64(frame.frameBytes.size());
+        frames.push_back(frame);
     }
-    m_pendingCaptureWriterRecords.erase(m_pendingCaptureWriterRecords.begin(),
-                                        m_pendingCaptureWriterRecords.begin() + takeCount);
+    m_pendingCaptureWriterFrames.erase(m_pendingCaptureWriterFrames.begin(),
+                                       m_pendingCaptureWriterFrames.begin() + takeCount);
     m_pendingCaptureWriterBytes = bytes > m_pendingCaptureWriterBytes ? 0 : m_pendingCaptureWriterBytes - bytes;
 
     m_captureWriterDispatchInFlight = true;
     QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> worker = m_captureWriterWorker;
-    QMetaObject::invokeMethod(m_captureWriterWorker, [worker, records = std::move(records)]() mutable {
-        if (worker) worker->enqueueRecords(std::move(records));
+    QMetaObject::invokeMethod(m_captureWriterWorker, [worker, frames = std::move(frames)]() mutable {
+        if (worker) worker->enqueueFrames(std::move(frames));
     }, Qt::QueuedConnection);
 }
 
@@ -947,13 +949,13 @@ void SerialWorker::flushCaptureWriterHandoffSync() {
                                   Qt::BlockingQueuedConnection);
     }
 
-    if (!m_pendingCaptureWriterRecords.isEmpty()) {
-        TypedRecordList records;
-        records.swap(m_pendingCaptureWriterRecords);
+    if (!m_pendingCaptureWriterFrames.isEmpty()) {
+        TypedCaptureFrameList frames;
+        frames.swap(m_pendingCaptureWriterFrames);
         m_pendingCaptureWriterBytes = 0;
         QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> worker = m_captureWriterWorker;
-        QMetaObject::invokeMethod(m_captureWriterWorker, [worker, records = std::move(records)]() mutable {
-            if (worker) worker->enqueueRecords(std::move(records));
+        QMetaObject::invokeMethod(m_captureWriterWorker, [worker, frames = std::move(frames)]() mutable {
+            if (worker) worker->enqueueFrames(std::move(frames));
         }, Qt::BlockingQueuedConnection);
     }
 
@@ -1540,7 +1542,7 @@ void SerialWorker::shutdownCaptureWriterRuntime() {
     m_captureWriterMaxQueueBytes = 0;
     m_captureWriterOverrunBytes = 0;
     m_captureWriteMaxMs = 0;
-    m_pendingCaptureWriterRecords.clear();
+    m_pendingCaptureWriterFrames.clear();
     if (m_captureRecordQueue) m_captureRecordQueue->clear();
     m_pendingCaptureWriterBytes = 0;
     m_pendingCaptureWriterMaxBytes = 0;

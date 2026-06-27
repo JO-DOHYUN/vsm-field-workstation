@@ -39,7 +39,7 @@ public:
     StorageUpdate stopStorage(const QString& inactivePath, const QJsonObject& diagnostics);
     StorageUpdate finalizeStorageIfActive(const QJsonObject& diagnostics);
 
-    StorageUpdate enqueueRecords(TypedRecordList records);
+    StorageUpdate enqueueFrames(TypedCaptureFrameList frames);
     StorageUpdate noteOverrun(quint64 records, quint64 bytes, const QString& reason);
     StorageUpdate flushQueued(bool force = false);
     void resetQueue();
@@ -52,7 +52,7 @@ private:
     QJsonObject withWriterDiagnostics(const QJsonObject& diagnostics) const;
 
     StorageRuntime m_storage;
-    QVector<TypedRecord> m_queue;
+    QVector<TypedCaptureFrame> m_queue;
     quint64 m_queuedBytes = 0;
     quint64 m_maxQueuedBytes = 0;
     quint64 m_overrunRecords = 0;

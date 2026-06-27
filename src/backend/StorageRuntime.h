@@ -48,6 +48,7 @@ public:
 
     bool startTypedSession(const QString& sessionDir, const QJsonObject& metadata, QString* errorOut = nullptr);
     bool appendTypedRecord(const TypedRecord& record, QString* errorOut = nullptr);
+    bool appendTypedCaptureFrame(const TypedCaptureFrame& frame, QString* errorOut = nullptr);
     bool appendEventJsonLine(const QJsonObject& event, QString* errorOut = nullptr);
     bool finalizeTypedSession(QString* errorOut = nullptr, const QJsonObject& diagnostics = QJsonObject());
     void discard();

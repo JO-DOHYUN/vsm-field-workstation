@@ -33,8 +33,8 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterWorkerRuntime::finali
     return update;
 }
 
-void TypedCaptureWriterWorkerRuntime::enqueueRecords(TypedRecordList records) {
-    const auto update = m_writer.enqueueRecords(std::move(records));
+void TypedCaptureWriterWorkerRuntime::enqueueFrames(TypedCaptureFrameList frames) {
+    const auto update = m_writer.enqueueFrames(std::move(frames));
     emitStorageUpdate(update);
     emitStatus(m_writer.status());
     emit batchFinished();
@@ -46,14 +46,14 @@ void TypedCaptureWriterWorkerRuntime::drainQueuedRecords() {
         return;
     }
 
-    TypedRecordList records = m_recordQueue->popRecords(4096, 4ULL * 1024ULL * 1024ULL);
-    if (records.isEmpty()) {
+    TypedCaptureFrameList frames = m_recordQueue->popFrames(4096, 4ULL * 1024ULL * 1024ULL);
+    if (frames.isEmpty()) {
         emitStatus(m_writer.status());
         emit batchFinished();
         return;
     }
 
-    const auto update = m_writer.enqueueRecords(std::move(records));
+    const auto update = m_writer.enqueueFrames(std::move(frames));
     emitStorageUpdate(update);
     emitStatus(m_writer.status());
     emit batchFinished();

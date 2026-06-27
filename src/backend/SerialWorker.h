@@ -232,7 +232,7 @@ private:
     CanMonitorTransport::RawLedgerWriterRuntime* m_rawLedgerWorker = nullptr;
     QHash<quint64, FrameRecord> m_pendingProjectionFramesByKey;
     FrameRecordList m_pendingRawLedgerFrames;
-    TypedRecordList m_pendingCaptureWriterRecords;
+    TypedCaptureFrameList m_pendingCaptureWriterFrames;
     FrameRecordList m_pendingAnalysisFrames;
     QElapsedTimer m_projectionFlushClock;
     QElapsedTimer m_drainStatusClock;

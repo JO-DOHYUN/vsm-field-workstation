@@ -71,7 +71,13 @@ private slots:
         while (auto record = parser.takeOne()) records.push_back(*record);
         QCOMPARE(records.size(), 2);
 
-        auto append = writer.enqueueRecords(records);
+        TypedCaptureFrameList frames;
+        frames.reserve(records.size());
+        for (const TypedRecord& record : records) {
+            frames.push_back(TypedCaptureFrame{record.header, record.frameBytes, typedRecordMonoUs(record)});
+        }
+
+        auto append = writer.enqueueFrames(std::move(frames));
         QVERIFY2(append.ok, qPrintable(append.error));
 
         QJsonObject diagnostics;

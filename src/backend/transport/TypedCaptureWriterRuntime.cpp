@@ -69,23 +69,23 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::finalizeStor
     return update;
 }
 
-TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::enqueueRecords(TypedRecordList records) {
+TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::enqueueFrames(TypedCaptureFrameList frames) {
     StorageUpdate update;
-    if (!m_storage.isActive() || records.isEmpty()) return update;
+    if (!m_storage.isActive() || frames.isEmpty()) return update;
 
     quint64 incomingBytes = 0;
-    for (const TypedRecord& record : records) incomingBytes += quint64(record.frameBytes.size());
+    for (const TypedCaptureFrame& frame : frames) incomingBytes += quint64(frame.frameBytes.size());
     if (incomingBytes + m_queuedBytes > kWriterQueueMaxBytes) {
         m_captureInvalid = true;
-        m_overrunRecords += quint64(records.size());
+        m_overrunRecords += quint64(frames.size());
         m_overrunBytes += incomingBytes;
         update.ok = false;
         update.error = QStringLiteral("Typed capture writer queue overrun: %1 bytes").arg(m_overrunBytes);
         return update;
     }
 
-    m_queue.reserve(m_queue.size() + records.size());
-    for (TypedRecord& record : records) m_queue.push_back(std::move(record));
+    m_queue.reserve(m_queue.size() + frames.size());
+    for (TypedCaptureFrame& frame : frames) m_queue.push_back(std::move(frame));
     m_queuedBytes += incomingBytes;
     m_maxQueuedBytes = std::max(m_maxQueuedBytes, m_queuedBytes);
     return flushQueued(false);
@@ -120,14 +120,14 @@ TypedCaptureWriterRuntime::StorageUpdate TypedCaptureWriterRuntime::flushQueued(
     QString error;
     int writtenCount = 0;
     for (int index = 0; index < takeCount; ++index) {
-        const TypedRecord& record = m_queue.at(index);
-        if (!m_storage.appendTypedRecord(record, &error)) {
+        const TypedCaptureFrame& frame = m_queue.at(index);
+        if (!m_storage.appendTypedCaptureFrame(frame, &error)) {
             m_captureInvalid = true;
             update.ok = false;
             update.error = QStringLiteral("Typed storage append failed: %1").arg(error);
             break;
         }
-        m_queuedBytes -= quint64(record.frameBytes.size());
+        m_queuedBytes -= quint64(frame.frameBytes.size());
         ++writtenCount;
     }
     if (writtenCount > 0) {

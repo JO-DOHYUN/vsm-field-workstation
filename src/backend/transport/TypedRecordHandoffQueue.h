@@ -33,18 +33,18 @@ public:
 
     explicit TypedRecordHandoffQueue(quint64 capacityBytes = 16ULL * 1024ULL * 1024ULL);
 
-    PushResult push(TypedRecordList records);
-    TypedRecordList popRecords(int maxRecords, quint64 maxBytes);
+    PushResult push(TypedCaptureFrameList frames);
+    TypedCaptureFrameList popFrames(int maxFrames, quint64 maxBytes);
     void clear();
 
     Snapshot snapshot() const;
     bool hasQueuedRecords() const;
 
 private:
-    static quint64 bytesForRecords(const TypedRecordList& records);
+    static quint64 bytesForFrames(const TypedCaptureFrameList& frames);
 
     mutable QMutex m_mutex;
-    std::deque<TypedRecordList> m_batches;
+    std::deque<TypedCaptureFrameList> m_batches;
     quint64 m_capacityBytes = 0;
     quint64 m_queuedRecords = 0;
     quint64 m_queuedBytes = 0;

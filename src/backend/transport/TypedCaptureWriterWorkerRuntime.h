@@ -20,7 +20,7 @@ public:
     TypedCaptureWriterRuntime::Status status() const { return m_writer.status(); }
 
 public slots:
-    void enqueueRecords(TypedRecordList records);
+    void enqueueFrames(TypedCaptureFrameList frames);
     void drainQueuedRecords();
     void noteOverrun(quint64 records, quint64 bytes, const QString& reason);
     void resetQueue();

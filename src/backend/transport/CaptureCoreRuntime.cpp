@@ -228,7 +228,7 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
                                                             quint64 parseBacklogBytes) {
     Result out;
     FrameRecordList liveLatestFrames;
-    TypedRecordList captureBatch;
+    TypedCaptureFrameList captureBatch;
     captureBatch.reserve(kCoreLocalBatchSize);
     auto flushCaptureBatch = [this, &captureBatch, &out]() {
         if (captureBatch.isEmpty()) return;
@@ -244,7 +244,11 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
                                               [this, &captureBatch, &flushCaptureBatch, &liveLatestFrames, &out](TypedRecord&& record) {
                                                   ingestRecordForViews(record, liveLatestFrames, out);
                                                   if (m_options.captureRecords && m_captureQueue) {
-                                                      captureBatch.push_back(std::move(record));
+                                                      const quint64 monoUs = typedRecordMonoUs(record);
+                                                      captureBatch.push_back(TypedCaptureFrame{
+                                                          record.header,
+                                                          std::move(record.frameBytes),
+                                                          monoUs});
                                                       if (captureBatch.size() >= kCoreLocalBatchSize) flushCaptureBatch();
                                                   }
                                               });
@@ -292,7 +296,7 @@ void CaptureCoreRuntime::ingestRecordForViews(const TypedRecord& record,
     }
 }
 
-void CaptureCoreRuntime::pushCaptureBatch(TypedRecordList&& batch, Result& result) {
+void CaptureCoreRuntime::pushCaptureBatch(TypedCaptureFrameList&& batch, Result& result) {
     if (batch.isEmpty() || !m_options.captureRecords || !m_captureQueue) return;
 
     auto push = m_captureQueue->push(std::move(batch));

@@ -9,19 +9,19 @@ namespace CanMonitorTransport {
 TypedRecordHandoffQueue::TypedRecordHandoffQueue(quint64 capacityBytes)
     : m_capacityBytes(capacityBytes) {}
 
-quint64 TypedRecordHandoffQueue::bytesForRecords(const TypedRecordList& records) {
+quint64 TypedRecordHandoffQueue::bytesForFrames(const TypedCaptureFrameList& frames) {
     quint64 bytes = 0;
-    for (const TypedRecord& record : records) {
-        bytes += quint64(record.frameBytes.size());
+    for (const TypedCaptureFrame& frame : frames) {
+        bytes += quint64(frame.frameBytes.size());
     }
     return bytes;
 }
 
-TypedRecordHandoffQueue::PushResult TypedRecordHandoffQueue::push(TypedRecordList records) {
+TypedRecordHandoffQueue::PushResult TypedRecordHandoffQueue::push(TypedCaptureFrameList frames) {
     PushResult result;
-    result.records = quint64(records.size());
-    result.bytes = bytesForRecords(records);
-    if (records.isEmpty()) return result;
+    result.records = quint64(frames.size());
+    result.bytes = bytesForFrames(frames);
+    if (frames.isEmpty()) return result;
 
     QMutexLocker locker(&m_mutex);
     if (m_queuedBytes + result.bytes > m_capacityBytes) {
@@ -34,7 +34,7 @@ TypedRecordHandoffQueue::PushResult TypedRecordHandoffQueue::push(TypedRecordLis
         return result;
     }
 
-    m_batches.push_back(std::move(records));
+    m_batches.push_back(std::move(frames));
     m_queuedRecords += result.records;
     m_queuedBytes += result.bytes;
     m_maxQueuedBytes = std::max(m_maxQueuedBytes, m_queuedBytes);
@@ -47,21 +47,21 @@ TypedRecordHandoffQueue::PushResult TypedRecordHandoffQueue::push(TypedRecordLis
     return result;
 }
 
-TypedRecordList TypedRecordHandoffQueue::popRecords(int maxRecords, quint64 maxBytes) {
-    TypedRecordList out;
-    if (maxRecords <= 0 || maxBytes == 0) return out;
+TypedCaptureFrameList TypedRecordHandoffQueue::popFrames(int maxFrames, quint64 maxBytes) {
+    TypedCaptureFrameList out;
+    if (maxFrames <= 0 || maxBytes == 0) return out;
 
     QMutexLocker locker(&m_mutex);
     quint64 outBytes = 0;
-    while (!m_batches.empty() && out.size() < maxRecords) {
-        TypedRecordList& front = m_batches.front();
+    while (!m_batches.empty() && out.size() < maxFrames) {
+        TypedCaptureFrameList& front = m_batches.front();
         if (front.isEmpty()) {
             m_batches.pop_front();
             ++m_poppedBatches;
             continue;
         }
 
-        const int remainingRecords = maxRecords - out.size();
+        const int remainingRecords = maxFrames - out.size();
         int take = 0;
         quint64 takeBytes = 0;
         while (take < front.size() && take < remainingRecords) {

@@ -218,32 +218,36 @@ bool StorageRuntime::startTypedSession(const QString& sessionDir, const QJsonObj
 }
 
 bool StorageRuntime::appendTypedRecord(const TypedRecord& record, QString* errorOut) {
+    return appendTypedCaptureFrame(TypedCaptureFrame{record.header, record.frameBytes, typedRecordMonoUs(record)}, errorOut);
+}
+
+bool StorageRuntime::appendTypedCaptureFrame(const TypedCaptureFrame& frame, QString* errorOut) {
     if (!m_active || !m_stream.isOpen() || !m_index.isOpen()) {
         setError(errorOut, QStringLiteral("Typed storage session is not active."));
         return false;
     }
-    if (record.frameBytes.size() < kTypedTransportFrameOverhead) {
+    if (frame.frameBytes.size() < kTypedTransportFrameOverhead) {
         setError(errorOut, QStringLiteral("Typed record has no complete frame bytes."));
         return false;
     }
 
     const quint64 offset = m_streamLogicalOffset;
-    m_streamBuffer.append(record.frameBytes);
-    m_streamLogicalOffset += quint64(record.frameBytes.size());
+    m_streamBuffer.append(frame.frameBytes);
+    m_streamLogicalOffset += quint64(frame.frameBytes.size());
 
     char indexEntry[24] = {};
     writeU64Le(indexEntry + 0, offset);
-    writeU64Le(indexEntry + 8, typedRecordMonoUs(record));
-    indexEntry[16] = char(record.header.recordType);
-    indexEntry[17] = char(record.header.flags);
-    writeU16Le(indexEntry + 18, record.header.seq);
-    writeU16Le(indexEntry + 20, record.header.payloadLength);
+    writeU64Le(indexEntry + 8, frame.monoUs);
+    indexEntry[16] = char(frame.header.recordType);
+    indexEntry[17] = char(frame.header.flags);
+    writeU16Le(indexEntry + 18, frame.header.seq);
+    writeU16Le(indexEntry + 20, frame.header.payloadLength);
     writeU16Le(indexEntry + 22, 0);
 
     m_indexBuffer.append(indexEntry, qsizetype(sizeof(indexEntry)));
 
     ++m_recordCount;
-    m_bytesWritten += quint64(record.frameBytes.size());
+    m_bytesWritten += quint64(frame.frameBytes.size());
     if (m_streamBuffer.size() >= kTypedStreamBufferFlushBytes ||
         m_indexBuffer.size() >= kTypedIndexBufferFlushBytes) {
         return flushTypedBuffers(errorOut);
