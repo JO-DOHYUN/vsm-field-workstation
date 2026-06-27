@@ -9,6 +9,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaType>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QHostAddress>

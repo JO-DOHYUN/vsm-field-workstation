@@ -7,7 +7,6 @@
 #include "StableMapListModel.h"
 #include "ReplayEngine.h"
 #include "ReplayRuntime.h"
-#include "SerialWorker.h"
 #include "ModelPack.h"
 #include "SessionManager.h"
 #include "AnalysisTypes.h"
@@ -22,7 +21,6 @@
 #include "evidence/EvidenceRuntime.h"
 #include "evidence/BusRoleResolver.h"
 #include "transport/LivePathTelemetry.h"
-#include "transport/TransportRuntime.h"
 #include "transport/TransportSession.h"
 #include "perf/LiveRuntimeTrace.h"
 #include "perf/UiResponsivenessRuntime.h"
@@ -983,7 +981,7 @@ private:
     void appendPendingLiveFrames(const FrameRecordList& frames);
     QJsonObject livePathTraceObject();
     QJsonObject drainEventTraceObject();
-    void applyCoreTransportSummaryPayload(const QJsonObject& payload);
+    void applyCoreTransportSummaryView(const QJsonObject& payload);
     void handleCoreViewChanged(const QJsonObject& change);
     void handleCoreViewSnapshotReady(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
     void dispatchCoreViewRequest(const CanMonitorCore::CoreViewClientRuntime::ViewRequest& request);
@@ -1378,8 +1376,6 @@ private:
     mutable SessionManager m_session;
     bool m_restoringSession = false;
 
-    SerialWorker* m_worker = nullptr;
-    CanMonitorTransport::TransportRuntime m_transportRuntime;
     CanMonitorTransport::TransportSession m_transportSession;
     QString m_transportModeKey = QStringLiteral("typed");
     QProcess* m_debugGatewayProcess = nullptr;

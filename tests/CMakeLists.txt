@@ -126,6 +126,7 @@ add_test(NAME core_ipc_runtime COMMAND test_core_ipc_runtime)
 add_executable(test_capture_core_process_runtime
     test_capture_core_process_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/BuildMetadata.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/AppLogging.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/RuntimePaths.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
@@ -134,6 +135,12 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcServerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CaptureCoreProcessRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/ModelPack.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/ModelPackValidator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/TimingEvaluator.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/SignalDecoder.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/analysis/AnalysisWorkerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/ControlCommandEncoder.cpp

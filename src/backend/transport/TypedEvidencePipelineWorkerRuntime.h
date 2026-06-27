@@ -1,5 +1,6 @@
 #pragma once
 
+#include "transport/CoreDataBatches.h"
 #include "transport/CaptureCoreRuntime.h"
 #include "transport/DrainByteQueue.h"
 #include "transport/LivePathTelemetry.h"
@@ -26,16 +27,13 @@ public slots:
     void setCaptureEnabled(bool enabled);
     void setCanRxFramesEnabled(bool enabled);
     void setSecondaryFanoutEnabled(bool enabled);
-    void acknowledgeProjectionSnapshot();
     void queryCoreView(const QString& viewName, quint64 sinceSeq, int limit, quint64 requestId);
 
 signals:
     void capabilityFirstSeen(qint64 elapsedMs, quint64 bytes);
     void errorsOccurred(const QStringList& errors);
-    void canRxFramesReady(const FrameRecordList& frames);
-    void projectedFramesReady(const FrameRecordList& frames);
-    void truthFramesReady(const FrameRecordList& frames);
-    void criticalRecordsReady(const TypedRecordList& records);
+    void analysisFramesReady(const CanMonitorTransport::AnalysisFrameBatch& batch);
+    void rawLedgerFramesReady(const CanMonitorTransport::RawLedgerFrameBatch& batch);
     void captureQueueReady();
     void captureHandoffOverrun(quint64 records, quint64 bytes, const QString& reason);
     void projectionStatusReady(quint64 observedCanRxFrames,
@@ -79,9 +77,6 @@ private slots:
 private:
     void emitPipelineStatus(const CaptureCoreRuntime::Result* result = nullptr, bool force = false);
     void emitCoreViewChanges(const QVector<CanMonitorCore::ViewChanged>& changes);
-    void queueProjectionSnapshotFrames(const FrameRecordList& frames);
-    void scheduleProjectionSnapshot();
-    void emitProjectionSnapshot();
     void queueProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
     void queueTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status);
     void queueTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
@@ -93,25 +88,18 @@ private:
 
     QSharedPointer<DrainByteQueue> m_queue;
     CaptureCoreRuntime m_core;
-    QHash<quint64, FrameRecord> m_pendingProjectionByKey;
     LivePathTelemetry m_livePathTelemetry;
     DrainEventTelemetry m_eventTelemetry;
     QElapsedTimer m_statusClock;
     QElapsedTimer m_statusSignalClock;
-    QElapsedTimer m_projectionSnapshotClock;
     LiveProjectionRuntime::Status m_pendingProjectionStatus;
     LiveTruthRuntime::Status m_pendingTruthStatus;
     TypedIngressRuntime::StatusSnapshot m_pendingTypedStatus;
-    quint64 m_projectionSnapshotEmitted = 0;
-    quint64 m_projectionSnapshotCoalesced = 0;
-    quint64 m_projectionSnapshotDropped = 0;
     bool m_pumpScheduled = false;
     bool m_statusSignalScheduled = false;
     bool m_hasPendingProjectionStatus = false;
     bool m_hasPendingTruthStatus = false;
     bool m_hasPendingTypedStatus = false;
-    bool m_projectionSnapshotScheduled = false;
-    bool m_projectionSnapshotInFlight = false;
     qint64 m_handshakeElapsedMs = -1;
 };
 

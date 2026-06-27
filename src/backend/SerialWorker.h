@@ -4,6 +4,7 @@
 #include "analysis/AnalysisWorkerRuntime.h"
 #include "control/ControlCycleRuntime.h"
 #include "transport/DrainByteQueue.h"
+#include "transport/CoreDataBatches.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LegacyIngressRuntime.h"
 #include "transport/LivePathTelemetry.h"
@@ -80,7 +81,6 @@ signals:
                                       quint64 writeMaxUs,
                                       quint64 writeFailures,
                                       const QString& lastError);
-    void truthFramesReceived(const FrameRecordList& frames);
     void statsReceived(const StatsRecord& st);
     void typedRecordsReceived(const TypedRecordList& records);
     void typedProjectionStatusChanged(quint64 observedCanRxFrames,
@@ -165,11 +165,11 @@ private:
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
     void queueProjectedFrames(const FrameRecordList& frames);
     void flushQueuedProjectionFrames(bool force = false);
+    void queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch);
     void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushQueuedRawLedgerRecords(bool force = false);
     void flushRawLedgerHandoffSync();
-    void queueTruthFrames(const TypedRecordList& records);
-    void flushQueuedTruthFrames(bool force = false);
+    void queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch);
     void queueAnalysisFrames(const FrameRecordList& frames);
     void scheduleAnalysisDispatch();
     void dispatchAnalysisFrames();
@@ -238,7 +238,6 @@ private:
     QElapsedTimer m_drainStatusClock;
     int m_projectionFlushTimerId = 0;
     int m_rawLedgerFlushTimerId = 0;
-    int m_truthFlushTimerId = 0;
     quint64 m_projectionQueueSampledFrames = 0;
     quint64 m_projectionQueueDroppedFrames = 0;
     CanMonitorTransport::LiveProjectionRuntime::Status m_lastProjectionStatus;

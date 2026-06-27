@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/CoreMaterializedViewStore.h"
+#include "transport/CoreDataBatches.h"
 #include "transport/LiveProjectionRuntime.h"
 #include "transport/LiveTruthRuntime.h"
 #include "transport/TypedEvidencePipelineRuntime.h"
@@ -17,8 +18,7 @@ public:
     struct Options {
         bool captureRecords = false;
         bool emitCanRxFrames = false;
-        bool emitProjectionFrames = true;
-        bool emitTruthFrames = false;
+        bool consumeTruth = true;
     };
 
     struct Result {
@@ -27,10 +27,8 @@ public:
         quint64 capabilityBytes = 0;
         QStringList errors;
 
-        FrameRecordList canRxFrames;
-        FrameRecordList projectedFrames;
-        FrameRecordList truthFrames;
-        TypedRecordList criticalRecords;
+        AnalysisFrameBatch analysisFrames;
+        RawLedgerFrameBatch rawLedgerFrames;
 
         bool typedStatusDue = false;
         TypedIngressRuntime::StatusSnapshot typedStatus;
@@ -67,12 +65,12 @@ public:
     CanMonitorCore::ViewQueryResult queryView(const CanMonitorCore::ViewQuery& query) const;
     QVector<CanMonitorCore::ViewChanged> viewChanges() const;
 
-    FrameRecordList flushTruth(bool force);
     LiveTruthRuntime::Status truthStatus() const { return m_liveTruth.status(); }
 
 private:
     void appendCanRxFrames(const TypedRecord& record, FrameRecordList& out) const;
     void ingestBatch(TypedRecordList&& batch, Result& result);
+    void ingestCriticalRecord(const TypedRecord& record, Result& result);
     void updateLiveLatestView(const FrameRecordList& frames, Result& result);
     void updateStatusViews(const Result& ingestResult, Result& out);
     static quint64 liveLatestKeyForFrame(const FrameRecord& frame);
@@ -82,6 +80,13 @@ private:
     LiveTruthRuntime m_liveTruth;
     CanMonitorCore::CoreMaterializedViewStore m_viewStore;
     QHash<quint64, FrameRecord> m_liveLatestByKey;
+    QJsonObject m_coreEvidenceTransportPayload;
+    QJsonObject m_coreEvidenceCheapCounts;
+    CanMonitorCore::CoreViewSeverity m_coreEvidenceSeverity = CanMonitorCore::CoreViewSeverity::Ok;
+    quint64 m_boardEventTotal = 0;
+    quint64 m_mcp2515EventTotal = 0;
+    quint64 m_boardEventFatalTotal = 0;
+    QHash<quint16, quint64> m_mcp2515Details;
     quint64 m_liveLatestDropped = 0;
     QSharedPointer<TypedRecordHandoffQueue> m_captureQueue;
     Options m_options;

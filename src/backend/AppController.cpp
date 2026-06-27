@@ -147,22 +147,18 @@ bool replaceArgValue(QStringList& args, const QString& option, const QString& va
 }
 
 bool coreProcessModeEnabled() {
-    const QString value = qEnvironmentVariable("CAN_MONITOR_USE_CORE_PROCESS").trimmed().toLower();
-    const QString disabled = qEnvironmentVariable("CAN_MONITOR_DISABLE_CORE_PROCESS").trimmed().toLower();
-    const auto isTrue = [](const QString& text) {
-        return text == QStringLiteral("1") ||
-               text == QStringLiteral("true") ||
-               text == QStringLiteral("yes") ||
-               text == QStringLiteral("on");
-    };
-    const auto isFalse = [](const QString& text) {
-        return text == QStringLiteral("0") ||
-               text == QStringLiteral("false") ||
-               text == QStringLiteral("no") ||
-               text == QStringLiteral("off");
-    };
-    if (isTrue(disabled) || isFalse(value)) return false;
     return true;
+}
+
+QString normalizeTransportModeKey(const QString& mode) {
+    const QString key = mode.trimmed().toLower();
+    if (key == QStringLiteral("legacy") ||
+        key == QStringLiteral("legacy20") ||
+        key == QStringLiteral("legacy-20b") ||
+        key == QStringLiteral("20b")) {
+        return QStringLiteral("legacy20");
+    }
+    return QStringLiteral("typed");
 }
 
 QString coreProcessExecutablePath() {
@@ -2064,7 +2060,7 @@ QJsonObject AppController::drainEventTraceObject() {
     return out;
 }
 
-void AppController::applyCoreTransportSummaryPayload(const QJsonObject& payload) {
+void AppController::applyCoreTransportSummaryView(const QJsonObject& payload) {
     m_transportSession.updateCoreTransportSummary(payload);
     const quint64 nowWallMs = quint64(QDateTime::currentMSecsSinceEpoch());
     const bool previousBoardAlive = m_evidenceRuntime.boardAlive();
@@ -2297,14 +2293,6 @@ void AppController::dispatchCoreViewRequest(const CanMonitorCore::CoreViewClient
         m_coreProcessClient.requestView(request);
         return;
     }
-    if (!m_worker) return;
-    QMetaObject::invokeMethod(m_worker,
-                              [worker = QPointer<SerialWorker>(m_worker), request]() {
-                                  if (worker) {
-                                      worker->requestCoreView(request.viewName, request.sinceSeq, request.limit, request.requestId);
-                                  }
-                              },
-                              Qt::QueuedConnection);
 }
 
 void AppController::handleCoreViewChanged(const QJsonObject& change) {
@@ -2326,7 +2314,7 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("transport_summary")) {
         const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
-        applyCoreTransportSummaryPayload(payload);
+        applyCoreTransportSummaryView(payload);
         const QString transport = payload.value(QStringLiteral("transport")).toString();
         const bool serialConnected = transport == QStringLiteral("connected");
         if (m_connected != serialConnected) {
@@ -2913,7 +2901,6 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         processControlPatternStep();
     });
 
-    m_worker = m_transportRuntime.createWorker();
     connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::stateChanged, this, [this](bool active, const QString& message) {
         if (!m_coreProcessMode) return;
         if (m_coreProcessClient.isIpcConnected()) {
@@ -2999,689 +2986,6 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                     requestLogStateRefresh(stateChanged);
                 }
             });
-    connect(m_worker, &SerialWorker::stateChanged, this, [this](bool ok, const QString& msg) {
-        if (m_coreProcessMode) return;
-        const bool previousReplayActive = replayAnalysisActive();
-        m_connected = ok;
-        m_evidenceRuntime.setSerialOpen(ok);
-        m_transportSession.setConnected(ok);
-        if (ok) {
-            m_coreViewClient.reset();
-            clearPendingRawLedgerUiCommit();
-            m_rawFrameTable.clear();
-            startLiveRuntimeTraceSession(makeLiveRuntimeTraceDirectory(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"))),
-                                         QStringLiteral("serial_connected"),
-                                         true);
-        }
-        updateTransportDiagnostics();
-        if (ok) m_evidenceRuntime.advanceWallTimeMs(quint64(QDateTime::currentMSecsSinceEpoch()));
-        if (!ok) {
-            m_coreViewClient.reset();
-            stopLiveRuntimeTraceSession(QStringLiteral("serial_disconnected"));
-            m_controlRuntime.setArmed(false);
-            m_controlRuntime.setTestRunning(false);
-            m_controlKeepaliveTimer.stop();
-            m_controlPatternTimer.stop();
-            m_controlPatternSteps.clear();
-            m_controlPatternIndex = 0;
-            m_controlRuntime.clearBurstWallMs();
-            refreshControlStatus(QStringLiteral("Control disarmed on disconnect"));
-            m_lastStats = StatsRecord{};
-            m_lastTypedHealthMonoUs = 0;
-            m_lastTypedHealthCanRxTotal = 0;
-            m_lastTypedHealthSerialTxTotal = 0;
-            m_pendingLiveFrames.clear();
-            m_pendingLiveFrameOffset = 0;
-            m_liveFlushTimer.stop();
-            m_lastLiveFrameWallMs = -1;
-            m_lastLiveStatsWallMs = -1;
-            m_liveSampledViewDrops = 0;
-            m_liveProjectionObservedFrames = 0;
-            m_liveProjectionProjectedFrames = 0;
-            m_liveProjectionWorkerSampledFrames = 0;
-            m_liveProjectionWorkerDroppedFrames = 0;
-            m_liveProjectionObservedControlEvidenceRecords = 0;
-            m_liveProjectionProjectedControlEvidenceRecords = 0;
-            m_liveProjectionSampledControlEvidenceRecords = 0;
-            m_liveProjectionDroppedFrames = 0;
-            m_liveProjectionFlushBudgetHits = 0;
-            m_liveProjectionMaxBacklog = 0;
-            m_liveProjectionLastFlushMs = 0;
-            m_lastLiveRuntimeLogWallMs = 0;
-            m_lastRoutineControlWriteNotifyWallMs = 0;
-            m_lastHostTxQueueNotifyWallMs = 0;
-            clearGraphHistory(QStringLiteral("live"));
-            if (m_logRecordingActive || m_logStopping) {
-                m_logRecordingActive = false;
-                m_logStopping = false;
-                if (!m_logTypedSession && !m_logTempPath.isEmpty()) m_logPendingSave = true;
-                requestLogStateRefresh(true);
-            }
-        }
-        emit connectedChanged();
-        requestTransportDiagnosticsRefresh(true);
-        emit typedEvidenceChanged();
-        emit controlStateChanged();
-        requestLiveStatsRefresh(true);
-        handleAnalysisSourceMaybeChanged(previousReplayActive);
-        requestGraphRefresh(true);
-        setStatus(msg);
-    });
-    connect(m_worker, &SerialWorker::errorOccurred, this, [this](const QString& msg) {
-        setStatus(msg);
-    });
-    connect(m_worker, &SerialWorker::loggingStateChanged, this, [this](bool active, const QString& path) {
-        m_logRecordingActive = active;
-        if (active) {
-            if (!path.isEmpty()) m_logTempPath = path;
-            if (m_logTypedSession && !m_logTempPath.isEmpty()) {
-                startLiveRuntimeTraceSession(m_logTempPath, QStringLiteral("typed_logging_active"), false);
-            }
-            m_logStopping = false;
-            m_logSaving = false;
-            m_logPendingSave = false;
-            setStatus(QStringLiteral("로그 기록 중 · 임시 버퍼 적재 중"));
-        } else {
-            if (m_logTypedSession && !m_logTempPath.isEmpty()) {
-                stopLiveRuntimeTraceSession(QStringLiteral("typed_logging_inactive"));
-            }
-            m_logStopping = false;
-            if (!m_logTempPath.isEmpty() && (QFileInfo::exists(m_logTempPath) || m_logRecordedFrameCount > 0)) {
-                m_logPendingSave = true;
-                setStatus(QStringLiteral("로그 종료 완료 · 저장 위치 선택"));
-            }
-        }
-        requestLogStateRefresh(true);
-    });
-    connect(m_worker, &SerialWorker::loggingProgress, this, [this](quint64 bytesWritten, quint64 frameCount) {
-        m_logRecordedBytes = bytesWritten;
-        m_logRecordedFrameCount = frameCount;
-        requestLogStateRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::statsReceived, this, [this](const StatsRecord& st) {
-        m_lastStats = st;
-        m_lastLiveStatsWallMs = QDateTime::currentMSecsSinceEpoch();
-        ensureTimeAnchorForFrame(QStringLiteral("live"), st.tExtUs);
-        if (st.tExtUs > m_liveLatestUs) m_liveLatestUs = st.tExtUs;
-        syncLiveBusHealthAlarms();
-        requestLiveStatsRefresh(false);
-        requestDerivedSummaryRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::framesReceived, this, [this](const FrameRecordList& frames) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::FramesReceived,
-                      quint64(frames.size()),
-                      quint64(frames.size()) * quint64(sizeof(FrameRecord)));
-        if (frames.isEmpty()) return;
-        ++m_livePathTelemetry.appFramesReceivedCalls;
-        m_livePathTelemetry.appFramesReceivedFrames += quint64(frames.size());
-        ++m_livePathTelemetry.framesReceivedSlotSeq;
-        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        m_livePathTelemetry.framesReceivedLastSlotWallMs = m_lastLiveFrameWallMs;
-        CanMonitorPerf::ScopedProbe probe("app.projection_frames_received", frames.size(), 3000);
-        appendPendingLiveFrames(frames);
-        if (!m_liveFlushTimer.isActive()) {
-            m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
-        }
-    });
-    connect(m_worker, &SerialWorker::livePathTraceChanged, this, [this](const QJsonObject& trace) {
-        m_workerLivePathTrace = trace;
-        m_transportSession.updateLivePathTrace(livePathTraceObject());
-        requestTransportDiagnosticsRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::drainEventTraceChanged, this, [this](const QJsonObject& trace) {
-        m_workerDrainEventTrace = trace;
-        m_transportSession.updateDrainEventTrace(drainEventTraceObject());
-        requestTransportDiagnosticsRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::coreViewChanged, this, [this](const QJsonObject& change) {
-        handleCoreViewChanged(change);
-    });
-    connect(m_worker, &SerialWorker::coreViewSnapshotReady, this, [this](quint64 requestId,
-                                                                          bool changed,
-                                                                          const QJsonObject& snapshot,
-                                                                          const QJsonObject& change) {
-        handleCoreViewSnapshotReady(requestId, changed, snapshot, change);
-    });
-    connect(m_worker, &SerialWorker::rawFramesReceived, this, [this](const FrameRecordList& frames) {
-        if (frames.isEmpty()) return;
-        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        if (m_transportModeKey == QStringLiteral("typed")) {
-            m_liveProjectionDroppedFrames += quint64(frames.size());
-            requestLiveStatsRefresh(false);
-            return;
-        }
-        CanMonitorPerf::ScopedProbe probe("app.raw_frames_append", frames.size(), 3000);
-        m_rawFrameTable.appendFrames(frames);
-        requestLiveStatsRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::rawLedgerReset, this, [this](bool ok, const QString& path, const QString& error) {
-        clearPendingRawLedgerUiCommit();
-        m_rawFrameTable.resetLedgerState(path, ok ? QString() : error);
-        requestLiveStatsRefresh(true);
-    });
-    connect(m_worker, &SerialWorker::rawLedgerBatchCommitted, this,
-            [this](const FrameRecordList& frames,
-                   quint64 firstSeq,
-                   quint64 lastSeq,
-                   quint64 totalRows,
-                   quint64 segmentBytes,
-                   const QString& path) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::RawLedgerBatchCommitted,
-                      quint64(frames.size()),
-                      quint64(frames.size()) * quint64(sizeof(FrameRecord)));
-        if (frames.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_commit", frames.size(), 1500);
-        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        queueRawLedgerUiCommit(frames, firstSeq, lastSeq, totalRows, segmentBytes, path);
-    });
-    connect(m_worker, &SerialWorker::rawLedgerWriterStatusChanged, this,
-            [this](quint64 queueBytes,
-                   quint64 maxQueueBytes,
-                   quint64 overrunBytes,
-                   quint64 writeMaxUs,
-                   quint64 writeFailures,
-                   const QString& lastError) {
-        m_rawFrameTable.updateWriterStatus(queueBytes,
-                                           maxQueueBytes,
-                                           overrunBytes,
-                                           writeMaxUs,
-                                           writeFailures,
-                                           lastError);
-        requestLiveStatsRefresh(overrunBytes > 0 || writeFailures > 0);
-    });
-    connect(m_worker, &SerialWorker::truthFramesReceived, this, [this](const FrameRecordList& frames) {
-        if (frames.isEmpty()) return;
-        m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-        if (m_transportModeKey == QStringLiteral("typed")) {
-            m_liveProjectionDroppedFrames += quint64(frames.size());
-            requestLiveStatsRefresh(false);
-            return;
-        }
-        CanMonitorPerf::ScopedProbe probe("app.truth_display_state", frames.size(), 2500);
-        const QString liveSource = QStringLiteral("live");
-        const bool graphIngestActive = m_graphPageActive && !m_graphSelectedKeys.isEmpty() && !m_graphSelectedIds.isEmpty();
-        if (m_liveBaseFrameUs == 0 && !frames.isEmpty()) {
-            ensureTimeAnchorForFrame(liveSource, frames.front().tExtUs);
-        }
-
-        QHash<AnalysisStateKey, FrameRecord> latestByState;
-        latestByState.reserve(frames.size());
-        QHash<quint64, FrameRecord> latestGraphByKey;
-        if (graphIngestActive) latestGraphByKey.reserve(std::min<int>(int(frames.size()), kLiveTruthMaxGraphUpdates));
-
-        for (const FrameRecord& frame : frames) {
-            if (frame.tExtUs > m_liveLatestUs) m_liveLatestUs = frame.tExtUs;
-            const AnalysisStateKey stateKey = analysisStateKeyForFrame(frame);
-            auto stateIt = latestByState.find(stateKey);
-            if (stateIt == latestByState.end()) {
-                latestByState.insert(stateKey, frame);
-            } else if (frame.tExtUs >= stateIt.value().tExtUs) {
-                stateIt.value() = frame;
-            }
-
-            if (graphIngestActive && m_graphSelectedIds.contains(frame.canId)) {
-                const quint64 graphKey = liveProjectionFrameKey(frame);
-                auto graphIt = latestGraphByKey.find(graphKey);
-                if (graphIt == latestGraphByKey.end()) {
-                    latestGraphByKey.insert(graphKey, frame);
-                } else if (frame.tExtUs >= graphIt.value().tExtUs) {
-                    graphIt.value() = frame;
-                }
-            }
-        }
-
-        FrameRecordList displayFrames;
-        displayFrames.reserve(latestByState.size());
-        for (auto it = latestByState.cbegin(); it != latestByState.cend(); ++it) displayFrames.push_back(it.value());
-        std::sort(displayFrames.begin(), displayFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-            if (a.tExtUs != b.tExtUs) return a.tExtUs > b.tExtUs;
-            if (a.bus != b.bus) return a.bus < b.bus;
-            return a.canId < b.canId;
-        });
-
-        if (displayFrames.size() > kLiveTruthMaxDisplayStateUpdates) {
-            m_liveProjectionDroppedFrames += quint64(displayFrames.size() - kLiveTruthMaxDisplayStateUpdates);
-            displayFrames.resize(kLiveTruthMaxDisplayStateUpdates);
-        }
-
-        bool selectedValueUpdated = false;
-        for (const FrameRecord& frame : displayFrames) {
-            const AnalysisStateKey stateKey = analysisStateKeyForFrame(frame);
-            IdState& state = m_liveStates[stateKey];
-            state.seen = true;
-            state.lastFrame = frame;
-            state.lastSource = liveSource;
-            state.lastLocalSeenMs = qint64(frame.tExtUs / 1000ULL);
-            state.lastBoardSeenUs = frame.tExtUs;
-            if (m_hasSelectedValueId && m_selectedValueKey == stateKey) {
-                m_valueDetailsDirty = true;
-                selectedValueUpdated = true;
-            }
-        }
-
-        if (m_hasSelectedValueId && !selectedValueUpdated) {
-            const auto selectedIt = latestByState.constFind(m_selectedValueKey);
-            if (selectedIt != latestByState.cend()) {
-                IdState& state = m_liveStates[m_selectedValueKey];
-                state.seen = true;
-                state.lastFrame = selectedIt.value();
-                state.lastSource = liveSource;
-                state.lastLocalSeenMs = qint64(selectedIt.value().tExtUs / 1000ULL);
-                state.lastBoardSeenUs = selectedIt.value().tExtUs;
-                m_valueDetailsDirty = true;
-            }
-        }
-
-        if (graphIngestActive && !latestGraphByKey.isEmpty()) {
-            FrameRecordList graphFrames;
-            graphFrames.reserve(latestGraphByKey.size());
-            for (auto it = latestGraphByKey.cbegin(); it != latestGraphByKey.cend(); ++it) graphFrames.push_back(it.value());
-            std::sort(graphFrames.begin(), graphFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-                if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
-                if (a.bus != b.bus) return a.bus < b.bus;
-                return a.canId < b.canId;
-            });
-            if (graphFrames.size() > kLiveTruthMaxGraphUpdates) {
-                m_liveProjectionDroppedFrames += quint64(graphFrames.size() - kLiveTruthMaxGraphUpdates);
-                graphFrames.erase(graphFrames.begin(), graphFrames.end() - kLiveTruthMaxGraphUpdates);
-            }
-            for (const FrameRecord& frame : graphFrames) appendGraphSamples(frame, liveSource);
-        }
-        requestLiveStatsRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::typedRecordsReceived, this, [this](const TypedRecordList& records) {
-        if (records.isEmpty()) return;
-        CanMonitorPerf::ScopedProbe probe("app.typed_evidence_records", records.size(), 4000);
-        const bool previousBoardAlive = m_evidenceRuntime.boardAlive();
-        const bool previousControlCapable = m_evidenceRuntime.controlCapable();
-        const quint64 nowWallMs = quint64(QDateTime::currentMSecsSinceEpoch());
-        for (const auto& record : records) {
-            ++m_typedRecordCount;
-            m_typedTypeCounts[record.header.recordType] += 1;
-            m_typedLastMonoUs = typedRecordMonoUs(record);
-            m_typedLastRecordType = typedRecordTypeName(record.header.recordType);
-
-            const TypedRecordType recordType = record.header.type();
-            if (recordType == TypedRecordType::CanRxRaw || recordType == TypedRecordType::CanTxRaw) {
-                const auto can = decodeTypedCanRaw(record);
-                if (!can) continue;
-                const QString canText = QStringLiteral("%1 BUS %2 %3 DLC %4")
-                    .arg(can->txAudit ? QStringLiteral("TX") : QStringLiteral("RX"))
-                    .arg(can->bus)
-                    .arg(idText(can->canId))
-                    .arg(can->dlc);
-                if (can->txAudit) {
-                    m_typedCanTxByBus[can->bus] += 1;
-                    m_typedLastCanTxSummary = canText;
-                    if (isControlCommandCanId(can->canId)) {
-                        const quint32 matchedCommandId = m_controlAudit.takeAcceptedCommandId(can->canId);
-                        m_controlAudit.noteTxAudit(matchedCommandId > 0);
-                        const bool auditUiDue = m_controlAudit.txAuditUiDue(matchedCommandId == 0, qint64(nowWallMs));
-                        if (auditUiDue) {
-                            const QString auditSummary = QStringLiteral("AUDIT %1 %2")
-                                .arg(canText, hexBytes(can->data, can->dlc));
-                            appendControlEvidenceEvent(QStringLiteral("CAN_TX_RAW"),
-                                                       matchedCommandId > 0 ? QStringLiteral("ok") : QStringLiteral("warn"),
-                                                       matchedCommandId > 0
-                                                           ? QStringLiteral("실제 CAN 송신 audit 확인")
-                                                           : QStringLiteral("ACK 매칭 없는 CAN_TX_RAW audit"),
-                                                       auditSummary,
-                                                       matchedCommandId,
-                                                       can->canId,
-                                                       can->bus);
-                            emit controlStateChanged();
-                        }
-                    }
-                } else {
-                    m_typedCanRxByBus[can->bus] += 1;
-                    m_typedLastCanRxSummary = canText;
-                    observeBusRoleFingerprint(can->bus, can->canId);
-                    if (isControlCommandCanId(can->canId)) {
-                        if (m_controlAudit.noteFeedbackIfDue(can->canId, qint64(nowWallMs))) {
-                            appendControlEvidenceEvent(QStringLiteral("CAN_RX_FEEDBACK"),
-                                                       QStringLiteral("info"),
-                                                       QStringLiteral("Control CAN_RX observed; feedback/echo candidate only"),
-                                                       QStringLiteral("%1 %2").arg(canText, hexBytes(can->data, can->dlc)),
-                                                       0,
-                                                       can->canId,
-                                                       can->bus);
-                        }
-                    }
-                }
-            } else if (recordType == TypedRecordType::ControlAck) {
-                const auto ack = decodeTypedControlAck(record);
-                if (!ack) continue;
-                if (ack->status != 0 && isControlCommandCanId(ack->targetCanId)) {
-                    m_controlAudit.rememberAcceptedAck(ack->targetCanId, ack->commandId);
-                }
-                m_controlAudit.noteAck(ack->status != 0);
-                const bool ackUiDue = m_controlAudit.ackUiDue(ack->status == 0, qint64(nowWallMs));
-                if (ackUiDue) {
-                    const QString ackSummary = QStringLiteral("ACK #%1 %2 reason %3 BUS %4 %5 %6%7")
-                        .arg(ack->commandId)
-                        .arg(controlAckStatusText(ack->status))
-                        .arg(controlAckReasonText(ack->reason))
-                        .arg(ack->targetBus)
-                        .arg(idText(ack->targetCanId))
-                        .arg(controlAckDlcText(ack->targetDlcFlags))
-                        .arg(controlAckEvidenceHint(ack->status, ack->reason));
-                    appendControlEvidenceEvent(QStringLiteral("CONTROL_ACK"),
-                                               ack->status == 0 ? QStringLiteral("error") : QStringLiteral("info"),
-                                               ack->status == 0 ? QStringLiteral("보드 요청 거부") : QStringLiteral("보드 요청 수락"),
-                                               ackSummary,
-                                               ack->commandId,
-                                               ack->targetCanId,
-                                               ack->targetBus);
-                    emit controlStateChanged();
-                }
-            } else if (recordType == TypedRecordType::BoardEvent) {
-                const auto boardEvent = decodeTypedBoardEvent(record);
-                if (boardEvent) {
-                    m_transportSession.noteBoardEvent(boardEvent->code, boardEvent->detail, boardEvent->counter, boardEvent->monoUs);
-                    requestLiveStatsRefresh(false);
-                }
-                if (boardEvent && (boardEvent->code == 12 || boardEvent->code == 17)) {
-                    const QString detailHex = QStringLiteral("0x%1")
-                        .arg(boardEvent->detail, 4, 16, QLatin1Char('0'))
-                        .toUpper();
-                    const QString auditSummary = QStringLiteral("NO CAN_TX_RAW: %1 detail 0x%2 counter %3")
-                        .arg(boardEventCodeText(boardEvent->code))
-                        .arg(detailHex.mid(2))
-                        .arg(boardEvent->counter);
-                    appendControlEvidenceEvent(QStringLiteral("BOARD_EVENT"),
-                                               QStringLiteral("error"),
-                                               QStringLiteral("Actual CAN TX failed before audit"),
-                                               auditSummary);
-                    refreshControlStatus(QStringLiteral("Control TX failed: %1").arg(boardEventCodeText(boardEvent->code)));
-                }
-            } else if (recordType == TypedRecordType::Capability) {
-                const auto capability = decodeTypedCapability(record);
-                if (!capability) continue;
-                m_evidenceRuntime.ingestCapability(*capability, nowWallMs);
-                const QString previousBusSummary = m_controlBusSummary;
-                const bool previousBusAllowed = controlTargetBusAllowed();
-                const int previousTargetBus = controlTargetBus();
-                updateControlBusCapability(*capability);
-                if (m_controlBusSummary != previousBusSummary ||
-                    previousBusAllowed != controlTargetBusAllowed() ||
-                    previousTargetBus != controlTargetBus()) {
-                    emit controlStateChanged();
-                }
-            } else if (recordType == TypedRecordType::BoardHealth) {
-                const auto health = decodeTypedBoardHealth(record);
-                if (!health) continue;
-                m_evidenceRuntime.ingestBoardHealth(*health, nowWallMs);
-
-                StatsRecord typedStats = m_lastStats;
-                typedStats.tExtUs = health->monoUs;
-                typedStats.droppedTotal = health->canDroppedTotal;
-                typedStats.fifoOverflowTotal = health->canFifoOverflowTotal;
-                if (m_lastTypedHealthMonoUs > 0 && health->monoUs > m_lastTypedHealthMonoUs) {
-                    const quint64 elapsedUs = health->monoUs - m_lastTypedHealthMonoUs;
-                    const quint64 rxDelta = u32CounterDelta(health->canRxTotal, m_lastTypedHealthCanRxTotal);
-                    const quint64 txDelta = u32CounterDelta(health->serialRecordTxTotal, m_lastTypedHealthSerialTxTotal);
-                    typedStats.rxFps1s = boundedFpsFromDelta(quint32(std::min<quint64>(rxDelta, std::numeric_limits<quint32>::max())), elapsedUs);
-                    typedStats.txFps1s = boundedFpsFromDelta(quint32(std::min<quint64>(txDelta, std::numeric_limits<quint32>::max())), elapsedUs);
-                }
-                const quint64 streamRxCount = m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw));
-                if (!m_typedRxHealthParityAnchored) {
-                    m_typedRxHealthParityAnchored = true;
-                    m_typedRxHealthAnchorBoardTotal = health->canRxTotal;
-                    m_typedRxHealthAnchorStreamCount = streamRxCount;
-                    m_typedRxHealthBoardDelta = 0;
-                    m_typedRxHealthStreamDelta = 0;
-                    m_typedRxHealthMissing = 0;
-                } else {
-                    m_typedRxHealthBoardDelta = u32CounterDelta(health->canRxTotal, m_typedRxHealthAnchorBoardTotal);
-                    m_typedRxHealthStreamDelta = streamRxCount >= m_typedRxHealthAnchorStreamCount
-                        ? (streamRxCount - m_typedRxHealthAnchorStreamCount)
-                        : 0;
-                    m_typedRxHealthMissing = qint64(m_typedRxHealthBoardDelta) - qint64(m_typedRxHealthStreamDelta);
-                }
-                m_lastStats = typedStats;
-                m_lastTypedHealthMonoUs = health->monoUs;
-                m_lastTypedHealthCanRxTotal = health->canRxTotal;
-                m_lastTypedHealthSerialTxTotal = health->serialRecordTxTotal;
-                m_lastTypedHealthHasUplinkCounters = health->hasExtendedTransportCounters;
-                m_lastTypedHealthUplinkCounters = {};
-                if (health->hasExtendedTransportCounters) {
-                    m_lastTypedHealthUplinkCounters.present = true;
-                    m_lastTypedHealthUplinkCounters.serialEnqueueFailTotal = health->serialEnqueueFailTotal;
-                    m_lastTypedHealthUplinkCounters.serialRingClearTotal = health->serialRingClearTotal;
-                    m_lastTypedHealthUplinkCounters.serialRingClearedBytesTotal = health->serialRingClearedBytesTotal;
-                    m_lastTypedHealthUplinkCounters.serialBackpressureTotal = health->serialBackpressureTotal;
-                    m_lastTypedHealthUplinkCounters.serialTxHighWaterBytes = health->serialTxHighWaterBytes;
-                    m_lastTypedHealthUplinkCounters.sharedCanQueueHighWater = health->sharedCanQueueHighWater;
-                    m_lastTypedHealthUplinkCounters.mcpDrainBudgetHitTotal = health->mcpDrainBudgetHitTotal;
-                    m_lastTypedHealthUplinkCounters.canSegmentEnqueueFailTotal = health->canSegmentEnqueueFailTotal;
-                    m_lastTypedHealthUplinkCounters.hasPoolCounters = health->hasUplinkPoolCounters;
-                    m_lastTypedHealthUplinkCounters.uplinkLargePoolUsedBlocks = health->uplinkLargePoolUsedBlocks;
-                    m_lastTypedHealthUplinkCounters.uplinkLargePoolCapacityBlocks = health->uplinkLargePoolCapacityBlocks;
-                    m_lastTypedHealthUplinkCounters.uplinkLargePoolCanReserveUsedBlocks = health->uplinkLargePoolCanReserveUsedBlocks;
-                    m_lastTypedHealthUplinkCounters.canTruthDescriptorQueueHighWater = health->canTruthDescriptorQueueHighWater;
-                    m_lastTypedHealthUplinkCounters.uplinkPoolAllocFailTotal = health->uplinkPoolAllocFailTotal;
-                    m_lastTypedHealthUplinkCounters.canTruthPoolAllocFailTotal = health->canTruthPoolAllocFailTotal;
-                    m_lastTypedHealthUplinkCounters.uplinkDescriptorHighWaterTotal = health->uplinkDescriptorHighWaterTotal;
-                    m_lastTypedHealthUplinkCounters.diagnosticSuppressedTotal = health->diagnosticSuppressedTotal;
-                }
-                m_lastLiveStatsWallMs = QDateTime::currentMSecsSinceEpoch();
-                ensureTimeAnchorForFrame(QStringLiteral("live"), health->monoUs);
-                if (health->monoUs > m_liveLatestUs) m_liveLatestUs = health->monoUs;
-                syncLiveBusHealthAlarms();
-                requestLiveStatsRefresh(false);
-            }
-        }
-        const bool boardAliveChanged = previousBoardAlive != m_evidenceRuntime.boardAlive();
-        const bool controlCapableChanged = previousControlCapable != m_evidenceRuntime.controlCapable();
-        if (m_controlRuntime.armed() && !m_evidenceRuntime.controlCapable()) {
-            m_controlRuntime.setArmed(false);
-            m_controlKeepaliveTimer.stop();
-            refreshControlStatus(QStringLiteral("Control disarmed: %1").arg(m_evidenceRuntime.reason()));
-        }
-        const bool typedUiDue = m_lastTypedEvidenceNotifyWallMs <= 0
-            || (qint64(nowWallMs) - m_lastTypedEvidenceNotifyWallMs) >= kTypedEvidenceUiMinIntervalMs;
-        if (boardAliveChanged || controlCapableChanged || typedUiDue) {
-            m_lastTypedEvidenceNotifyWallMs = qint64(nowWallMs);
-            emit typedEvidenceChanged();
-        }
-        if (boardAliveChanged || controlCapableChanged) emit controlStateChanged();
-        requestDerivedSummaryRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::typedProjectionStatusChanged, this, [this](quint64 observedCanRxFrames,
-                                                                                 quint64 projectedCanRxFrames,
-                                                                                 quint64 sampledCanRxFrames,
-                                                                                 quint64 workerDroppedCanRxFrames,
-                                                                                 quint64 observedBus0CanRxFrames,
-                                                                                 quint64 observedBus1CanRxFrames,
-                                                                                 quint64 observedControlEvidenceRecords,
-                                                                                 quint64 projectedControlEvidenceRecords,
-                                                                                 quint64 sampledControlEvidenceRecords) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedProjectionStatusChanged, 1, 96);
-        ++m_drainEventTelemetry.typedProjectionStatusReceive;
-        m_typedTypeCounts[static_cast<quint8>(TypedRecordType::CanRxRaw)] =
-            std::max(m_typedTypeCounts.value(static_cast<quint8>(TypedRecordType::CanRxRaw)), observedCanRxFrames);
-        m_typedCanRxByBus[0] = std::max(m_typedCanRxByBus.value(0), observedBus0CanRxFrames);
-        m_typedCanRxByBus[1] = std::max(m_typedCanRxByBus.value(1), observedBus1CanRxFrames);
-        m_liveProjectionObservedFrames = observedCanRxFrames;
-        m_liveProjectionProjectedFrames = projectedCanRxFrames;
-        m_liveProjectionWorkerSampledFrames = sampledCanRxFrames;
-        m_liveProjectionWorkerDroppedFrames = workerDroppedCanRxFrames;
-        m_liveProjectionObservedControlEvidenceRecords = observedControlEvidenceRecords;
-        m_liveProjectionProjectedControlEvidenceRecords = projectedControlEvidenceRecords;
-        m_liveProjectionSampledControlEvidenceRecords = sampledControlEvidenceRecords;
-        requestLiveStatsRefresh(false);
-        emit typedEvidenceChanged();
-    });
-    connect(m_worker, &SerialWorker::typedTruthStatusChanged, this, [this](quint64 observedCanRxFrames,
-                                                                            quint64 emittedTruthFrames,
-                                                                            quint64 coalescedTruthUpdates,
-                                                                            quint64 observedBus0CanRxFrames,
-                                                                            quint64 observedBus1CanRxFrames,
-                                                                            quint64 flushCount,
-                                                                            int pendingKeys,
-                                                                            int maxPendingKeys,
-                                                                            int lastInputRecords,
-                                                                            int lastOutputFrames,
-                                                                            int lastFlushMs,
-                                                                            quint64 truthLoss) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
-        ++m_drainEventTelemetry.typedTruthStatusReceive;
-        m_transportSession.updateLiveTruth(observedCanRxFrames,
-                                           emittedTruthFrames,
-                                           coalescedTruthUpdates,
-                                           observedBus0CanRxFrames,
-                                           observedBus1CanRxFrames,
-                                           flushCount,
-                                           pendingKeys,
-                                           maxPendingKeys,
-                                           lastInputRecords,
-                                           lastOutputFrames,
-                                           lastFlushMs,
-                                           truthLoss);
-        requestTransportDiagnosticsRefresh(false);
-        requestDerivedSummaryRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::analysisRuntimeSnapshotChanged, this, [this](const QString& source,
-                                                                                  const QString& level,
-                                                                                  const QString& summary,
-                                                                                  const QVariantList& diagnostics,
-                                                                                  const QVariantList& timingRows,
-                                                                                  const QVariantList& valueRows,
-                                                                                  const QVariantList& alarmRows) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::AnalysisRuntimeSnapshotChanged,
-                      quint64(timingRows.size() + valueRows.size() + alarmRows.size()),
-                      0);
-        if (source != QStringLiteral("live")) return;
-        ++m_livePathTelemetry.appSnapshotReceive;
-        m_livePathTelemetry.appSnapshotLastReceiveWallMs = QDateTime::currentMSecsSinceEpoch();
-        CanMonitorPerf::ScopedProbe probe("app.analysis_snapshot_accept", timingRows.size() + valueRows.size() + alarmRows.size(), 5000);
-        QElapsedTimer applyTimer;
-        applyTimer.start();
-        ++m_livePathTelemetry.appSnapshotAck;
-        acceptLiveAnalysisRuntimeSnapshot(level, summary, diagnostics, timingRows, valueRows, alarmRows);
-        ++m_livePathTelemetry.appSnapshotApply;
-        m_livePathTelemetry.appSnapshotApplyRows += quint64(timingRows.size() + valueRows.size() + alarmRows.size());
-        m_livePathTelemetry.appSnapshotLastApplyWallMs = QDateTime::currentMSecsSinceEpoch();
-        m_livePathTelemetry.appSnapshotApplyMaxMs =
-            std::max<qint64>(m_livePathTelemetry.appSnapshotApplyMaxMs, applyTimer.elapsed());
-    });
-    connect(m_worker, &SerialWorker::typedTransportStatusChanged, this, [this](quint64 frames,
-                                                                               quint64 bytesDropped,
-                                                                               quint64 crcFailures,
-                                                                               quint64 lengthFailures,
-                                                                               quint64 versionWarnings,
-                                                                               quint64 seqGaps) {
-        noteTraceSlot(CanMonitorPerf::LiveTraceSignal::TypedTransportStatusChanged, 1, 64);
-        ++m_drainEventTelemetry.typedTransportStatusReceive;
-        m_typedRecordCount = std::max(m_typedRecordCount, frames);
-        m_typedBytesDropped = bytesDropped;
-        m_typedCrcFailures = crcFailures;
-        m_typedLengthFailures = lengthFailures;
-        m_typedVersionWarnings = versionWarnings;
-        m_typedSeqGaps = seqGaps;
-        m_transportSession.updateTypedStatus(frames,
-                                             bytesDropped,
-                                             crcFailures,
-                                             lengthFailures,
-                                             versionWarnings,
-                                             seqGaps);
-        emit typedEvidenceChanged();
-        requestTransportDiagnosticsRefresh(false);
-        requestDerivedSummaryRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::hostTxQueueChanged, this, [this](quint64 queuedFrames,
-                                                                        quint64 queuedBytes,
-                                                                        quint64 enqueuedFrames,
-                                                                        quint64 writtenFrames,
-                                                                        quint64 droppedFrames) {
-        m_transportSession.updateHostTxQueue(queuedFrames, queuedBytes, enqueuedFrames, writtenFrames, droppedFrames);
-        const qint64 nowWallMs = QDateTime::currentMSecsSinceEpoch();
-        const bool notifyDue = droppedFrames > 0
-            || m_lastHostTxQueueNotifyWallMs <= 0
-            || nowWallMs - m_lastHostTxQueueNotifyWallMs >= kHostTxQueueUiMinIntervalMs;
-        if (notifyDue) {
-            m_lastHostTxQueueNotifyWallMs = nowWallMs;
-            requestTransportDiagnosticsRefresh(droppedFrames > 0);
-        }
-    });
-    connect(m_worker, &SerialWorker::drainStatusChanged, this, [this](quint64 bytesTotal,
-                                                                       quint64 readyReadCount,
-                                                                       quint64 readyReadMaxUs,
-                                                                       quint64 drainBurstMaxBytes,
-                                                                       quint64 rawQueueUsedBytes,
-                                                                       quint64 rawQueueMaxUsedBytes,
-                                                                       quint64 rawQueueCapacityBytes,
-                                                                       quint64 rawQueueOverrunBytes,
-                                                                       quint64 rawQueueContentionCount,
-                                                                       quint64 parseBacklogBytes,
-                                                                       quint64 parserBatchMaxMs,
-                                                                       quint64 captureWriterQueueBytes,
-                                                                       quint64 captureWriterMaxQueueBytes,
-                                                                       quint64 captureWriterOverrunBytes,
-                                                                       quint64 captureWriteMaxMs) {
-        m_transportSession.updateDrainPipeline(bytesTotal,
-                                               readyReadCount,
-                                               readyReadMaxUs,
-                                               drainBurstMaxBytes,
-                                               rawQueueUsedBytes,
-                                               rawQueueMaxUsedBytes,
-                                               rawQueueCapacityBytes,
-                                               rawQueueOverrunBytes,
-                                               rawQueueContentionCount,
-                                               parseBacklogBytes,
-                                               parserBatchMaxMs,
-                                               captureWriterQueueBytes,
-                                               captureWriterMaxQueueBytes,
-                                               captureWriterOverrunBytes,
-                                               captureWriteMaxMs);
-        requestTransportDiagnosticsRefresh(rawQueueOverrunBytes > 0 || captureWriterOverrunBytes > 0);
-    });
-    connect(m_worker, &SerialWorker::analysisQueueStatusChanged, this, [this](quint64 queuedFrames,
-                                                                              quint64 maxQueuedFrames,
-                                                                              quint64 capacityFrames,
-                                                                              quint64 enqueuedFrames,
-                                                                              quint64 processedFrames,
-                                                                              quint64 overrunFrames,
-                                                                              quint64 pumpCount,
-                                                                              quint64 pumpMaxMs,
-                                                                              quint64 snapshotMaxMs,
-                                                                              quint64 truthLoss) {
-        m_transportSession.updateAnalysisQueue(queuedFrames,
-                                               maxQueuedFrames,
-                                               capacityFrames,
-                                               enqueuedFrames,
-                                               processedFrames,
-                                               overrunFrames,
-                                               pumpCount,
-                                               pumpMaxMs,
-                                               snapshotMaxMs,
-                                               truthLoss);
-        requestTransportDiagnosticsRefresh(overrunFrames > 0 || truthLoss > 0);
-    });
-    connect(m_worker, &SerialWorker::typedStorageStateChanged, this, [this](bool active, const QString& path) {
-        m_logTypedSession = true;
-        m_logRecordingActive = active;
-        m_logStopping = false;
-        m_logSaving = false;
-        m_logPendingSave = false;
-        if (!path.isEmpty()) {
-            m_logTempPath = path;
-            m_logPath = path;
-            m_logSuggestedSavePath = path;
-            if (!active) m_logLastSavedPath = path;
-            emit logPathChanged();
-        }
-        setStatus(active
-            ? QStringLiteral("Typed capture recording: %1").arg(path)
-            : QStringLiteral("Typed capture finalized: %1").arg(path));
-        requestLogStateRefresh(true);
-    });
-    connect(m_worker, &SerialWorker::typedStorageProgress, this, [this](quint64 bytesWritten, quint64 recordCount) {
-        m_logRecordedBytes = bytesWritten;
-        m_logRecordedFrameCount = recordCount;
-        requestLogStateRefresh(false);
-    });
-    connect(m_worker, &SerialWorker::hostFrameWriteResult, this, &AppController::handleHostFrameWriteResult);
     connect(&m_replay, &ReplayEngine::replayFrame, this, [this](const FrameRecord& fr) {
         if (m_replayDisplayedUs > 0 && fr.tExtUs < m_replayDisplayedUs) {
             m_replayStates.clear();
@@ -3814,14 +3118,9 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     connect(&m_liveFrameView, &FrameFilterProxyModel::busFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
     connect(&m_replayFrameView, &FrameFilterProxyModel::busFilterChanged, this, [this]() { if (!m_restoringSession) saveSessionState(); emit derivedSummaryChanged(); });
 
-    if (!m_coreProcessMode) {
-        m_transportRuntime.startWorkerThread(QThread::TimeCriticalPriority);
-        m_transportRuntime.setTransportModeKey(m_transportModeKey);
-    } else {
-        QString error;
-        if (!m_coreProcessClient.startServerOnly(coreProcessExecutablePath(), &error)) {
-            setStatus(error);
-        }
+    QString error;
+    if (!m_coreProcessClient.startServerOnly(coreProcessExecutablePath(), &error)) {
+        setStatus(error);
     }
     syncAnalysisRuntimeConfig();
     refreshPorts();
@@ -3862,8 +3161,6 @@ AppController::~AppController() {
     CanMonitorPerf::PerformanceProbeRuntime::setEnabled(false);
     saveSessionState();
     m_session.sync();
-    m_transportRuntime.shutdown();
-    m_worker = nullptr;
 }
 
 QString AppController::makeLiveRuntimeTraceDirectory(const QString& stamp) const {
@@ -5440,7 +4737,11 @@ QString AppController::transportModeText() const {
 }
 
 void AppController::setTransportMode(const QString& mode) {
-    const QString key = CanMonitorTransport::TransportRuntime::normalizeModeKey(mode);
+    const QString key = normalizeTransportModeKey(mode);
+    if (key != QStringLiteral("typed")) {
+        setStatus(QStringLiteral("legacy in-process transport is disabled; use typed core process"));
+        return;
+    }
     if (m_transportModeKey == key) return;
     if (m_connected) {
         setStatus(QStringLiteral("전송 모드는 연결 해제 후 변경하세요"));
@@ -5449,12 +4750,6 @@ void AppController::setTransportMode(const QString& mode) {
 
     m_transportModeKey = key;
     resetTypedEvidenceState();
-    if (!m_coreProcessMode) {
-        QString error;
-        if (!m_transportRuntime.setTransportModeKey(key, &error)) {
-            setStatus(error);
-        }
-    }
     emit transportModeChanged();
     emit typedEvidenceChanged();
     emit controlStateChanged();
@@ -5889,9 +5184,7 @@ void AppController::queueControlHostFrame(const QByteArray& frame,
                                    bus);
     }
     QString error;
-    const bool queued = m_coreProcessMode
-        ? m_coreProcessClient.sendHostFrame(frame, summary, &error)
-        : m_transportRuntime.sendHostFrame(frame, summary, &error);
+    const bool queued = m_coreProcessClient.sendHostFrame(frame, summary, &error);
     if (!queued) {
         appendControlEvidenceEvent(QStringLiteral("HOST_WRITE"),
                                    QStringLiteral("error"),
@@ -6126,21 +5419,13 @@ void AppController::updateControlWorkerCycleTarget() {
     const auto intent = m_controlRuntime.currentIntent();
     const quint8 bus = quint8(controlTargetBus());
     QString error;
-    const bool queued = m_coreProcessMode
-        ? m_coreProcessClient.updateControlCycle(intent.signedCommand,
-                                                 intent.rpm,
-                                                 intent.steeringDeg,
-                                                 intent.motorMode,
-                                                 intent.drivingMode,
-                                                 bus,
-                                                 &error)
-        : m_transportRuntime.updateControlCycle(intent.signedCommand,
-                                                intent.rpm,
-                                                intent.steeringDeg,
-                                                intent.motorMode,
-                                                intent.drivingMode,
-                                                bus,
-                                                &error);
+    const bool queued = m_coreProcessClient.updateControlCycle(intent.signedCommand,
+                                                               intent.rpm,
+                                                               intent.steeringDeg,
+                                                               intent.motorMode,
+                                                               intent.drivingMode,
+                                                               bus,
+                                                               &error);
     if (!queued) {
         refreshControlStatus(error);
     }
@@ -6163,25 +5448,15 @@ void AppController::sendControlKeepaliveTick(bool force, bool resetSlew) {
         const auto intent = m_controlRuntime.currentIntent();
         const quint8 bus = quint8(controlTargetBus());
         QString error;
-        const bool queued = m_coreProcessMode
-            ? m_coreProcessClient.sendControlCycleBurstOnce(intent.signedCommand,
-                                                           intent.rpm,
-                                                           intent.steeringDeg,
-                                                           intent.motorMode,
-                                                           intent.drivingMode,
-                                                           bus,
-                                                           QStringLiteral("worker forced burst"),
-                                                           resetSlew,
-                                                           &error)
-            : m_transportRuntime.sendControlCycleBurstOnce(intent.signedCommand,
-                                                           intent.rpm,
-                                                           intent.steeringDeg,
-                                                           intent.motorMode,
-                                                           intent.drivingMode,
-                                                           bus,
-                                                           QStringLiteral("worker forced burst"),
-                                                           resetSlew,
-                                                           &error);
+        const bool queued = m_coreProcessClient.sendControlCycleBurstOnce(intent.signedCommand,
+                                                                         intent.rpm,
+                                                                         intent.steeringDeg,
+                                                                         intent.motorMode,
+                                                                         intent.drivingMode,
+                                                                         bus,
+                                                                         QStringLiteral("worker forced burst"),
+                                                                         resetSlew,
+                                                                         &error);
         if (!queued) {
             refreshControlStatus(error);
         }
@@ -6195,25 +5470,15 @@ void AppController::startControlKeepalive() {
     const auto intent = m_controlRuntime.currentIntent();
     const quint8 bus = quint8(controlTargetBus());
     QString error;
-    const bool queued = m_coreProcessMode
-        ? m_coreProcessClient.startControlCycle(intent.signedCommand,
-                                                intent.rpm,
-                                                intent.steeringDeg,
-                                                intent.motorMode,
-                                                intent.drivingMode,
-                                                bus,
-                                                kControlWorkerCyclePeriodMs,
-                                                kControlBurstFrameGapMs,
-                                                &error)
-        : m_transportRuntime.startControlCycle(intent.signedCommand,
-                                               intent.rpm,
-                                               intent.steeringDeg,
-                                               intent.motorMode,
-                                               intent.drivingMode,
-                                               bus,
-                                               kControlWorkerCyclePeriodMs,
-                                               kControlBurstFrameGapMs,
-                                               &error);
+    const bool queued = m_coreProcessClient.startControlCycle(intent.signedCommand,
+                                                              intent.rpm,
+                                                              intent.steeringDeg,
+                                                              intent.motorMode,
+                                                              intent.drivingMode,
+                                                              bus,
+                                                              kControlWorkerCyclePeriodMs,
+                                                              kControlBurstFrameGapMs,
+                                                              &error);
     if (!queued) {
         refreshControlStatus(error);
         return;
@@ -6224,11 +5489,7 @@ void AppController::startControlKeepalive() {
 void AppController::stopControlKeepalive() {
     m_controlKeepaliveTimer.stop();
     QString error;
-    if (m_coreProcessMode) {
-        m_coreProcessClient.stopControlCycle(&error);
-    } else {
-        m_transportRuntime.stopControlCycle(&error);
-    }
+    m_coreProcessClient.stopControlCycle(&error);
 }
 
 void AppController::applyControlKeyboardHeldState(const QString& reason, bool forceBurst) {
@@ -6603,12 +5864,6 @@ void AppController::syncAnalysisRuntimeConfig() {
     config.signalMessages = m_signalMessages;
     m_liveAnalysisRuntime.setConfig(config);
     m_replayAnalysisRuntime.setConfig(config);
-    if (m_worker) {
-        QPointer<SerialWorker> worker = m_worker;
-        QMetaObject::invokeMethod(m_worker, [worker, config]() {
-            if (worker) worker->setAnalysisConfig(config);
-        }, Qt::QueuedConnection);
-    }
     if (m_coreProcessMode && m_coreProcessClient.isIpcConnected()) {
         QString error;
         const QString modelPath = m_modelEnabled ? m_rulesActivePath : QString();
@@ -9478,46 +8733,22 @@ void AppController::connectPort(const QString& portName) {
     const QString trimmed = portName.trimmed();
     if (trimmed.isEmpty()) return;
     if (m_transportModeKey == QStringLiteral("typed")) resetTypedEvidenceState();
-    if (m_coreProcessMode) {
-        QString error;
-        const bool started = trimmed.startsWith(QStringLiteral("tcp://"), Qt::CaseInsensitive)
-            ? m_coreProcessClient.startGatewayTcp(coreProcessExecutablePath(), trimmed, &error)
-            : m_coreProcessClient.startSerial(coreProcessExecutablePath(), trimmed, &error);
-        if (!started) {
-            setStatus(error);
-        }
-        return;
-    }
     QString error;
-    if (!m_transportRuntime.startSerial(trimmed, &error)) {
+    const bool started = trimmed.startsWith(QStringLiteral("tcp://"), Qt::CaseInsensitive)
+        ? m_coreProcessClient.startGatewayTcp(coreProcessExecutablePath(), trimmed, &error)
+        : m_coreProcessClient.startSerial(coreProcessExecutablePath(), trimmed, &error);
+    if (!started) {
         setStatus(error);
     }
 }
 
 void AppController::disconnectPort() {
-    if (m_coreProcessMode) {
-        prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
-        QString error;
-        if (!m_coreProcessClient.stopTransport(&error)) {
-            setStatus(error);
-        } else {
-            setStatus(QStringLiteral("core transport stop requested"));
-        }
-        return;
-    }
-    const bool delayedStop = prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
-    if (delayedStop) {
-        QTimer::singleShot(150, this, [this]() {
-            QString error;
-            if (!m_transportRuntime.stopSerial(&error)) {
-                setStatus(error);
-            }
-        });
-        return;
-    }
+    prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
     QString error;
-    if (!m_transportRuntime.stopSerial(&error)) {
+    if (!m_coreProcessClient.stopTransport(&error)) {
         setStatus(error);
+    } else {
+        setStatus(QStringLiteral("core transport stop requested"));
     }
 }
 
@@ -10363,9 +9594,7 @@ void AppController::startLog() {
         startLiveRuntimeTraceSession(sessionDir, QStringLiteral("typed_capture_start_requested"), true);
 
         QString error;
-        const bool captureQueued = m_coreProcessMode
-            ? m_coreProcessClient.startCapture(sessionDir, metadata, &error)
-            : m_transportRuntime.setTypedStorage(true, sessionDir, metadata, &error);
+        const bool captureQueued = m_coreProcessClient.startCapture(sessionDir, metadata, &error);
         if (!captureQueued) {
             stopLiveRuntimeTraceSession(QStringLiteral("typed_capture_start_failed"));
             setStatus(error);
@@ -10375,27 +9604,7 @@ void AppController::startLog() {
         return;
     }
 
-    const StorageRuntime::LogSessionPaths paths = StorageRuntime::makeLegacyLogPaths(stamp, m_modelEnabled, logTargetDirectory(), m_logTargetName);
-    m_logTypedSession = paths.typedSession;
-    m_logTempPath = paths.recordPath;
-    m_logTempMetaPath = paths.metaPath;
-    m_logTempModelPath = paths.modelPath;
-    m_logSuggestedSavePath = paths.suggestedSavePath;
-    m_logRecordedBytes = 0;
-    m_logRecordedFrameCount = 0;
-    m_logStopping = false;
-    m_logSaving = false;
-    m_logPath = m_logTempPath;
-    emit logPathChanged();
-    requestLogStateRefresh(true);
-
-    const QString rulesPath = m_modelEnabled ? m_rulesActivePath : QString();
-    QString error;
-    if (!m_transportRuntime.setLegacyLogging(true, m_logTempPath, m_logTempMetaPath, m_logTempModelPath, rulesPath, &error)) {
-        setStatus(error);
-        return;
-    }
-    setStatus(QStringLiteral("로그 기록 시작 · 임시 저장 중"));
+    setStatus(QStringLiteral("legacy live logging is disabled; use typed core capture"));
 }
 
 void AppController::resetTypedEvidenceState() {
@@ -10470,14 +9679,9 @@ void AppController::stopLog() {
     requestLogStateRefresh(true);
     if (m_logTypedSession) {
         QString error;
-        const bool stopQueued = m_coreProcessMode
-            ? m_coreProcessClient.stopCapture(m_logTempPath,
-                                              runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
-                                              &error)
-            : m_transportRuntime.setTypedStorage(false,
-                                                 m_logTempPath,
-                                                 runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
-                                                 &error);
+        const bool stopQueued = m_coreProcessClient.stopCapture(m_logTempPath,
+                                                                runtimeTraceAppSnapshot(QStringLiteral("typed_capture_stop_requested")),
+                                                                &error);
         if (!stopQueued) {
             setStatus(error);
             return;
@@ -10485,12 +9689,7 @@ void AppController::stopLog() {
         setStatus(QStringLiteral("Typed capture finalize requested"));
         return;
     }
-    QString error;
-    if (!m_transportRuntime.setLegacyLogging(false, QString(), QString(), QString(), QString(), &error)) {
-        setStatus(error);
-        return;
-    }
-    setStatus(QStringLiteral("로그 종료 중 · 임시 버퍼 정리"));
+    setStatus(QStringLiteral("legacy live logging is disabled"));
 }
 
 void AppController::finalizePendingLogSave(const QString& filePath) {
@@ -11268,11 +10467,6 @@ void AppController::clearFrames() {
     m_liveFrames.clear();
     clearPendingRawLedgerUiCommit();
     m_rawFrameTable.clear();
-    if (m_worker) {
-        QMetaObject::invokeMethod(m_worker, [worker = m_worker]() {
-            worker->resetRawLedger(QStringLiteral("live"));
-        }, Qt::QueuedConnection);
-    }
     m_replayFrames.clear();
     clearGraphHistory();
     requestGraphRefresh(true);

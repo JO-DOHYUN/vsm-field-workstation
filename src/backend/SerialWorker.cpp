@@ -417,14 +417,6 @@ void SerialWorker::timerEvent(QTimerEvent* event) {
         }
         return;
     }
-    if (event->timerId() == m_truthFlushTimerId) {
-        flushQueuedTruthFrames(false);
-        if (!m_liveTruth.hasPending()) {
-            killTimer(m_truthFlushTimerId);
-            m_truthFlushTimerId = 0;
-        }
-        return;
-    }
     if (event->timerId() == m_controlCycleTimerId) {
         beginControlCycle();
         return;
@@ -646,13 +638,14 @@ void SerialWorker::handleTypedRecordBatch(const TypedRecordList& batch) {
         });
     }
     if (m_typedCaptureEnabled) queueCaptureWriterRecords(batch);
-    queueAnalysisFrames(canRxFrames);
-    queueRawLedgerFrames(canRxFrames);
-    queueTruthFrames(batch);
+    queueAnalysisFrames(CanMonitorTransport::AnalysisFrameBatch{canRxFrames, 0});
+    queueRawLedgerFrames(CanMonitorTransport::RawLedgerFrameBatch{canRxFrames, 0});
     const auto projection = m_liveProjection.ingest(batch);
     if (!projection.criticalRecords.isEmpty()) emit typedRecordsReceived(projection.criticalRecords);
     if (!projection.projectedFrames.isEmpty()) queueProjectedFrames(projection.projectedFrames);
     if (projection.statusDue) emitProjectionStatus(projection.status);
+    const auto truth = m_liveTruth.ingest(batch);
+    if (truth.statusDue) emitTruthStatus(truth.status);
 }
 
 quint64 SerialWorker::projectionKeyForFrame(const FrameRecord& frame) {
@@ -738,6 +731,10 @@ void SerialWorker::flushQueuedProjectionFrames(bool force) {
     emitProjectionStatus(m_liveProjection.status());
 }
 
+void SerialWorker::queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch) {
+    queueRawLedgerFrames(batch.frames);
+}
+
 void SerialWorker::queueRawLedgerFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     CanMonitorPerf::ScopedProbe probe("ledger.queue_frames", frames.size(), 2000);
@@ -815,33 +812,8 @@ void SerialWorker::flushRawLedgerHandoffSync() {
     m_drainEventTelemetry.rawLedgerHandoffInflight = false;
 }
 
-void SerialWorker::queueTruthFrames(const TypedRecordList& records) {
-    CanMonitorPerf::ScopedProbe probe("truth.queue_records", records.size(), 2000);
-    const auto result = m_liveTruth.ingest(records);
-    if (!result.frames.isEmpty()) {
-        ++m_drainEventTelemetry.truthHandoffEmitCount;
-        m_drainEventTelemetry.truthHandoffEmitFrames += quint64(result.frames.size());
-        emit truthFramesReceived(result.frames);
-    }
-    if (result.statusDue) emitTruthStatus(result.status);
-    m_drainEventTelemetry.truthHandoffPendingKeys = quint64(std::max(0, m_liveTruth.status().pendingKeys));
-    if (!m_liveTruth.hasPending()) return;
-    if (m_truthFlushTimerId == 0) {
-        m_truthFlushTimerId = startTimer(m_liveTruth.flushIntervalMs(), Qt::CoarseTimer);
-    }
-}
-
-void SerialWorker::flushQueuedTruthFrames(bool force) {
-    CanMonitorPerf::ScopedProbe probe("truth.flush_frames", m_liveTruth.status().pendingKeys, 2000);
-    const FrameRecordList frames = m_liveTruth.flush(force);
-    ++m_drainEventTelemetry.truthHandoffFlushCount;
-    if (!frames.isEmpty()) {
-        ++m_drainEventTelemetry.truthHandoffEmitCount;
-        m_drainEventTelemetry.truthHandoffEmitFrames += quint64(frames.size());
-        emit truthFramesReceived(frames);
-    }
-    m_drainEventTelemetry.truthHandoffPendingKeys = quint64(std::max(0, m_liveTruth.status().pendingKeys));
-    emitTruthStatus(m_liveTruth.status());
+void SerialWorker::queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch) {
+    queueAnalysisFrames(batch.frames);
 }
 
 void SerialWorker::queueAnalysisFrames(const FrameRecordList& frames) {
@@ -1026,10 +998,6 @@ void SerialWorker::resetProjectionQueue() {
         killTimer(m_projectionFlushTimerId);
         m_projectionFlushTimerId = 0;
     }
-    if (m_truthFlushTimerId != 0) {
-        killTimer(m_truthFlushTimerId);
-        m_truthFlushTimerId = 0;
-    }
     if (m_rawLedgerFlushTimerId != 0) {
         killTimer(m_rawLedgerFlushTimerId);
         m_rawLedgerFlushTimerId = 0;
@@ -1043,7 +1011,6 @@ void SerialWorker::resetProjectionQueue() {
     m_rawLedgerDispatchInFlight = false;
     m_rawLedgerDispatchInFlightFrames = 0;
     m_projectionFlushClock.invalidate();
-    m_liveTruth.reset();
     resetAnalysisWorker();
     m_projectionQueueSampledFrames = 0;
     m_projectionQueueDroppedFrames = 0;
@@ -1103,7 +1070,6 @@ void SerialWorker::closeSerialPortForRecovery(const QString& reason) {
     stopTypedHandshakeWatchdog();
     stopControlCycle();
     flushQueuedProjectionFrames(true);
-    flushQueuedTruthFrames(true);
     emitTypedStorageUpdate(finalizeCaptureWriterIfActive());
     if (!m_connected && !m_drainRuntime && !m_serial && !m_tcp) return;
 
@@ -1254,34 +1220,18 @@ void SerialWorker::ensureTypedPipelineRuntime() {
             },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
-            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::canRxFramesReady,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::analysisFramesReady,
             this,
-            [this](const FrameRecordList& frames) {
-                queueAnalysisFrames(frames);
-                queueRawLedgerFrames(frames);
+            [this](const CanMonitorTransport::AnalysisFrameBatch& batch) {
+                queueAnalysisFrames(batch);
             },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
-            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::projectedFramesReady,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::rawLedgerFramesReady,
             this,
-            [this](const FrameRecordList& frames) {
-                queueProjectedFrames(frames);
-                if (m_typedPipelineWorker) {
-                    QMetaObject::invokeMethod(m_typedPipelineWorker,
-                                              &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::acknowledgeProjectionSnapshot,
-                                              Qt::QueuedConnection);
-                }
+            [this](const CanMonitorTransport::RawLedgerFrameBatch& batch) {
+                queueRawLedgerFrames(batch);
             },
-            Qt::QueuedConnection);
-    connect(m_typedPipelineWorker,
-            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::truthFramesReady,
-            this,
-            &SerialWorker::truthFramesReceived,
-            Qt::QueuedConnection);
-    connect(m_typedPipelineWorker,
-            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::criticalRecordsReady,
-            this,
-            &SerialWorker::typedRecordsReceived,
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
             &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::captureQueueReady,

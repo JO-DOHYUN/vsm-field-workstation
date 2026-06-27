@@ -10,6 +10,120 @@ namespace {
 constexpr int kCoreLocalBatchSize = 128;
 constexpr int kCoreLiveLatestMaxKeys = 256;
 
+CanMonitorCore::CoreViewSeverity maxSeverity(CanMonitorCore::CoreViewSeverity lhs,
+                                             CanMonitorCore::CoreViewSeverity rhs) {
+    return static_cast<int>(lhs) >= static_cast<int>(rhs) ? lhs : rhs;
+}
+
+QString u64Text(quint64 value) {
+    return QString::number(value);
+}
+
+QJsonObject boardHealthToJson(const TypedBoardHealthRecord& health) {
+    QJsonObject out;
+    out.insert(QStringLiteral("mono_us"), u64Text(health.monoUs));
+    out.insert(QStringLiteral("can_rx_total"), u64Text(health.canRxTotal));
+    out.insert(QStringLiteral("can_dropped_total"), u64Text(health.canDroppedTotal));
+    out.insert(QStringLiteral("can_fifo_overflow_total"), u64Text(health.canFifoOverflowTotal));
+    out.insert(QStringLiteral("serial_record_tx_total"), u64Text(health.serialRecordTxTotal));
+    out.insert(QStringLiteral("queue_depth"), int(health.queueDepth));
+    out.insert(QStringLiteral("encoder_fault_events"), u64Text(health.encoderFaultEvents));
+    out.insert(QStringLiteral("encoder_wrap_events"), u64Text(health.encoderWrapEvents));
+    out.insert(QStringLiteral("encoder_position"), QString::number(health.encoderPosition));
+    out.insert(QStringLiteral("safety_state"), int(health.safetyState));
+    out.insert(QStringLiteral("inputs"), int(health.inputs));
+    out.insert(QStringLiteral("encoder_timer_ok"), int(health.encoderTimerOk));
+    out.insert(QStringLiteral("flags"), int(health.flags));
+    out.insert(QStringLiteral("fault_flags"), u64Text(health.faultFlags));
+    out.insert(QStringLiteral("has_extended_transport_counters"), health.hasExtendedTransportCounters);
+    out.insert(QStringLiteral("serial_enqueue_fail_total"), u64Text(health.serialEnqueueFailTotal));
+    out.insert(QStringLiteral("serial_ring_clear_total"), u64Text(health.serialRingClearTotal));
+    out.insert(QStringLiteral("serial_ring_cleared_bytes_total"), u64Text(health.serialRingClearedBytesTotal));
+    out.insert(QStringLiteral("serial_backpressure_total"), u64Text(health.serialBackpressureTotal));
+    out.insert(QStringLiteral("serial_tx_high_water_bytes"), u64Text(health.serialTxHighWaterBytes));
+    out.insert(QStringLiteral("shared_can_queue_high_water"), u64Text(health.sharedCanQueueHighWater));
+    out.insert(QStringLiteral("mcp_drain_budget_hit_total"), u64Text(health.mcpDrainBudgetHitTotal));
+    out.insert(QStringLiteral("can_segment_enqueue_fail_total"), u64Text(health.canSegmentEnqueueFailTotal));
+    out.insert(QStringLiteral("has_uplink_pool_counters"), health.hasUplinkPoolCounters);
+    out.insert(QStringLiteral("uplink_large_pool_used_blocks"), u64Text(health.uplinkLargePoolUsedBlocks));
+    out.insert(QStringLiteral("uplink_large_pool_capacity_blocks"), u64Text(health.uplinkLargePoolCapacityBlocks));
+    out.insert(QStringLiteral("uplink_large_pool_can_reserve_used_blocks"), u64Text(health.uplinkLargePoolCanReserveUsedBlocks));
+    out.insert(QStringLiteral("can_truth_descriptor_queue_high_water"), u64Text(health.canTruthDescriptorQueueHighWater));
+    out.insert(QStringLiteral("uplink_pool_alloc_fail_total"), u64Text(health.uplinkPoolAllocFailTotal));
+    out.insert(QStringLiteral("can_truth_pool_alloc_fail_total"), u64Text(health.canTruthPoolAllocFailTotal));
+    out.insert(QStringLiteral("uplink_descriptor_high_water_total"), u64Text(health.uplinkDescriptorHighWaterTotal));
+    out.insert(QStringLiteral("diagnostic_suppressed_total"), u64Text(health.diagnosticSuppressedTotal));
+    return out;
+}
+
+QJsonObject capabilityToJson(const TypedCapabilityRecord& capability) {
+    QJsonObject out;
+    out.insert(QStringLiteral("mono_us"), u64Text(capability.monoUs));
+    out.insert(QStringLiteral("protocol_version"), int(capability.protocolVersion));
+    out.insert(QStringLiteral("profile_major"), int(capability.profileMajor));
+    out.insert(QStringLiteral("profile_minor"), int(capability.profileMinor));
+    out.insert(QStringLiteral("mono_unit"), int(capability.monoUnit));
+    out.insert(QStringLiteral("can_queue_size"), u64Text(capability.canQueueSize));
+    out.insert(QStringLiteral("encoder_ppr"), u64Text(capability.encoderPpr));
+    out.insert(QStringLiteral("encoder_frequency_limit"), u64Text(capability.encoderFrequencyLimit));
+    out.insert(QStringLiteral("supports_can_rx_raw"), capability.supportsCanRxRaw);
+    out.insert(QStringLiteral("supports_can_tx_raw"), capability.supportsCanTxRaw);
+    out.insert(QStringLiteral("supports_enc_edge_raw"), capability.supportsEncEdgeRaw);
+    out.insert(QStringLiteral("supports_enc_derived"), capability.supportsEncDerived);
+    out.insert(QStringLiteral("supports_adc_sample"), capability.supportsAdcSample);
+    out.insert(QStringLiteral("supports_board_health"), capability.supportsBoardHealth);
+    out.insert(QStringLiteral("supports_board_event"), capability.supportsBoardEvent);
+    out.insert(QStringLiteral("adc_channels"), int(capability.adcChannels));
+    out.insert(QStringLiteral("adc_resolution_bits"), int(capability.adcResolutionBits));
+    out.insert(QStringLiteral("adc_period_ms"), int(capability.adcPeriodMs));
+    out.insert(QStringLiteral("lane_capability_flags"), int(capability.laneCapabilityFlags));
+    out.insert(QStringLiteral("limitation_flags"), int(capability.limitationFlags));
+    out.insert(QStringLiteral("bus_count"), int(capability.busCount));
+    out.insert(QStringLiteral("bus_descriptor_size"), int(capability.busDescriptorSize));
+    out.insert(QStringLiteral("capability_v2_flags"), int(capability.capabilityV2Flags));
+    out.insert(QStringLiteral("supported_uplink_records"), u64Text(capability.supportedUplinkRecords));
+    out.insert(QStringLiteral("supported_downlink_records"), u64Text(capability.supportedDownlinkRecords));
+    out.insert(QStringLiteral("safety_feature_flags"), u64Text(capability.safetyFeatureFlags));
+    out.insert(QStringLiteral("policy_hash"), u64Text(capability.policyHash));
+    out.insert(QStringLiteral("firmware_build_id"), u64Text(capability.firmwareBuildId));
+    out.insert(QStringLiteral("host_tx_queue_size"), int(capability.hostTxQueueSize));
+    out.insert(QStringLiteral("capability_v3_flags"), int(capability.capabilityV3Flags));
+    QJsonArray buses;
+    for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
+        buses.append(QJsonObject{{QStringLiteral("bus_id"), int(bus.busId)},
+                                 {QStringLiteral("role_hint"), int(bus.roleHint)},
+                                 {QStringLiteral("backend"), int(bus.backend)},
+                                 {QStringLiteral("transceiver"), int(bus.transceiver)},
+                                 {QStringLiteral("rx_supported"), bus.rxSupported},
+                                 {QStringLiteral("tx_supported"), bus.txSupported},
+                                 {QStringLiteral("control_tx_allowed"), bus.controlTxAllowed},
+                                 {QStringLiteral("classic_can_supported"), bus.classicCanSupported},
+                                 {QStringLiteral("can_fd_supported"), bus.canFdSupported},
+                                 {QStringLiteral("max_live_dlc"), int(bus.maxLiveDlc)},
+                                 {QStringLiteral("nominal_bitrate"), u64Text(bus.nominalBitrate)},
+                                 {QStringLiteral("data_bitrate"), u64Text(bus.dataBitrate)},
+                                 {QStringLiteral("termination_policy"), int(bus.terminationPolicy)},
+                                 {QStringLiteral("isolation_policy"), int(bus.isolationPolicy)}});
+    }
+    out.insert(QStringLiteral("buses"), buses);
+    return out;
+}
+
+QJsonObject boardEventToJson(const TypedBoardEventRecord& event) {
+    return QJsonObject{{QStringLiteral("mono_us"), u64Text(event.monoUs)},
+                       {QStringLiteral("code"), int(event.code)},
+                       {QStringLiteral("detail"), int(event.detail)},
+                       {QStringLiteral("counter"), u64Text(event.counter)}};
+}
+
+QJsonObject mcpDetailsToJson(const QHash<quint16, quint64>& details) {
+    QJsonObject out;
+    for (auto it = details.cbegin(); it != details.cend(); ++it) {
+        out.insert(QStringLiteral("0x%1").arg(it.key(), 4, 16, QLatin1Char('0')).toUpper(), u64Text(it.value()));
+    }
+    return out;
+}
+
 FrameRecord frameFromCanRawRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
     FrameRecord frame;
     frame.tExtUs = can.monoUs;
@@ -99,6 +213,13 @@ void CaptureCoreRuntime::reset() {
     m_liveTruth.reset();
     m_viewStore.clear();
     m_liveLatestByKey.clear();
+    m_coreEvidenceTransportPayload = {};
+    m_coreEvidenceCheapCounts = {};
+    m_coreEvidenceSeverity = CanMonitorCore::CoreViewSeverity::Ok;
+    m_boardEventTotal = 0;
+    m_mcp2515EventTotal = 0;
+    m_boardEventFatalTotal = 0;
+    m_mcp2515Details.clear();
     m_liveLatestDropped = 0;
 }
 
@@ -139,16 +260,16 @@ void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
 
     if (m_options.emitCanRxFrames) {
         for (const TypedRecord& record : batch) {
-            appendCanRxFrames(record, result.canRxFrames);
+            appendCanRxFrames(record, result.analysisFrames.frames);
         }
+        result.rawLedgerFrames.frames = result.analysisFrames.frames;
     }
 
     const auto projection = m_liveProjection.ingest(batch);
     if (!projection.criticalRecords.isEmpty()) {
-        result.criticalRecords += projection.criticalRecords;
-    }
-    if (m_options.emitProjectionFrames && !projection.projectedFrames.isEmpty()) {
-        result.projectedFrames += projection.projectedFrames;
+        for (const TypedRecord& record : projection.criticalRecords) {
+            ingestCriticalRecord(record, result);
+        }
     }
     updateLiveLatestView(projection.projectedFrames, result);
     if (projection.statusDue) {
@@ -156,11 +277,8 @@ void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
         result.projectionStatus = projection.status;
     }
 
-    if (m_options.emitTruthFrames) {
+    if (m_options.consumeTruth) {
         const auto truth = m_liveTruth.ingest(batch);
-        if (!truth.frames.isEmpty()) {
-            result.truthFrames += truth.frames;
-        }
         if (truth.statusDue) {
             result.truthStatusDue = true;
             result.truthStatus = truth.status;
@@ -177,6 +295,114 @@ void CaptureCoreRuntime::ingestBatch(TypedRecordList&& batch, Result& result) {
             result.captureHandoffOverrunBytes += push.bytes;
         }
     }
+}
+
+void CaptureCoreRuntime::ingestCriticalRecord(const TypedRecord& record, Result& result) {
+    QJsonObject payload = m_coreEvidenceTransportPayload;
+    QJsonObject counts = m_coreEvidenceCheapCounts;
+    auto severity = m_coreEvidenceSeverity;
+
+    const TypedRecordType type = record.header.type();
+    if (type == TypedRecordType::Capability) {
+        const auto capability = decodeTypedCapability(record);
+        if (!capability) return;
+        payload.insert(QStringLiteral("capability"), capabilityToJson(*capability));
+        payload.insert(QStringLiteral("capability_seen"), true);
+        payload.insert(QStringLiteral("capability_mono_us"), u64Text(capability->monoUs));
+        counts.insert(QStringLiteral("capability_seen"), true);
+    } else if (type == TypedRecordType::BoardHealth) {
+        const auto health = decodeTypedBoardHealth(record);
+        if (!health) return;
+        payload.insert(QStringLiteral("board_health"), boardHealthToJson(*health));
+        payload.insert(QStringLiteral("board_health_seen"), true);
+        payload.insert(QStringLiteral("board_health_mono_us"), u64Text(health->monoUs));
+        counts.insert(QStringLiteral("board_health_seen"), true);
+        counts.insert(QStringLiteral("board_can_dropped_total"), u64Text(health->canDroppedTotal));
+        counts.insert(QStringLiteral("board_fifo_overflow_total"), u64Text(health->canFifoOverflowTotal));
+        if (health->canDroppedTotal > 0 ||
+            health->canFifoOverflowTotal > 0 ||
+            health->serialRingClearTotal > 0 ||
+            health->canSegmentEnqueueFailTotal > 0 ||
+            health->canTruthPoolAllocFailTotal > 0) {
+            severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Error);
+        } else if (health->serialEnqueueFailTotal > 0 ||
+                   health->serialBackpressureTotal > 0 ||
+                   health->mcpDrainBudgetHitTotal > 0 ||
+                   health->uplinkPoolAllocFailTotal > 0) {
+            severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Warn);
+        }
+    } else if (type == TypedRecordType::BoardEvent) {
+        const auto event = decodeTypedBoardEvent(record);
+        if (!event) return;
+        ++m_boardEventTotal;
+        if (event->code == 9) {
+            ++m_mcp2515EventTotal;
+            m_mcp2515Details[event->detail] = m_mcp2515Details.value(event->detail) + 1;
+            severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Warn);
+        }
+        if (event->code == 12 || event->code == 17) {
+            ++m_boardEventFatalTotal;
+            severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Error);
+        }
+        payload.insert(QStringLiteral("last_board_event"), boardEventToJson(*event));
+        payload.insert(QStringLiteral("board_event_total"), u64Text(m_boardEventTotal));
+        payload.insert(QStringLiteral("mcp2515_event_total"), u64Text(m_mcp2515EventTotal));
+        payload.insert(QStringLiteral("board_event_fatal_total"), u64Text(m_boardEventFatalTotal));
+        payload.insert(QStringLiteral("mcp2515_details"), mcpDetailsToJson(m_mcp2515Details));
+        counts.insert(QStringLiteral("board_event_total"), u64Text(m_boardEventTotal));
+        counts.insert(QStringLiteral("mcp2515_event_total"), u64Text(m_mcp2515EventTotal));
+        counts.insert(QStringLiteral("board_event_fatal_total"), u64Text(m_boardEventFatalTotal));
+    } else if (type == TypedRecordType::ControlAck) {
+        const auto ack = decodeTypedControlAck(record);
+        if (!ack) return;
+        payload.insert(QStringLiteral("last_control_ack"),
+                       QJsonObject{{QStringLiteral("mono_us"), u64Text(ack->monoUs)},
+                                   {QStringLiteral("command_id"), u64Text(ack->commandId)},
+                                   {QStringLiteral("status"), int(ack->status)},
+                                   {QStringLiteral("reason"), int(ack->reason)},
+                                   {QStringLiteral("target_bus"), int(ack->targetBus)},
+                                   {QStringLiteral("target_dlc_flags"), int(ack->targetDlcFlags)},
+                                   {QStringLiteral("target_can_id"), u64Text(ack->targetCanId)},
+                                   {QStringLiteral("target_extended"), ack->targetExtended},
+                                   {QStringLiteral("target_rtr"), ack->targetRtr},
+                                   {QStringLiteral("counter"), u64Text(ack->counter)},
+                                   {QStringLiteral("rejected_total"), u64Text(ack->rejectedTotal)}});
+        payload.insert(QStringLiteral("control_ack_total"), u64Text(ack->counter));
+        payload.insert(QStringLiteral("control_ack_rejected_total"), u64Text(ack->rejectedTotal));
+    } else if (type == TypedRecordType::CanTxRaw) {
+        const auto can = decodeTypedCanRaw(record);
+        if (!can || !can->txAudit) return;
+        payload.insert(QStringLiteral("last_can_tx_audit"),
+                       QJsonObject{{QStringLiteral("mono_us"), u64Text(can->monoUs)},
+                                   {QStringLiteral("bus"), int(can->bus)},
+                                   {QStringLiteral("can_id"), u64Text(can->canId)},
+                                   {QStringLiteral("dlc"), int(can->dlc)},
+                                   {QStringLiteral("total"), u64Text(can->total)},
+                                   {QStringLiteral("failed_total"), u64Text(can->droppedOrFailed)}});
+        payload.insert(QStringLiteral("can_tx_audit_total"), u64Text(can->total));
+        if (can->droppedOrFailed > 0) {
+            payload.insert(QStringLiteral("can_tx_failed_total"), u64Text(can->droppedOrFailed));
+            severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Error);
+        }
+    } else if (type == TypedRecordType::CanRxRaw) {
+        const auto can = decodeTypedCanRaw(record);
+        if (!can || can->txAudit) return;
+        payload.insert(QStringLiteral("last_control_feedback_rx"),
+                       QJsonObject{{QStringLiteral("mono_us"), u64Text(can->monoUs)},
+                                   {QStringLiteral("bus"), int(can->bus)},
+                                   {QStringLiteral("can_id"), u64Text(can->canId)},
+                                   {QStringLiteral("dlc"), int(can->dlc)}});
+    } else {
+        return;
+    }
+
+    m_coreEvidenceTransportPayload = payload;
+    m_coreEvidenceCheapCounts = counts;
+    m_coreEvidenceSeverity = severity;
+    result.viewChanges.push_back(m_viewStore.updateView(CanMonitorCore::CoreViewName::TransportSummary,
+                                                        m_coreEvidenceTransportPayload,
+                                                        m_coreEvidenceSeverity,
+                                                        m_coreEvidenceCheapCounts));
 }
 
 void CaptureCoreRuntime::updateLiveLatestView(const FrameRecordList& frames, Result& result) {
@@ -272,10 +498,19 @@ void CaptureCoreRuntime::updateStatusViews(const Result& ingestResult, Result& o
         counts.insert(QStringLiteral("typed_frames"), QString::number(ingestResult.typedStatus.frames));
         counts.insert(QStringLiteral("seq_gaps"), QString::number(ingestResult.typedStatus.seqGaps));
 
+        for (auto it = m_coreEvidenceTransportPayload.constBegin(); it != m_coreEvidenceTransportPayload.constEnd(); ++it) {
+            payload.insert(it.key(), it.value());
+        }
+        for (auto it = m_coreEvidenceCheapCounts.constBegin(); it != m_coreEvidenceCheapCounts.constEnd(); ++it) {
+            counts.insert(it.key(), it.value());
+        }
+
         const bool fatal = ingestResult.typedStatus.crcFailures > 0 || ingestResult.typedStatus.lengthFailures > 0;
+        const auto severity = maxSeverity(fatal ? CanMonitorCore::CoreViewSeverity::Error : CanMonitorCore::CoreViewSeverity::Ok,
+                                          m_coreEvidenceSeverity);
         out.viewChanges.push_back(m_viewStore.updateView(CanMonitorCore::CoreViewName::TransportSummary,
                                                          payload,
-                                                         fatal ? CanMonitorCore::CoreViewSeverity::Error : CanMonitorCore::CoreViewSeverity::Ok,
+                                                         severity,
                                                          counts));
     }
 
@@ -334,10 +569,6 @@ CanMonitorCore::ViewQueryResult CaptureCoreRuntime::queryView(const CanMonitorCo
 
 QVector<CanMonitorCore::ViewChanged> CaptureCoreRuntime::viewChanges() const {
     return m_viewStore.changes();
-}
-
-FrameRecordList CaptureCoreRuntime::flushTruth(bool force) {
-    return m_liveTruth.flush(force);
 }
 
 quint64 CaptureCoreRuntime::liveLatestKeyForFrame(const FrameRecord& frame) {

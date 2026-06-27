@@ -154,26 +154,23 @@ private slots:
         QVERIFY(projectionStatus.at(2).toULongLong() >= quint64(1));
     }
 
-    void liveTruthFramesPreserveObservedRawGapAcrossProjectionSampling() {
+    void liveTruthStatusObservesTypedCanRxWithoutFrameFanout() {
         SerialWorker worker;
         worker.setTransportMode(SerialWorker::TransportMode::TypedEvidence);
 
-        QSignalSpy truthSpy(&worker, &SerialWorker::truthFramesReceived);
+        QSignalSpy truthStatusSpy(&worker, &SerialWorker::typedTruthStatusChanged);
 
         worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 50, makeCanPayload(1000, 1)));
-        QTRY_COMPARE(truthSpy.size(), 1);
-        truthSpy.clear();
+        QTRY_COMPARE(truthStatusSpy.size(), 1);
 
         worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 51, makeCanPayload(1100, 1)));
         worker.ingestBytesForTest(makeTypedFrame(TypedRecordType::CanRxRaw, 52, makeCanPayload(1200, 1)));
 
-        QTRY_COMPARE(truthSpy.size(), 1);
-        const auto frames = qvariant_cast<FrameRecordList>(truthSpy.takeFirst().at(0));
-        QCOMPARE(frames.size(), 1);
-        QCOMPARE(frames.first().tExtUs, quint64(1200));
-        QCOMPARE(frames.first().seq, quint8(52));
-        QCOMPARE(frames.first().hasObservedGap, true);
-        QCOMPARE(frames.first().observedGapUs, quint64(100));
+        const auto status = truthStatusSpy.takeLast();
+        QVERIFY(status.at(0).toULongLong() >= quint64(1));
+        QCOMPARE(status.at(3).toULongLong(), quint64(0));
+        QVERIFY(status.at(4).toULongLong() >= quint64(1));
+        QCOMPARE(status.at(11).toULongLong(), quint64(0));
     }
 
     void typedStorageWritesFinalizedEvidenceSession() {

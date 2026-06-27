@@ -4,6 +4,7 @@
 #include "core/CoreMaterializedViewStore.h"
 #include "analysis/AnalysisWorkerRuntime.h"
 #include "control/ControlCycleRuntime.h"
+#include "transport/CoreDataBatches.h"
 #include "transport/DrainByteQueue.h"
 #include "transport/RawLedgerWriterRuntime.h"
 #include "transport/SerialDrainRuntime.h"
@@ -58,7 +59,6 @@ private:
     void updatePipelineTransportSummary(const QJsonObject& payload,
                                         CoreViewSeverity severity,
                                         const QJsonObject& cheapCounts);
-    void ingestCriticalRecords(const TypedRecordList& records);
     void handleAnalysisModelRequested(quint64 requestId, const QString& modelPath, bool modelEnabled);
     void publishChange(const ViewChanged& change);
     void requestPipelineViewMirror(const QJsonObject& change);
@@ -85,7 +85,7 @@ private:
     void shutdownRawLedgerRuntime();
     void ensureAnalysisRuntime();
     void shutdownAnalysisRuntime();
-    void queueAnalysisFrames(const FrameRecordList& frames);
+    void queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch);
     void publishAnalysisSnapshot(const QString& source,
                                  const QString& level,
                                  const QString& summary,
@@ -103,6 +103,7 @@ private:
                               quint64 pumpMaxMs,
                               quint64 snapshotMaxMs,
                               quint64 truthLoss);
+    void queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch);
     void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushRawLedgerFrames(bool force = false);
     void updateRawLedgerTailView(const FrameRecordList& frames,
@@ -153,17 +154,10 @@ private:
     quint64 m_rawLedgerLastWriteFailures = 0;
     QJsonObject m_pipelineTransportPayload;
     QJsonObject m_pipelineTransportCheapCounts;
-    QJsonObject m_coreEvidenceTransportPayload;
-    QJsonObject m_coreEvidenceCheapCounts;
     QJsonObject m_analysisTransportPayload;
     QJsonObject m_analysisTransportCheapCounts;
     CoreViewSeverity m_pipelineTransportSeverity = CoreViewSeverity::Ok;
-    CoreViewSeverity m_coreEvidenceSeverity = CoreViewSeverity::Ok;
     CoreViewSeverity m_analysisSeverity = CoreViewSeverity::Ok;
-    quint64 m_boardEventTotal = 0;
-    quint64 m_mcp2515EventTotal = 0;
-    quint64 m_boardEventFatalTotal = 0;
-    QHash<quint16, quint64> m_mcp2515Details;
     bool m_rawLedgerDispatchInFlight = false;
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;

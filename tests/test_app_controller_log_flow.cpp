@@ -92,7 +92,6 @@ class AppControllerLogFlowTest : public QObject {
 private slots:
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
-        qputenv("CAN_MONITOR_DISABLE_CORE_PROCESS", QByteArrayLiteral("1"));
     }
 
     void controlEvidenceStatsStartAtZero() {
@@ -490,7 +489,7 @@ private slots:
         QCOMPARE(trace.value(QStringLiteral("append_live_batch_frames")).toString().toULongLong(), quint64(0));
     }
 
-    void finalizePendingLogSaveCopiesArtifactsAndClearsPendingState() {
+    void legacyLiveLoggingDoesNotCreateTempArtifactsInCoreOnlyMode() {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
 
@@ -498,45 +497,21 @@ private slots:
         qputenv("APPDATA", appDataPath);
         qputenv("LOCALAPPDATA", appDataPath);
 
-        const QString modelPath = writeModelFixture(tempDir.path());
-        QVERIFY(!modelPath.isEmpty());
-
         AppController controller;
         controller.clearSavedSession();
         controller.clearFrames();
-        controller.setTransportMode(QStringLiteral("legacy20"));
-        controller.setRulesPath(modelPath);
-        QTRY_VERIFY_WITH_TIMEOUT(controller.modelActive(), 10000);
-
+        controller.m_transportModeKey = QStringLiteral("legacy20");
         controller.m_connected = true;
         controller.startLog();
-        QTRY_VERIFY_WITH_TIMEOUT(controller.logRecordingActive(), 10000);
-        QVERIFY(!controller.logPath().isEmpty());
-        QVERIFY(QFileInfo::exists(controller.logPath()));
+
+        QCOMPARE(controller.logRecordingActive(), false);
         QCOMPARE(controller.logPendingSave(), false);
-
-        controller.stopLog();
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.logRecordingActive(), 10000);
-        QTRY_VERIFY_WITH_TIMEOUT(controller.logPendingSave(), 10000);
-        QVERIFY(controller.logStatusSummary().contains(QStringLiteral("저장"), Qt::CaseInsensitive));
-
-        const QString saveBasePath = tempDir.path() + QStringLiteral("/saved/capture_one");
-        controller.finalizePendingLogSave(saveBasePath);
-        QTRY_VERIFY_WITH_TIMEOUT(!controller.logPendingSave(), 10000);
         QCOMPARE(controller.logSaving(), false);
-
-        const QString finalBin = tempDir.path() + QStringLiteral("/saved/capture_one.bin");
-        const QString finalMeta = tempDir.path() + QStringLiteral("/saved/capture_one.meta.json");
-        const QString finalModel = tempDir.path() + QStringLiteral("/saved/capture_one.model.json");
-        QCOMPARE(controller.logPath(), finalBin);
-        QCOMPARE(controller.suggestedLogSavePath(), finalBin);
-        QCOMPARE(controller.m_logLastSavedPath, finalBin);
-        QVERIFY(QFileInfo::exists(finalBin));
-        QVERIFY(QFileInfo::exists(finalMeta));
-        QVERIFY(QFileInfo::exists(finalModel));
+        QVERIFY(controller.m_logTempPath.isEmpty());
+        QVERIFY(controller.statusText().contains(QStringLiteral("legacy live logging is disabled")));
     }
 
-    void discardPendingLogRemovesTempArtifactsAndClearsPendingState() {
+    void legacyTransportModeSelectionIsRejectedByCoreOnlyUi() {
         QTemporaryDir tempDir;
         QVERIFY(tempDir.isValid());
 
@@ -544,36 +519,13 @@ private slots:
         qputenv("APPDATA", appDataPath);
         qputenv("LOCALAPPDATA", appDataPath);
 
-        const QString modelPath = writeModelFixture(tempDir.path());
-        QVERIFY(!modelPath.isEmpty());
-
         AppController controller;
         controller.clearSavedSession();
         controller.clearFrames();
         controller.setTransportMode(QStringLiteral("legacy20"));
-        controller.setRulesPath(modelPath);
-        QTRY_VERIFY_WITH_TIMEOUT(controller.modelActive(), 10000);
 
-        controller.m_connected = true;
-        controller.startLog();
-        QTRY_VERIFY_WITH_TIMEOUT(controller.logRecordingActive(), 10000);
-        const QString tempBin = controller.m_logTempPath;
-        const QString tempMeta = controller.m_logTempMetaPath;
-        const QString tempModel = controller.m_logTempModelPath;
-        QVERIFY(!tempBin.isEmpty());
-
-        controller.stopLog();
-        QTRY_VERIFY_WITH_TIMEOUT(controller.logPendingSave(), 10000);
-        controller.discardPendingLog();
-
-        QCOMPARE(controller.logPendingSave(), false);
-        QCOMPARE(controller.logRecordingActive(), false);
-        QCOMPARE(controller.logStopping(), false);
-        QCOMPARE(controller.logSaving(), false);
-        QVERIFY(!QFileInfo::exists(tempBin));
-        QVERIFY(!QFileInfo::exists(tempMeta));
-        QVERIFY(!QFileInfo::exists(tempModel));
-        QVERIFY(controller.logPath().isEmpty());
+        QCOMPARE(controller.transportMode(), QStringLiteral("typed"));
+        QVERIFY(controller.statusText().contains(QStringLiteral("legacy in-process transport is disabled")));
     }
 };
 

@@ -1,12 +1,14 @@
 #include "backend/BuildMetadata.h"
 #include "backend/core/CaptureCoreProcessRuntime.h"
 #include "backend/core/CoreMaterializedViewStore.h"
+#include "backend/transport/CoreDataBatches.h"
 
 #include <QCoreApplication>
 #include <QCommandLineParser>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaType>
 #include <QTextStream>
 
 namespace {
@@ -47,6 +49,8 @@ int runSelfTest() {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    qRegisterMetaType<CanMonitorTransport::AnalysisFrameBatch>("CanMonitorTransport::AnalysisFrameBatch");
+    qRegisterMetaType<CanMonitorTransport::RawLedgerFrameBatch>("CanMonitorTransport::RawLedgerFrameBatch");
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("vsm-capture-core"));
     QCoreApplication::setOrganizationName(QStringLiteral(CAN_MONITOR_ORG_NAME));

@@ -33,19 +33,12 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/FilePersistence.cpp
     src/backend/TypedRecords.h
     src/backend/TypedRecords.cpp
-    src/backend/core/CaptureCoreDataPlane.h
     src/backend/core/CoreViewTypes.h
     src/backend/core/CoreViewTypes.cpp
-    src/backend/core/CoreMaterializedViewStore.h
-    src/backend/core/CoreMaterializedViewStore.cpp
-    src/backend/core/CaptureCoreProcessRuntime.h
-    src/backend/core/CaptureCoreProcessRuntime.cpp
     src/backend/core/CoreViewClientRuntime.h
     src/backend/core/CoreViewClientRuntime.cpp
     src/backend/core/CoreIpcClientRuntime.h
     src/backend/core/CoreIpcClientRuntime.cpp
-    src/backend/core/CoreIpcServerRuntime.h
-    src/backend/core/CoreIpcServerRuntime.cpp
     src/backend/core/CoreProcessClientRuntime.h
     src/backend/core/CoreProcessClientRuntime.cpp
     src/backend/evidence/BoardConnectionState.h
@@ -54,43 +47,9 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/evidence/EvidenceRuntime.cpp
     src/backend/evidence/BusRoleResolver.h
     src/backend/evidence/BusRoleResolver.cpp
-    src/backend/transport/HostTxQueue.h
-    src/backend/transport/HostTxQueue.cpp
-    src/backend/transport/HostTxRuntime.h
-    src/backend/transport/HostTxRuntime.cpp
-    src/backend/transport/DrainByteQueue.h
-    src/backend/transport/DrainByteQueue.cpp
-    src/backend/transport/TypedRecordHandoffQueue.h
-    src/backend/transport/TypedRecordHandoffQueue.cpp
-    src/backend/transport/LegacyIngressRuntime.h
-    src/backend/transport/LegacyIngressRuntime.cpp
     src/backend/transport/LivePathTelemetry.h
-    src/backend/transport/LiveProjectionRuntime.h
-    src/backend/transport/LiveProjectionRuntime.cpp
-    src/backend/transport/SerialDrainRuntime.h
-    src/backend/transport/SerialDrainRuntime.cpp
-    src/backend/transport/TypedCaptureWriterRuntime.h
-    src/backend/transport/TypedCaptureWriterRuntime.cpp
-    src/backend/transport/TypedCaptureWriterWorkerRuntime.h
-    src/backend/transport/TypedCaptureWriterWorkerRuntime.cpp
-    src/backend/transport/TypedEvidencePipelineRuntime.h
-    src/backend/transport/TypedEvidencePipelineRuntime.cpp
-    src/backend/transport/CaptureCoreRuntime.h
-    src/backend/transport/CaptureCoreRuntime.cpp
-    src/backend/transport/TypedEvidencePipelineWorkerRuntime.h
-    src/backend/transport/TypedEvidencePipelineWorkerRuntime.cpp
-    src/backend/transport/LiveTruthRuntime.h
-    src/backend/transport/LiveTruthRuntime.cpp
-    src/backend/transport/RawLedgerRuntime.h
-    src/backend/transport/RawLedgerRuntime.cpp
-    src/backend/transport/RawLedgerWriterRuntime.h
-    src/backend/transport/RawLedgerWriterRuntime.cpp
-    src/backend/transport/TransportRuntime.h
-    src/backend/transport/TransportRuntime.cpp
     src/backend/transport/TransportSession.h
     src/backend/transport/TransportSession.cpp
-    src/backend/transport/TypedIngressRuntime.h
-    src/backend/transport/TypedIngressRuntime.cpp
     src/backend/TypedTransportParser.h
     src/backend/TypedTransportParser.cpp
     src/backend/TypedReplayReader.h
@@ -107,8 +66,6 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/control/ControlRuntime.cpp
     src/backend/control/ControlSlewLimiter.h
     src/backend/control/ControlSlewLimiter.cpp
-    src/backend/control/ControlCycleRuntime.h
-    src/backend/control/ControlCycleRuntime.cpp
     src/backend/UiStateStore.h
     src/backend/UiStateStore.cpp
     src/backend/PacketParser.h
@@ -121,8 +78,6 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/TimingEvaluator.cpp
     src/backend/analysis/AnalysisRuntime.h
     src/backend/analysis/AnalysisRuntime.cpp
-    src/backend/analysis/AnalysisWorkerRuntime.h
-    src/backend/analysis/AnalysisWorkerRuntime.cpp
     src/backend/perf/PerformanceProbeRuntime.h
     src/backend/perf/PerformanceProbeRuntime.cpp
     src/backend/perf/UiResponsivenessRuntime.h
@@ -150,8 +105,6 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/DetailListModel.cpp
     src/backend/StableMapListModel.h
     src/backend/StableMapListModel.cpp
-    src/backend/SerialWorker.h
-    src/backend/SerialWorker.cpp
     src/backend/ReplayEngine.h
     src/backend/ReplayEngine.cpp
     src/backend/AppController.h
