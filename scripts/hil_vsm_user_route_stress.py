@@ -968,6 +968,8 @@ def main() -> int:
         control_request(args.control_port, {"cmd": "start_log", "directory": str(log_root), "name": log_name})
         wait_status(args.control_port, lambda s: bool(s.get("log_recording_active")), 10, "VSM logging active")
         state_poller.sample("logging_started")
+        control_request(args.control_port, {"cmd": "panel", "key": "live"})
+        state_poller.sample("live_panel_opened")
         if args.control_smoke:
             control_driver = ControlSmokeDriver(args, run_dir / "control_smoke.jsonl")
             control_driver.start()
