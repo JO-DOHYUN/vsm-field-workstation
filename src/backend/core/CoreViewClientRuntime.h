@@ -43,6 +43,7 @@ public:
         quint64 skippedDisabled = 0;
         quint64 skippedInflight = 0;
         quint64 timedOutInflight = 0;
+        quint64 failedInflight = 0;
         quint64 staleResponses = 0;
         int pendingViews = 0;
         int inflightViews = 0;
@@ -53,6 +54,7 @@ public:
     void reset();
     void setPolicy(CoreViewName viewName, int limit, bool enabled = true);
     std::optional<ViewRequest> noteViewChanged(const QJsonObject& change);
+    std::optional<ViewRequest> noteRequestFailed(quint64 requestId);
     ApplyResult applySnapshot(quint64 requestId, bool changed, const QJsonObject& snapshot, const QJsonObject& change);
 
     Status status() const;

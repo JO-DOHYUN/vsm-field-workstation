@@ -58,13 +58,25 @@ private slots:
         QCOMPARE(client.status().inflightViews, 1);
     }
 
-    void analysisSnapshotRequestsAreNotSingleRowLimited() {
+    void analysisSnapshotRequestsUseBoundedSchemaLimit() {
         CanMonitorCore::CoreViewClientRuntime client;
 
         auto request = client.noteViewChanged(makeChange(QStringLiteral("analysis_snapshot"), 5));
         QVERIFY(request.has_value());
         QCOMPARE(request->viewName, QStringLiteral("analysis_snapshot"));
-        QCOMPARE(request->limit, 0);
+        QCOMPARE(request->limit, 1600);
+    }
+
+    void failedRequestClearsInflightAccounting() {
+        CanMonitorCore::CoreViewClientRuntime client;
+
+        auto request = client.noteViewChanged(makeChange(QStringLiteral("live_latest"), 7));
+        QVERIFY(request.has_value());
+        QCOMPARE(client.status().inflightViews, 1);
+        QVERIFY(!client.noteRequestFailed(request->requestId).has_value());
+        const auto status = client.status();
+        QCOMPARE(status.failedInflight, quint64(1));
+        QCOMPARE(status.inflightViews, 0);
     }
 
 private:

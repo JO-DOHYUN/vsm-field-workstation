@@ -15,6 +15,7 @@ namespace {
 constexpr qint64 kIpcViewChangedCoalesceMs = 50;
 constexpr qint64 kIpcViewBackpressureBytes = 2 * 1024 * 1024;
 constexpr qint64 kIpcCriticalBackpressureBytes = 4 * 1024 * 1024;
+constexpr qint64 kIpcMaxSnapshotResponseBytes = 2 * 1024 * 1024;
 constexpr qsizetype kIpcMaxHostFrameBytes = 8192;
 
 bool intInRange(const QJsonObject& object, const QString& key, int minValue, int maxValue, bool required, QString* errorOut) {
@@ -120,6 +121,9 @@ QJsonObject CoreIpcServerRuntime::statusJson() const {
     return QJsonObject{{QStringLiteral("ipc_view_published"), QString::number(m_publishedViewNotifications)},
                        {QStringLiteral("ipc_view_coalesced"), QString::number(m_coalescedViewNotifications)},
                        {QStringLiteral("ipc_view_dropped"), QString::number(m_droppedViewNotifications)},
+                       {QStringLiteral("ipc_snapshot_responses"), QString::number(m_snapshotResponses)},
+                       {QStringLiteral("ipc_snapshot_dropped"), QString::number(m_droppedSnapshotResponses)},
+                       {QStringLiteral("ipc_snapshot_max_bytes"), QString::number(m_maxSnapshotResponseBytes)},
                        {QStringLiteral("ipc_slow_client_disconnects"), QString::number(m_disconnectedSlowClients)},
                        {QStringLiteral("ipc_max_queued_bytes"), QString::number(m_maxQueuedBytes)},
                        {QStringLiteral("ipc_pending_views"), m_pendingViewChanges.size()},
@@ -366,25 +370,38 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
     response.insert(QStringLiteral("change"), result.changed ? result.change.toJson() : QJsonObject{{QStringLiteral("view_name"), coreViewNameToString(viewName)},
                                                                                                     {QStringLiteral("view_seq"), QString::number(sinceSeq)}});
     response.insert(QStringLiteral("snapshot"), result.changed ? result.snapshot.toJson() : QJsonObject{});
+    const qint64 responseBytes = QJsonDocument(response).toJson(QJsonDocument::Compact).size();
+    ++m_snapshotResponses;
+    m_maxSnapshotResponseBytes = std::max(m_maxSnapshotResponseBytes, responseBytes);
+    if (responseBytes > kIpcMaxSnapshotResponseBytes) {
+        ++m_droppedSnapshotResponses;
+        sendObject(socket,
+                   errorResponse(message,
+                                 QStringLiteral("view_snapshot_too_large"),
+                                 QString::number(responseBytes)));
+        return;
+    }
     sendObject(socket, response);
 }
 
 void CoreIpcServerRuntime::sendObject(QLocalSocket* socket, const QJsonObject& object) {
     if (!socket) return;
+    const QByteArray payload = QJsonDocument(object).toJson(QJsonDocument::Compact);
     const qint64 queued = socket->bytesToWrite();
-    m_maxQueuedBytes = std::max(m_maxQueuedBytes, queued);
+    const qint64 projectedQueued = queued + payload.size() + 1;
+    m_maxQueuedBytes = std::max(m_maxQueuedBytes, projectedQueued);
     const bool viewNotification = object.value(QStringLiteral("message_type")).toString() == QStringLiteral("view_changed");
-    if (viewNotification && queued > kIpcViewBackpressureBytes) {
+    if (viewNotification && projectedQueued > kIpcViewBackpressureBytes) {
         ++m_droppedViewNotifications;
         return;
     }
-    if (!viewNotification && queued > kIpcCriticalBackpressureBytes) {
+    if (!viewNotification && projectedQueued > kIpcCriticalBackpressureBytes) {
         ++m_disconnectedSlowClients;
         emit protocolError(QStringLiteral("ipc critical response backpressure exceeded"));
         socket->disconnectFromServer();
         return;
     }
-    socket->write(QJsonDocument(object).toJson(QJsonDocument::Compact));
+    socket->write(payload);
     socket->write("\n");
     socket->flush();
 }

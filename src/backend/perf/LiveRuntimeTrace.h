@@ -81,6 +81,8 @@ public:
 
     static LiveRuntimeTraceRegistry& instance();
 
+    void setEnabled(bool enabled);
+    bool enabled() const;
     void reset();
     void noteEmit(LiveTraceSignal signal, quint64 payloadCount = 0, quint64 payloadBytes = 0);
     void noteSlot(LiveTraceSignal signal, quint64 payloadCount = 0, quint64 payloadBytes = 0);
@@ -125,6 +127,7 @@ private:
 
     std::array<SignalCounters, static_cast<int>(LiveTraceSignal::Count)> m_signals;
     HeartbeatCounters m_heartbeat;
+    std::atomic<bool> m_enabled{false};
 };
 
 class LiveRuntimeTraceService : public QObject {

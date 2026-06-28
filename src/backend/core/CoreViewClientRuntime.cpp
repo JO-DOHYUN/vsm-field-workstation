@@ -16,7 +16,7 @@ CoreViewClientRuntime::CoreViewClientRuntime() {
     setPolicy(CoreViewName::RawLedgerTail, 256, true);
     setPolicy(CoreViewName::TransportSummary, 1, true);
     setPolicy(CoreViewName::CaptureProgress, 1, true);
-    setPolicy(CoreViewName::AnalysisSnapshot, 0, true);
+    setPolicy(CoreViewName::AnalysisSnapshot, 1600, true);
     setPolicy(CoreViewName::FatalDiagnostics, 16, true);
 }
 
@@ -68,6 +68,22 @@ std::optional<CoreViewClientRuntime::ViewRequest> CoreViewClientRuntime::noteVie
         }
     }
     return makeRequest(viewName);
+}
+
+std::optional<CoreViewClientRuntime::ViewRequest> CoreViewClientRuntime::noteRequestFailed(quint64 requestId) {
+    if (requestId == 0) return std::nullopt;
+    for (int index = 0; index < kCoreViewCount; ++index) {
+        State& state = m_states.at(index);
+        if (!state.inflight || state.inflightRequestId != requestId) continue;
+        state.inflight = false;
+        state.inflightRequestId = 0;
+        state.inflightStartedMs = 0;
+        state.pending = state.pendingSeq > state.lastSeq;
+        ++m_status.failedInflight;
+        return std::nullopt;
+    }
+    ++m_status.staleResponses;
+    return std::nullopt;
 }
 
 CoreViewClientRuntime::ApplyResult CoreViewClientRuntime::applySnapshot(quint64 requestId,
@@ -137,6 +153,7 @@ QJsonObject CoreViewClientRuntime::statusJson() const {
     out.insert(QStringLiteral("core_view_skipped_disabled"), QString::number(s.skippedDisabled));
     out.insert(QStringLiteral("core_view_skipped_inflight"), QString::number(s.skippedInflight));
     out.insert(QStringLiteral("core_view_timed_out_inflight"), QString::number(s.timedOutInflight));
+    out.insert(QStringLiteral("core_view_failed_inflight"), QString::number(s.failedInflight));
     out.insert(QStringLiteral("core_view_stale_responses"), QString::number(s.staleResponses));
     out.insert(QStringLiteral("core_view_pending_views"), s.pendingViews);
     out.insert(QStringLiteral("core_view_inflight_views"), s.inflightViews);

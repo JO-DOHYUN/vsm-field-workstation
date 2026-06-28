@@ -72,15 +72,28 @@ signals:
                               bool progressDue,
                               quint64 bytesWritten,
                               quint64 recordCount);
+    void ipcRequestError(quint64 requestId, const QString& error, const QString& detail);
     void errorOccurred(const QString& message);
 
 private:
+    enum class LifecycleState {
+        Stopped,
+        ProcessStarting,
+        IpcConnecting,
+        IpcConnected,
+        Degraded,
+        Stopping,
+    };
+
     bool startProcess(const QString& executablePath, const QStringList& extraArgs, QString* errorOut);
     void connectClientSignals();
     void readStandardOutput();
     void readStandardError();
     void connectIpc();
     void scheduleConnectIpc(int delayMs);
+    void scheduleStartupTimeout();
+    void setLifecycleState(LifecycleState state, const QString& message = QString());
+    static QString lifecycleStateText(LifecycleState state);
     bool queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut);
     void sendPendingTransportStartIfReady();
     static QString makeServerName();
@@ -92,6 +105,9 @@ private:
     QString m_pendingTransportMode;
     QString m_pendingTransportEndpoint;
     QString m_lastMessage = QStringLiteral("core process idle");
+    LifecycleState m_lifecycleState = LifecycleState::Stopped;
+    qint64 m_lifecycleStateChangedMs = 0;
+    quint64 m_lifecycleGeneration = 0;
     bool m_startupSeen = false;
     bool m_connectRetryScheduled = false;
     int m_connectAttempts = 0;

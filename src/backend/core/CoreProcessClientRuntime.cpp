@@ -20,9 +20,8 @@ CoreProcessClientRuntime::CoreProcessClientRuntime(QObject* parent)
             &QProcess::errorOccurred,
             this,
             [this](QProcess::ProcessError) {
-                m_lastMessage = m_process.errorString();
+                setLifecycleState(LifecycleState::Degraded, m_process.errorString());
                 emit errorOccurred(QStringLiteral("core process error: %1").arg(m_lastMessage));
-                emit stateChanged(isActive(), m_lastMessage);
             });
     connect(&m_process,
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
@@ -30,10 +29,10 @@ CoreProcessClientRuntime::CoreProcessClientRuntime(QObject* parent)
             [this](int exitCode, QProcess::ExitStatus status) {
                 m_connectRetryScheduled = false;
                 m_client.disconnectFromServer();
-                m_lastMessage = QStringLiteral("core process exited: code %1 status %2")
-                                    .arg(exitCode)
-                                    .arg(status == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash"));
-                emit stateChanged(false, m_lastMessage);
+                setLifecycleState(LifecycleState::Stopped,
+                                  QStringLiteral("core process exited: code %1 status %2")
+                                      .arg(exitCode)
+                                      .arg(status == QProcess::NormalExit ? QStringLiteral("normal") : QStringLiteral("crash")));
             });
 }
 
@@ -94,16 +93,22 @@ bool CoreProcessClientRuntime::stopTransport(QString* errorOut) {
 }
 
 void CoreProcessClientRuntime::stop() {
+    ++m_lifecycleGeneration;
+    setLifecycleState(LifecycleState::Stopping, QStringLiteral("stopping core process"));
     m_connectRetryScheduled = false;
     m_client.disconnectFromServer();
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
-    if (m_process.state() == QProcess::NotRunning) return;
+    if (m_process.state() == QProcess::NotRunning) {
+        setLifecycleState(LifecycleState::Stopped, QStringLiteral("core process stopped"));
+        return;
+    }
     m_process.terminate();
     if (!m_process.waitForFinished(1500)) {
         m_process.kill();
         m_process.waitForFinished(1000);
     }
+    setLifecycleState(LifecycleState::Stopped, QStringLiteral("core process stopped"));
 }
 
 bool CoreProcessClientRuntime::isActive() const {
@@ -118,6 +123,8 @@ QJsonObject CoreProcessClientRuntime::statusJson() const {
     return QJsonObject{{QStringLiteral("core_process_active"), isActive()},
                        {QStringLiteral("core_process_ipc_connected"), m_client.isConnected()},
                        {QStringLiteral("core_process_server_name"), m_serverName},
+                       {QStringLiteral("core_process_state"), lifecycleStateText(m_lifecycleState)},
+                       {QStringLiteral("core_process_state_since_ms"), QString::number(m_lifecycleStateChangedMs)},
                        {QStringLiteral("core_process_ipc_connect_attempts"), m_connectAttempts},
                        {QStringLiteral("core_process_ipc_retry_scheduled"), m_connectRetryScheduled},
                        {QStringLiteral("core_process_message"), m_lastMessage}};
@@ -252,9 +259,10 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     m_startupSeen = false;
     m_connectRetryScheduled = false;
     m_connectAttempts = 0;
+    ++m_lifecycleGeneration;
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
-    m_lastMessage = QStringLiteral("starting core process");
+    setLifecycleState(LifecycleState::ProcessStarting, QStringLiteral("starting core process"));
 
     QStringList args{QStringLiteral("--server"), m_serverName};
     args += extraArgs;
@@ -264,10 +272,12 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     m_process.start();
     if (!m_process.waitForStarted(3000)) {
         if (errorOut) *errorOut = QStringLiteral("failed to start core process: %1").arg(m_process.errorString());
+        setLifecycleState(LifecycleState::Degraded, errorOut ? *errorOut : m_process.errorString());
         return false;
     }
 
-    emit stateChanged(true, m_lastMessage);
+    setLifecycleState(LifecycleState::ProcessStarting, m_lastMessage);
+    scheduleStartupTimeout();
     scheduleConnectIpc(150);
     if (errorOut) errorOut->clear();
     return true;
@@ -275,15 +285,17 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
 
 void CoreProcessClientRuntime::connectClientSignals() {
     connect(&m_client, &CoreIpcClientRuntime::connectedChanged, this, [this](bool connected) {
-        m_lastMessage = connected ? QStringLiteral("core IPC connected") : QStringLiteral("core IPC disconnected");
         if (connected) {
             m_connectRetryScheduled = false;
             m_connectAttempts = 0;
+            setLifecycleState(LifecycleState::IpcConnected, QStringLiteral("core IPC connected"));
             sendPendingTransportStartIfReady();
         } else if (isActive()) {
+            setLifecycleState(LifecycleState::Degraded, QStringLiteral("core IPC disconnected"));
             scheduleConnectIpc(250);
+        } else {
+            setLifecycleState(LifecycleState::Stopped, QStringLiteral("core IPC disconnected"));
         }
-        emit stateChanged(isActive(), m_lastMessage);
     });
     connect(&m_client, &CoreIpcClientRuntime::viewChanged, this, &CoreProcessClientRuntime::viewChanged);
     connect(&m_client,
@@ -307,9 +319,13 @@ void CoreProcessClientRuntime::connectClientSignals() {
                    quint64 recordCount) {
                 emit captureStorageUpdate(ok, error, stateChanged, active, path, progressDue, bytesWritten, recordCount);
             });
-    connect(&m_client, &CoreIpcClientRuntime::errorReceived, this, [this](quint64, const QString& error, const QString& detail) {
+    connect(&m_client, &CoreIpcClientRuntime::errorReceived, this, [this](quint64 requestId, const QString& error, const QString& detail) {
         const QString message = detail.isEmpty() ? error : QStringLiteral("%1: %2").arg(error, detail);
+        emit ipcRequestError(requestId, error, detail);
         emit errorOccurred(QStringLiteral("core IPC error: %1").arg(message));
+        if (!m_client.isConnected()) {
+            setLifecycleState(LifecycleState::Degraded, QStringLiteral("core IPC error: %1").arg(message));
+        }
         if (isActive() && !m_client.isConnected()) {
             scheduleConnectIpc(250);
         }
@@ -331,8 +347,8 @@ void CoreProcessClientRuntime::readStandardOutput() {
         const QJsonObject object = document.object();
         if (object.value(QStringLiteral("ok")).toBool(false)) {
             m_startupSeen = true;
-            m_lastMessage = QStringLiteral("core process ready");
-            emit stateChanged(true, m_lastMessage);
+            setLifecycleState(m_client.isConnected() ? LifecycleState::IpcConnected : LifecycleState::IpcConnecting,
+                              QStringLiteral("core process ready"));
             scheduleConnectIpc(0);
         }
     }
@@ -348,6 +364,8 @@ void CoreProcessClientRuntime::connectIpc() {
     m_connectRetryScheduled = false;
     if (!isActive() || m_client.isConnected() || m_serverName.isEmpty()) return;
     ++m_connectAttempts;
+    setLifecycleState(LifecycleState::IpcConnecting,
+                      QStringLiteral("connecting core IPC attempt %1").arg(m_connectAttempts));
     m_client.connectToServer(m_serverName);
     if (!m_client.isConnected()) scheduleConnectIpc(m_startupSeen ? 250 : 150);
 }
@@ -356,6 +374,48 @@ void CoreProcessClientRuntime::scheduleConnectIpc(int delayMs) {
     if (m_connectRetryScheduled || !isActive() || m_client.isConnected() || m_serverName.isEmpty()) return;
     m_connectRetryScheduled = true;
     QTimer::singleShot(std::max(0, delayMs), this, &CoreProcessClientRuntime::connectIpc);
+}
+
+void CoreProcessClientRuntime::scheduleStartupTimeout() {
+    const quint64 generation = m_lifecycleGeneration;
+    QTimer::singleShot(5000, this, [this, generation]() {
+        if (generation != m_lifecycleGeneration || !isActive() || m_client.isConnected()) return;
+        setLifecycleState(LifecycleState::Degraded,
+                          m_startupSeen
+                              ? QStringLiteral("core IPC connect timeout")
+                              : QStringLiteral("core process startup timeout"));
+        scheduleConnectIpc(250);
+    });
+}
+
+void CoreProcessClientRuntime::setLifecycleState(LifecycleState state, const QString& message) {
+    const bool lifecycleChanged = m_lifecycleState != state;
+    m_lifecycleState = state;
+    if (lifecycleChanged || m_lifecycleStateChangedMs == 0) {
+        m_lifecycleStateChangedMs = QDateTime::currentMSecsSinceEpoch();
+    }
+    if (!message.isEmpty()) {
+        m_lastMessage = message;
+    }
+    emit stateChanged(isActive(), m_lastMessage);
+}
+
+QString CoreProcessClientRuntime::lifecycleStateText(LifecycleState state) {
+    switch (state) {
+    case LifecycleState::Stopped:
+        return QStringLiteral("stopped");
+    case LifecycleState::ProcessStarting:
+        return QStringLiteral("process_starting");
+    case LifecycleState::IpcConnecting:
+        return QStringLiteral("ipc_connecting");
+    case LifecycleState::IpcConnected:
+        return QStringLiteral("ipc_connected");
+    case LifecycleState::Degraded:
+        return QStringLiteral("degraded");
+    case LifecycleState::Stopping:
+        return QStringLiteral("stopping");
+    }
+    return QStringLiteral("unknown");
 }
 
 bool CoreProcessClientRuntime::queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut) {

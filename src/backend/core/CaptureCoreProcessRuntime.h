@@ -94,6 +94,10 @@ private:
                                  const QVariantList& timingRows,
                                  const QVariantList& valueRows,
                                  const QVariantList& alarmRows);
+    void latchCaptureInvalid(const QString& reason, quint64 rawIngressOverrunBytes = 0);
+    void publishFatalDiagnostic(const QString& code,
+                                const QString& message,
+                                const QJsonObject& details = {});
     void updateAnalysisStatus(quint64 queuedFrames,
                               quint64 maxQueuedFrames,
                               quint64 capacityFrames,
@@ -160,6 +164,12 @@ private:
     quint64 m_captureProgressRecordCount = 0;
     bool m_captureProgressActive = false;
     bool m_captureProgressInvalid = false;
+    QString m_captureProgressInvalidReason;
+    quint64 m_captureProgressRawIngressOverrunBytes = 0;
+    quint64 m_fatalDiagnosticCount = 0;
+    QString m_lastFatalDiagnosticCode;
+    QString m_lastFatalDiagnosticMessage;
+    QJsonObject m_lastFatalDiagnosticDetails;
     QJsonObject m_pipelineTransportPayload;
     QJsonObject m_pipelineTransportCheapCounts;
     QJsonObject m_analysisTransportPayload;

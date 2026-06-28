@@ -125,6 +125,14 @@ const char* LiveRuntimeTraceRegistry::signalName(LiveTraceSignal signal) {
     return "unknown";
 }
 
+void LiveRuntimeTraceRegistry::setEnabled(bool enabled) {
+    m_enabled.store(enabled, std::memory_order_release);
+}
+
+bool LiveRuntimeTraceRegistry::enabled() const {
+    return m_enabled.load(std::memory_order_acquire);
+}
+
 void LiveRuntimeTraceRegistry::reset() {
     for (SignalCounters& signal : m_signals) {
         signal.emitSeq.store(0, std::memory_order_release);
@@ -151,6 +159,7 @@ void LiveRuntimeTraceRegistry::reset() {
 }
 
 void LiveRuntimeTraceRegistry::noteEmit(LiveTraceSignal signal, quint64 payloadCount, quint64 payloadBytes) {
+    if (!enabled()) return;
     const int index = static_cast<int>(signal);
     if (index < 0 || index >= static_cast<int>(LiveTraceSignal::Count)) return;
     SignalCounters& counters = m_signals.at(index);
@@ -161,6 +170,7 @@ void LiveRuntimeTraceRegistry::noteEmit(LiveTraceSignal signal, quint64 payloadC
 }
 
 void LiveRuntimeTraceRegistry::noteSlot(LiveTraceSignal signal, quint64 payloadCount, quint64 payloadBytes) {
+    if (!enabled()) return;
     const int index = static_cast<int>(signal);
     if (index < 0 || index >= static_cast<int>(LiveTraceSignal::Count)) return;
     SignalCounters& counters = m_signals.at(index);
@@ -176,6 +186,7 @@ void LiveRuntimeTraceRegistry::noteSlot(LiveTraceSignal signal, quint64 payloadC
 }
 
 void LiveRuntimeTraceRegistry::noteHeartbeatSent(qint64 sentWallMs) {
+    if (!enabled()) return;
     m_heartbeat.sent.fetch_add(1, std::memory_order_acq_rel);
     m_heartbeat.inflight.store(true, std::memory_order_release);
     m_heartbeat.pendingMs.store(0, std::memory_order_release);
@@ -183,6 +194,7 @@ void LiveRuntimeTraceRegistry::noteHeartbeatSent(qint64 sentWallMs) {
 }
 
 void LiveRuntimeTraceRegistry::noteHeartbeatAck(qint64 sentWallMs) {
+    if (!enabled()) return;
     const qint64 delayMs = sentWallMs > 0 ? std::max<qint64>(0, nowWallMs() - sentWallMs) : 0;
     m_heartbeat.ack.fetch_add(1, std::memory_order_acq_rel);
     m_heartbeat.inflight.store(false, std::memory_order_release);
@@ -201,6 +213,7 @@ void LiveRuntimeTraceRegistry::noteHeartbeatAck(qint64 sentWallMs) {
 }
 
 void LiveRuntimeTraceRegistry::noteHeartbeatPending(qint64 pendingMs) {
+    if (!enabled()) return;
     if (pendingMs < 0) return;
     m_heartbeat.pendingMs.store(pendingMs, std::memory_order_release);
     atomicMax(m_heartbeat.maxDelayMs, pendingMs);
@@ -308,12 +321,17 @@ public slots:
         QDir().mkpath(m_directory);
         m_mainThreadTarget = mainThreadTarget;
         if (resetCounters) LiveRuntimeTraceRegistry::instance().reset();
+        LiveRuntimeTraceRegistry::instance().setEnabled(true);
 
         m_traceFile.setFileName(QDir(m_directory).filePath(QStringLiteral("live_runtime_trace.jsonl")));
         m_metricsFile.setFileName(QDir(m_directory).filePath(QStringLiteral("process_metrics.csv")));
-        if (!m_traceFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) return;
+        if (!m_traceFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            LiveRuntimeTraceRegistry::instance().setEnabled(false);
+            return;
+        }
         if (!m_metricsFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
             m_traceFile.close();
+            LiveRuntimeTraceRegistry::instance().setEnabled(false);
             return;
         }
         QTextStream metrics(&m_metricsFile);
@@ -343,6 +361,7 @@ public slots:
         m_directory.clear();
         m_mainThreadTarget.clear();
         m_heartbeatInFlight.store(false, std::memory_order_release);
+        LiveRuntimeTraceRegistry::instance().setEnabled(false);
     }
 
     void flush() {

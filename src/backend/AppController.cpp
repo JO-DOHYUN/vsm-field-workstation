@@ -2448,7 +2448,7 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
         const QString path = payload.value(QStringLiteral("path")).toString();
 
         if (totalRows < m_rawFrameTable.totalRows()) {
-            m_rawFrameTable.resetLedgerState(path, QStringLiteral("core raw ledger sequence rewound"));
+            m_rawFrameTable.resetLedgerState(path, QStringLiteral("core decoded CAN tail sequence rewound"));
         }
 
         FrameRecordList frames;
@@ -2972,6 +2972,15 @@ AppController::AppController(QObject* parent) : QObject(parent) {
         setStatus(message);
         requestTransportDiagnosticsRefresh(true);
     });
+    connect(&m_coreProcessClient,
+            &CanMonitorCore::CoreProcessClientRuntime::ipcRequestError,
+            this,
+            [this](quint64 requestId, const QString&, const QString&) {
+                if (!m_coreProcessMode) return;
+                m_coreViewClient.noteRequestFailed(requestId);
+                m_transportSession.updateDrainEventTrace(drainEventTraceObject());
+                requestTransportDiagnosticsRefresh(true);
+            });
     connect(&m_coreProcessClient, &CanMonitorCore::CoreProcessClientRuntime::viewChanged, this, [this](const QJsonObject& change) {
         if (!m_coreProcessMode) return;
         handleCoreViewChanged(change);
@@ -3201,6 +3210,7 @@ AppController::~AppController() {
         m_verificationProcess = nullptr;
     }
     CanMonitorPerf::PerformanceProbeRuntime::setEnabled(false);
+    CanMonitorPerf::LiveRuntimeTraceRegistry::instance().setEnabled(false);
     saveSessionState();
     m_session.sync();
 }
@@ -3286,6 +3296,7 @@ void AppController::flushLiveRuntimeTraceOwnerSnapshot() {
 }
 
 void AppController::startLiveRuntimeTraceSession(const QString& directory, const QString& reason, bool resetCounters) {
+    if (!m_debugProfilerEnabled) return;
     const QString normalized = RuntimePaths::normalizeLocalPath(directory);
     if (normalized.trimmed().isEmpty()) return;
     if (!m_liveRuntimeTraceDir.isEmpty() && m_liveRuntimeTraceDir == normalized) {
@@ -9051,11 +9062,14 @@ void AppController::setDebugProfilerEnabled(bool enabled) {
     if (m_debugProfilerEnabled == enabled) return;
     m_debugProfilerEnabled = enabled;
     CanMonitorPerf::PerformanceProbeRuntime::setEnabled(enabled);
+    CanMonitorPerf::LiveRuntimeTraceRegistry::instance().setEnabled(enabled);
     if (enabled) {
         CanMonitorPerf::PerformanceProbeRuntime::reset();
+        CanMonitorPerf::LiveRuntimeTraceRegistry::instance().reset();
         m_performanceTimer.start();
         setStatus(QStringLiteral("성능 계측 켜짐 · debug mode"));
     } else {
+        stopLiveRuntimeTraceSession(QStringLiteral("debug_profiler_disabled"));
         m_performanceTimer.stop();
         setStatus(QStringLiteral("성능 계측 꺼짐"));
     }

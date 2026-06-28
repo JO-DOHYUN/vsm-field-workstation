@@ -114,7 +114,7 @@ private slots:
         QCOMPARE(limited.snapshot.payload.value(QStringLiteral("item_count")).toInt(), 2);
     }
 
-    void queryLimitDoesNotTrimUnownedAnalysisArrays() {
+    void queryLimitTrimsAnalysisArraysBySchema() {
         CoreMaterializedViewStore store;
 
         QJsonArray timingRows;
@@ -134,9 +134,12 @@ private slots:
 
         const auto limited = store.queryView({CoreViewName::AnalysisSnapshot, 0, 1});
         QVERIFY(limited.changed);
-        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows")).toArray().size(), 3);
-        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("value_rows")).toArray().size(), 3);
-        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("alarm_rows")).toArray().size(), 3);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows")).toArray().size(), 1);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("value_rows")).toArray().size(), 1);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("alarm_rows")).toArray().size(), 1);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows")).toArray().at(0).toObject().value(QStringLiteral("id")).toInt(), 2);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows_limited")).toBool(), true);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows_total")).toInt(), 3);
     }
 
     void arrayViewAcceptsExternalDropDelta() {

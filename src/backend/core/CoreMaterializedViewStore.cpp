@@ -164,6 +164,25 @@ qint64 CoreMaterializedViewStore::currentTimeMs() {
 
 QJsonObject CoreMaterializedViewStore::payloadWithQueryLimit(CoreViewName viewName, const QJsonObject& payload, int limit) const {
     if (limit <= 0) return payload;
+    if (viewName == CoreViewName::AnalysisSnapshot) {
+        QJsonObject output = payload;
+        const auto limitArray = [&output](const QString& key, int cap) {
+            const QJsonValue value = output.value(key);
+            if (!value.isArray()) return;
+            const QJsonArray array = value.toArray();
+            if (array.size() > cap) {
+                output.insert(key, tailArray(array, cap));
+                output.insert(QStringLiteral("%1_limited").arg(key), true);
+                output.insert(QStringLiteral("%1_total").arg(key), array.size());
+            }
+        };
+        const int rowCap = std::max(1, limit);
+        limitArray(QStringLiteral("timing_rows"), rowCap);
+        limitArray(QStringLiteral("value_rows"), rowCap);
+        limitArray(QStringLiteral("alarm_rows"), rowCap);
+        limitArray(QStringLiteral("diagnostics"), std::min(rowCap, 128));
+        return output;
+    }
     const QString arrayKey = m_primaryArrayKeys.at(indexOf(viewName));
     if (arrayKey.isEmpty()) return payload;
 

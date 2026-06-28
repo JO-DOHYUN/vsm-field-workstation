@@ -15,6 +15,7 @@ private slots:
     void signalCountersTrackInflightAndSlotDelay() {
         auto& registry = CanMonitorPerf::LiveRuntimeTraceRegistry::instance();
         registry.reset();
+        registry.setEnabled(true);
 
         registry.noteEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 96);
         auto snapshots = registry.signalSnapshots();
@@ -37,6 +38,7 @@ private slots:
         QCOMPARE(truthAfter->slotSeq, quint64(1));
         QCOMPARE(truthAfter->inflight, quint64(0));
         QVERIFY(truthAfter->maxSlotDelayMs >= 0);
+        registry.setEnabled(false);
     }
 
     void writerCreatesBoundedSnapshotArtifacts() {

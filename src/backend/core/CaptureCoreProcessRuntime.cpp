@@ -10,6 +10,8 @@
 #include <QStringList>
 #include <QTimer>
 
+#include <algorithm>
+
 namespace CanMonitorCore {
 
 namespace {
@@ -51,10 +53,21 @@ QJsonObject frameToViewRow(const FrameRecord& frame, quint64 ledgerSeq) {
     row.insert(QStringLiteral("dlc"), int(frame.dlc));
     row.insert(QStringLiteral("data_hex"), frameDataHex(frame));
     row.insert(QStringLiteral("seq"), int(frame.seq));
+    row.insert(QStringLiteral("typed_seq_lsb"), int(frame.seq));
+    row.insert(QStringLiteral("record_type"), QStringLiteral("CAN_RX_SEGMENT"));
+    row.insert(QStringLiteral("evidence_kind"), QStringLiteral("decoded_can_tail_row"));
     if (frame.hasCaptureSeq) {
         row.insert(QStringLiteral("capture_seq"), QString::number(frame.captureSeq));
     }
     return row;
+}
+
+void addDecodedTailSemantics(QJsonObject& payload) {
+    payload.insert(QStringLiteral("source"), QStringLiteral("decoded_can_tail_view"));
+    payload.insert(QStringLiteral("evidence_kind"), QStringLiteral("decoded_can_tail"));
+    payload.insert(QStringLiteral("truth_source"), QStringLiteral("capture.stream/index"));
+    payload.insert(QStringLiteral("truth_semantics"), QStringLiteral("derived_display_tail_not_raw_evidence"));
+    payload.insert(QStringLiteral("drop_semantics"), QStringLiteral("display_tail_drop_not_capture_truth_loss"));
 }
 
 } // namespace
@@ -241,6 +254,13 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
                 if (rawOverrunBytes > m_lastRawIngressOverrunBytes) {
                     const quint64 deltaBytes = rawOverrunBytes - m_lastRawIngressOverrunBytes;
                     m_lastRawIngressOverrunBytes = rawOverrunBytes;
+                    latchCaptureInvalid(QStringLiteral("Host drain raw ingress overrun: %1 bytes total")
+                                            .arg(rawOverrunBytes),
+                                        rawOverrunBytes);
+                    publishFatalDiagnostic(QStringLiteral("host_drain_overrun"),
+                                           QStringLiteral("Host drain raw ingress overrun"),
+                                           QJsonObject{{QStringLiteral("raw_ingress_overrun_bytes"), QString::number(rawOverrunBytes)},
+                                                       {QStringLiteral("delta_bytes"), QString::number(deltaBytes)}});
                     if (m_captureWriterRuntime) {
                         QMetaObject::invokeMethod(m_captureWriterRuntime,
                                                   [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
@@ -486,8 +506,8 @@ void CaptureCoreProcessRuntime::ensureRawLedgerRuntime() {
                                     {QStringLiteral("segment_bytes"), QStringLiteral("0")},
                                     {QStringLiteral("frames"), QJsonArray{}},
                                     {QStringLiteral("item_count"), 0},
-                                    {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
-                                    {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
+                                    {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap}};
+                addDecodedTailSemantics(payload);
                 if (!error.isEmpty()) payload.insert(QStringLiteral("error"), error);
                 QJsonObject counts{{QStringLiteral("total_rows"), QStringLiteral("0")},
                                    {QStringLiteral("segment_bytes"), QStringLiteral("0")},
@@ -730,8 +750,8 @@ void CaptureCoreProcessRuntime::updateRawLedgerTailView(const FrameRecordList& f
                         {QStringLiteral("item_count"), m_rawLedgerTailRows.size()},
                         {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
                         {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
-                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
-                        {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
+                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)}};
+    addDecodedTailSemantics(payload);
     QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
                        {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
@@ -763,8 +783,8 @@ void CaptureCoreProcessRuntime::updateRawLedgerStatusView(quint64 totalRows,
                         {QStringLiteral("item_count"), m_rawLedgerTailRows.size()},
                         {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
                         {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
-                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
-                        {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
+                        {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)}};
+    addDecodedTailSemantics(payload);
     if (!lastError.isEmpty()) payload.insert(QStringLiteral("error"), lastError);
     QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
@@ -784,6 +804,17 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
     m_rawLedgerLastTotalRows = 0;
     m_rawLedgerLastSegmentBytes = 0;
     m_lastRawIngressOverrunBytes = 0;
+    m_captureProgressPath.clear();
+    m_captureProgressBytesWritten = 0;
+    m_captureProgressRecordCount = 0;
+    m_captureProgressActive = false;
+    m_captureProgressInvalid = false;
+    m_captureProgressInvalidReason.clear();
+    m_captureProgressRawIngressOverrunBytes = 0;
+    m_fatalDiagnosticCount = 0;
+    m_lastFatalDiagnosticCode.clear();
+    m_lastFatalDiagnosticMessage.clear();
+    m_lastFatalDiagnosticDetails = QJsonObject{};
     m_pipelineTransportPayload = QJsonObject{};
     m_pipelineTransportCheapCounts = QJsonObject{};
     m_analysisTransportPayload = QJsonObject{};
@@ -803,10 +834,20 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
                                                      {QStringLiteral("frames"), QJsonArray{}},
                                                      {QStringLiteral("item_count"), 0},
                                                      {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
-                                                     {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}},
+                                                     {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")},
+                                                     {QStringLiteral("evidence_kind"), QStringLiteral("decoded_can_tail")},
+                                                     {QStringLiteral("truth_source"), QStringLiteral("capture.stream/index")},
+                                                     {QStringLiteral("truth_semantics"), QStringLiteral("derived_display_tail_not_raw_evidence")},
+                                                     {QStringLiteral("drop_semantics"), QStringLiteral("display_tail_drop_not_capture_truth_loss")}},
                                          CoreViewSeverity::Ok,
                                          QJsonObject{{QStringLiteral("total_rows"), QStringLiteral("0")},
                                                      {QStringLiteral("segment_bytes"), QStringLiteral("0")}}));
+    publishChange(m_viewStore.updateView(CoreViewName::FatalDiagnostics,
+                                         QJsonObject{{QStringLiteral("fatal_count"), QStringLiteral("0")},
+                                                     {QStringLiteral("last_code"), QString()},
+                                                     {QStringLiteral("last_message"), QString()}},
+                                         CoreViewSeverity::Ok,
+                                         QJsonObject{{QStringLiteral("fatal_count"), QStringLiteral("0")}}));
 }
 
 void CaptureCoreProcessRuntime::updateCoreHealth(const QString& state, CoreViewSeverity severity) {
@@ -968,6 +1009,20 @@ void CaptureCoreProcessRuntime::applyPipelineSnapshot(quint64 requestId,
         updatePipelineTransportSummary(payload, severityFromJson(snapshot), cheapCounts);
         return;
     }
+    if (viewName == CoreViewName::CaptureProgress) {
+        if (payload.value(QStringLiteral("capture_handoff_overrun")).toBool(false)) {
+            latchCaptureInvalid(payload.value(QStringLiteral("capture_handoff_error"))
+                                    .toString(QStringLiteral("capture handoff overrun")));
+            publishFatalDiagnostic(QStringLiteral("capture_handoff_overrun"),
+                                   QStringLiteral("Capture handoff overrun before writer"),
+                                   QJsonObject{{QStringLiteral("overrun_records"), payload.value(QStringLiteral("capture_handoff_overrun_records"))},
+                                               {QStringLiteral("overrun_bytes"), payload.value(QStringLiteral("capture_handoff_overrun_bytes"))}});
+            CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+            status.captureInvalid = true;
+            updateCaptureProgressView(status);
+        }
+        return;
+    }
     publishChange(m_viewStore.updateView(viewName,
                                          payload,
                                          severityFromJson(snapshot),
@@ -1089,6 +1144,13 @@ void CaptureCoreProcessRuntime::handleCaptureStartRequested(quint64 requestId,
     ensureTransportRuntime();
     ensureCaptureWriterRuntime();
     if (m_captureQueue) m_captureQueue->clear();
+    m_captureProgressPath = sessionDir;
+    m_captureProgressBytesWritten = 0;
+    m_captureProgressRecordCount = 0;
+    m_captureProgressActive = false;
+    m_captureProgressInvalid = false;
+    m_captureProgressInvalidReason.clear();
+    m_captureProgressRawIngressOverrunBytes = 0;
 
     CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate update;
     QMetaObject::invokeMethod(m_captureWriterRuntime,
@@ -1172,11 +1234,47 @@ void CaptureCoreProcessRuntime::publishCaptureStorageUpdate(
                                       update.recordCount);
 }
 
+void CaptureCoreProcessRuntime::latchCaptureInvalid(const QString& reason, quint64 rawIngressOverrunBytes) {
+    m_captureProgressInvalid = true;
+    if (!reason.isEmpty()) {
+        m_captureProgressInvalidReason = reason;
+    }
+    if (rawIngressOverrunBytes > 0) {
+        m_captureProgressRawIngressOverrunBytes = std::max(m_captureProgressRawIngressOverrunBytes, rawIngressOverrunBytes);
+    }
+}
+
+void CaptureCoreProcessRuntime::publishFatalDiagnostic(const QString& code,
+                                                       const QString& message,
+                                                       const QJsonObject& details) {
+    ++m_fatalDiagnosticCount;
+    m_lastFatalDiagnosticCode = code;
+    m_lastFatalDiagnosticMessage = message;
+    m_lastFatalDiagnosticDetails = details;
+
+    QJsonObject payload;
+    payload.insert(QStringLiteral("fatal_count"), QString::number(m_fatalDiagnosticCount));
+    payload.insert(QStringLiteral("last_code"), m_lastFatalDiagnosticCode);
+    payload.insert(QStringLiteral("last_message"), m_lastFatalDiagnosticMessage);
+    payload.insert(QStringLiteral("last_details"), m_lastFatalDiagnosticDetails);
+
+    QJsonObject counts;
+    counts.insert(QStringLiteral("fatal_count"), QString::number(m_fatalDiagnosticCount));
+    counts.insert(QStringLiteral("last_code"), m_lastFatalDiagnosticCode);
+
+    publishChange(m_viewStore.updateView(CoreViewName::FatalDiagnostics,
+                                         payload,
+                                         CoreViewSeverity::Fatal,
+                                         counts));
+}
+
 void CaptureCoreProcessRuntime::updateCaptureProgressView(
     const CanMonitorTransport::TypedCaptureWriterRuntime::Status& status,
     const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate* update) {
     m_captureProgressActive = status.active;
-    m_captureProgressInvalid = status.captureInvalid;
+    if (status.captureInvalid || status.overrunBytes > 0 || status.overrunRecords > 0) {
+        latchCaptureInvalid(QStringLiteral("capture writer reported invalid or overrun"));
+    }
     if (update) {
         m_captureProgressActive = update->active;
         if (!update->path.isEmpty()) m_captureProgressPath = update->path;
@@ -1190,11 +1288,16 @@ void CaptureCoreProcessRuntime::updateCaptureProgressView(
         if (update->stateChanged && !update->active) {
             m_captureProgressActive = false;
         }
+        if (!update->ok) {
+            latchCaptureInvalid(update->error.isEmpty() ? QStringLiteral("capture storage update failed") : update->error);
+        }
     }
 
     QJsonObject payload;
     payload.insert(QStringLiteral("capture_active"), m_captureProgressActive);
     payload.insert(QStringLiteral("capture_invalid"), m_captureProgressInvalid);
+    payload.insert(QStringLiteral("capture_invalid_reason"), m_captureProgressInvalidReason);
+    payload.insert(QStringLiteral("raw_ingress_overrun_bytes"), QString::number(m_captureProgressRawIngressOverrunBytes));
     payload.insert(QStringLiteral("path"), m_captureProgressPath);
     payload.insert(QStringLiteral("bytes_written"), QString::number(m_captureProgressBytesWritten));
     payload.insert(QStringLiteral("record_count"), QString::number(m_captureProgressRecordCount));
@@ -1213,11 +1316,12 @@ void CaptureCoreProcessRuntime::updateCaptureProgressView(
     QJsonObject counts;
     counts.insert(QStringLiteral("queued_bytes"), QString::number(status.queuedBytes));
     counts.insert(QStringLiteral("overrun_bytes"), QString::number(status.overrunBytes));
+    counts.insert(QStringLiteral("raw_ingress_overrun_bytes"), QString::number(m_captureProgressRawIngressOverrunBytes));
     counts.insert(QStringLiteral("record_count"), QString::number(m_captureProgressRecordCount));
 
     publishChange(m_viewStore.updateView(CanMonitorCore::CoreViewName::CaptureProgress,
                                          payload,
-                                         status.captureInvalid || (update && !update->ok)
+                                         m_captureProgressInvalid
                                              ? CanMonitorCore::CoreViewSeverity::Error
                                              : CanMonitorCore::CoreViewSeverity::Ok,
                                          counts));

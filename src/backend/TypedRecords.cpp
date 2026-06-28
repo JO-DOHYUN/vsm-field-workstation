@@ -11,7 +11,7 @@ QByteArray typedPayloadView(const TypedRecord& record) {
     const qsizetype payloadLength = qsizetype(record.header.payloadLength);
     const qsizetype frameLength = kTypedTransportFrameOverhead + payloadLength;
     if (payloadLength >= 0 && record.frameBytes.size() >= frameLength) {
-        return QByteArray::fromRawData(record.frameBytes.constData() + 9, payloadLength);
+        return record.frameBytes.mid(9, payloadLength);
     }
     return record.payload;
 }

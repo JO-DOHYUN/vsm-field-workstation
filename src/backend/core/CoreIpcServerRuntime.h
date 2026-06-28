@@ -69,8 +69,11 @@ private:
     quint64 m_publishedViewNotifications = 0;
     quint64 m_coalescedViewNotifications = 0;
     quint64 m_droppedViewNotifications = 0;
+    quint64 m_snapshotResponses = 0;
+    quint64 m_droppedSnapshotResponses = 0;
     quint64 m_disconnectedSlowClients = 0;
     qint64 m_maxQueuedBytes = 0;
+    qint64 m_maxSnapshotResponseBytes = 0;
 };
 
 } // namespace CanMonitorCore
