@@ -62,6 +62,7 @@ struct LivePathTelemetry {
 
     quint64 appFramesReceivedCalls = 0;
     quint64 appFramesReceivedFrames = 0;
+    quint64 legacyLiveRouteSuppressed = 0;
     quint64 appendPendingFrames = 0;
     quint64 pendingLiveRows = 0;
     quint64 liveFlushCalls = 0;
@@ -120,6 +121,7 @@ struct LivePathTelemetry {
 
         insertCounter(out, QStringLiteral("framesReceived_calls"), appFramesReceivedCalls);
         insertCounter(out, QStringLiteral("framesReceived_frames"), appFramesReceivedFrames);
+        insertCounter(out, QStringLiteral("legacy_live_route_suppressed"), legacyLiveRouteSuppressed);
         insertCounter(out, QStringLiteral("append_pending_frames"), appendPendingFrames);
         insertCounter(out, QStringLiteral("pending_live_rows"), pendingLiveRows);
         insertCounter(out, QStringLiteral("live_flush_calls"), liveFlushCalls);

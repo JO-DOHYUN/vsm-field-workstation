@@ -330,7 +330,7 @@ Item {
                 RowLayout {
                     Layout.fillWidth: true
                     Components.SafeText { text: "Live Latest · 표시용"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(11.0 * uiScale); font.bold: true; color: "#243447"; Layout.preferredWidth: Math.round(150 * uiScale) }
-                    Components.SafeText { text: "latest live rows " + appController.liveFrameView.count + " / source " + appController.liveFrames.count + " · decoded tail " + appController.rawFrameTable.totalRows; color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.fillWidth: true }
+                    Components.SafeText { text: "latest live rows " + appController.liveFrameView.count + " / source " + appController.liveFrames.count + " · decoded tail " + (appController.decodedCanTail ? appController.decodedCanTail.totalRows : appController.rawFrameTable.totalRows); color: "#52606d"; uiScale: liveRoot.uiScale; basePixelSize: Math.round(10.4 * uiScale); Layout.fillWidth: true }
                     Item { Layout.fillWidth: true }
                     Components.SafeText {
                         text: appController.liveUiPaused ? "화면 정지" : (appController.liveFrameView.idFilter === "" && appController.liveFrameView.busFilter < 0 ? "live latest" : "live latest · 필터")
@@ -366,8 +366,8 @@ Item {
                         width: Math.max(0, Math.min(parent.width - Math.round(28 * uiScale), Math.round(430 * uiScale)))
                         visible: liveList.count === 0
                         z: 10
-                        title: "수신 프레임 없음"
-                        message: appController.connected ? "포트는 열렸지만 아직 표시 조건에 맞는 CAN 프레임이 없습니다. 버스/ID 필터를 확인하세요." : "포트를 연결하면 truth ledger 기반 raw 프레임이 여기에 표시됩니다."
+                        title: "Live latest 없음"
+                        message: appController.connected ? "Core live_latest view에 표시할 CAN row가 없습니다. Live 패널/버스/ID 필터와 board health를 확인하세요." : "연결 후 Core view query로 최신 CAN 상태를 표시합니다. 원본 truth는 capture.stream/index에 저장됩니다."
                         badgeText: appController.connected ? "연결됨" : "미연결"
                         kind: appController.connected ? "warn" : "info"
                         uiScale: liveRoot.uiScale

@@ -2392,25 +2392,9 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
         }
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("capture_progress")) {
-        const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
-        const bool active = payload.value(QStringLiteral("capture_active")).toBool(m_logRecordingActive);
-        const QString path = payload.value(QStringLiteral("path")).toString();
-        m_logTypedSession = true;
-        m_logRecordingActive = active;
-        if (payload.contains(QStringLiteral("bytes_written"))) {
-            m_logRecordedBytes = jsonU64Value(payload, QStringLiteral("bytes_written"));
-        }
-        if (payload.contains(QStringLiteral("record_count"))) {
-            m_logRecordedFrameCount = jsonU64Value(payload, QStringLiteral("record_count"));
-        }
-        if (!path.isEmpty()) {
-            m_logTempPath = path;
-            m_logPath = path;
-            m_logSuggestedSavePath = path;
-            if (!active) m_logLastSavedPath = path;
-            emit logPathChanged();
-        }
-        requestLogStateRefresh(false);
+        // Log UI state is owned by CoreProcessClientRuntime::captureStorageUpdate.
+        // The capture_progress view is a materialized diagnostic view only; using it
+        // as a second writer can roll back path/active/record state during IPC races.
         requestTransportDiagnosticsRefresh(false);
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("analysis_snapshot")) {
@@ -2482,6 +2466,11 @@ quint64 liveProjectionFrameKey(const FrameRecord& frame) {
 
 void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
+    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
+        ++m_livePathTelemetry.legacyLiveRouteSuppressed;
+        m_liveSampledViewDrops += quint64(frames.size());
+        return;
+    }
     m_livePathTelemetry.appendPendingFrames += quint64(frames.size());
     if (m_pendingLiveFrameOffset > 0 &&
         (m_pendingLiveFrameOffset >= 4096 || (m_pendingLiveFrameOffset * 2) >= m_pendingLiveFrames.size())) {
@@ -2565,6 +2554,16 @@ void AppController::coalescePendingLiveFramesToLatest() {
 
 void AppController::flushPendingLiveFrames() {
     ++m_livePathTelemetry.liveFlushCalls;
+    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
+        if (pendingLiveFrameCount() > 0) {
+            ++m_livePathTelemetry.legacyLiveRouteSuppressed;
+            m_liveSampledViewDrops += quint64(std::max<qint64>(0, pendingLiveFrameCount()));
+        }
+        m_pendingLiveFrames.clear();
+        m_pendingLiveFrameOffset = 0;
+        m_livePathTelemetry.pendingLiveRows = 0;
+        return;
+    }
     if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) coalescePendingLiveFramesToLatest();
     const qint64 backlogBefore = pendingLiveFrameCount();
     if (backlogBefore <= 0) {
@@ -2625,6 +2624,12 @@ void AppController::flushPendingLiveFrames() {
 
 void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStringList& timeTexts) {
     if (frames.isEmpty() || timeTexts.isEmpty()) return;
+    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
+        ++m_livePathTelemetry.legacyLiveRouteSuppressed;
+        const int count = std::min(int(frames.size()), int(timeTexts.size()));
+        m_liveSampledViewDrops += quint64(std::max(0, count));
+        return;
+    }
 
     const int count = std::min(int(frames.size()), int(timeTexts.size()));
     ++m_livePathTelemetry.queueLiveViewCalls;
@@ -2671,6 +2676,15 @@ void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStr
 void AppController::flushQueuedLiveViewBatch() {
     CanMonitorPerf::ScopedProbe probe("app.live_view_flush", m_pendingLiveViewFrames.size(), 3000);
     ++m_livePathTelemetry.liveViewFlushCalls;
+    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
+        if (!m_pendingLiveViewFrames.isEmpty()) {
+            ++m_livePathTelemetry.legacyLiveRouteSuppressed;
+            m_liveSampledViewDrops += quint64(m_pendingLiveViewFrames.size());
+        }
+        m_pendingLiveViewFrames.clear();
+        m_pendingLiveViewTimeTexts.clear();
+        return;
+    }
     if (m_pendingLiveViewFrames.isEmpty()) return;
     if (m_liveUiPaused || !m_livePanelActive) {
         const quint64 dropped = quint64(m_pendingLiveViewFrames.size());

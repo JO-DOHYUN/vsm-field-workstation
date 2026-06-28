@@ -213,6 +213,7 @@ class AppController : public QObject {
     Q_PROPERTY(FrameListModel* recentFrames READ recentFrames CONSTANT)
     Q_PROPERTY(FrameListModel* liveFrames READ liveFrames CONSTANT)
     Q_PROPERTY(RawFrameTableModel* rawFrameTable READ rawFrameTable CONSTANT)
+    Q_PROPERTY(RawFrameTableModel* decodedCanTail READ decodedCanTail CONSTANT)
     Q_PROPERTY(FrameListModel* replayFrames READ replayFrames CONSTANT)
     Q_PROPERTY(FrameFilterProxyModel* liveFrameView READ liveFrameView CONSTANT)
     Q_PROPERTY(FrameFilterProxyModel* replayFrameView READ replayFrameView CONSTANT)
@@ -464,6 +465,7 @@ public:
     FrameListModel* recentFrames() { return &m_recentFrames; }
     FrameListModel* liveFrames() { return &m_liveFrames; }
     RawFrameTableModel* rawFrameTable() { return &m_rawFrameTable; }
+    RawFrameTableModel* decodedCanTail() { return &m_rawFrameTable; }
     FrameListModel* replayFrames() { return &m_replayFrames; }
     FrameFilterProxyModel* liveFrameView() { return &m_liveFrameView; }
     FrameFilterProxyModel* replayFrameView() { return &m_replayFrameView; }

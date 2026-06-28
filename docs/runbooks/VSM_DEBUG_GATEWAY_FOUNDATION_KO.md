@@ -24,15 +24,16 @@ up to the last successful serial read/write flush.
 can_monitor_qml_reboot.exe
 ```
 
-In normal mode VSM opens the serial endpoint directly and uses:
+In normal mode `can_monitor_qml_reboot.exe` starts `vsm-capture-core.exe` and the core process owns
+the physical serial endpoint. The UI is a view-query client and must not open COM directly.
 
-- `SerialWorker`
-- `TypedIngressRuntime`
-- `LiveTruthRuntime`
-- `LiveProjectionRuntime`
-- `TransportSession`
+Normal production flow:
 
-No gateway writer/forwarder runs.
+- UI process: `can_monitor_qml_reboot.exe`
+- Core process: `vsm-capture-core.exe`
+- Debug gateway process: not started
+
+No gateway writer/forwarder runs unless the user explicitly starts Debug Gateway mode.
 
 ## Gateway Mode
 
@@ -84,6 +85,18 @@ VSM user-route artifacts remain separate:
 - `process_metrics.csv`: VSM process memory/CPU samples.
 - `app_state.jsonl`: VSM HIL status samples.
 - `result.json`: final PASS/FAIL and exact reasons.
+
+## Deployment Contract
+
+Portable and release folders must contain:
+
+- `can_monitor_qml_reboot.exe`
+- `vsm-capture-core.exe`
+- `vsm_debug_gateway.py`
+
+`vsm-capture-core.exe` is required for normal production operation. `vsm_debug_gateway.py` is not
+executed in normal mode, but it must be present so field debug can be enabled without replacing the
+application folder. Packaging must fail if either file is missing.
 
 ## Pass/Fail Meaning
 

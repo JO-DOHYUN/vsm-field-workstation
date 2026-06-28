@@ -284,6 +284,7 @@ target_link_libraries(can_monitor_qml_reboot
         Qt6::SerialPort
         Qt6::Network
 )
+add_dependencies(can_monitor_qml_reboot vsm_capture_core)
 
 if (WIN32)
     target_link_libraries(can_monitor_qml_reboot PRIVATE winmm psapi)
@@ -328,6 +329,9 @@ if (WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_release_here.bat"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/run_release_here.bat"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:vsm_capture_core>"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/$<TARGET_FILE_NAME:vsm_capture_core>"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/hil_control_smoke.py"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/hil_control_smoke.py"
@@ -381,7 +385,7 @@ if (WIN32)
         COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/scripts/deploy_release.bat"
                 "$<TARGET_FILE_DIR:can_monitor_qml_reboot>"
                 "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/portable_release"
-        DEPENDS can_monitor_qml_reboot
+        DEPENDS can_monitor_qml_reboot vsm_capture_core
         COMMENT "Creating portable release folder with deploy_release.bat"
         VERBATIM)
 
