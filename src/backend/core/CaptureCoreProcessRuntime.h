@@ -155,6 +155,11 @@ private:
     quint64 m_rawLedgerLastWriteMaxUs = 0;
     quint64 m_rawLedgerLastWriteFailures = 0;
     quint64 m_lastRawIngressOverrunBytes = 0;
+    QString m_captureProgressPath;
+    quint64 m_captureProgressBytesWritten = 0;
+    quint64 m_captureProgressRecordCount = 0;
+    bool m_captureProgressActive = false;
+    bool m_captureProgressInvalid = false;
     QJsonObject m_pipelineTransportPayload;
     QJsonObject m_pipelineTransportCheapCounts;
     QJsonObject m_analysisTransportPayload;

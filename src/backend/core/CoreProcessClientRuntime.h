@@ -80,6 +80,7 @@ private:
     void readStandardOutput();
     void readStandardError();
     void connectIpc();
+    void scheduleConnectIpc(int delayMs);
     bool queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut);
     void sendPendingTransportStartIfReady();
     static QString makeServerName();
@@ -92,6 +93,8 @@ private:
     QString m_pendingTransportEndpoint;
     QString m_lastMessage = QStringLiteral("core process idle");
     bool m_startupSeen = false;
+    bool m_connectRetryScheduled = false;
+    int m_connectAttempts = 0;
 };
 
 } // namespace CanMonitorCore

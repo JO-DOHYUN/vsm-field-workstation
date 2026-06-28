@@ -1175,9 +1175,29 @@ void CaptureCoreProcessRuntime::publishCaptureStorageUpdate(
 void CaptureCoreProcessRuntime::updateCaptureProgressView(
     const CanMonitorTransport::TypedCaptureWriterRuntime::Status& status,
     const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate* update) {
+    m_captureProgressActive = status.active;
+    m_captureProgressInvalid = status.captureInvalid;
+    if (update) {
+        m_captureProgressActive = update->active;
+        if (!update->path.isEmpty()) m_captureProgressPath = update->path;
+        if (update->stateChanged && update->active && update->bytesWritten == 0 && update->recordCount == 0) {
+            m_captureProgressBytesWritten = 0;
+            m_captureProgressRecordCount = 0;
+        } else {
+            m_captureProgressBytesWritten = std::max(m_captureProgressBytesWritten, update->bytesWritten);
+            m_captureProgressRecordCount = std::max(m_captureProgressRecordCount, update->recordCount);
+        }
+        if (update->stateChanged && !update->active) {
+            m_captureProgressActive = false;
+        }
+    }
+
     QJsonObject payload;
-    payload.insert(QStringLiteral("capture_active"), status.active);
-    payload.insert(QStringLiteral("capture_invalid"), status.captureInvalid);
+    payload.insert(QStringLiteral("capture_active"), m_captureProgressActive);
+    payload.insert(QStringLiteral("capture_invalid"), m_captureProgressInvalid);
+    payload.insert(QStringLiteral("path"), m_captureProgressPath);
+    payload.insert(QStringLiteral("bytes_written"), QString::number(m_captureProgressBytesWritten));
+    payload.insert(QStringLiteral("record_count"), QString::number(m_captureProgressRecordCount));
     payload.insert(QStringLiteral("queued_records"), QString::number(status.queuedRecords));
     payload.insert(QStringLiteral("queued_bytes"), QString::number(status.queuedBytes));
     payload.insert(QStringLiteral("max_queued_bytes"), QString::number(status.maxQueuedBytes));
@@ -1187,16 +1207,13 @@ void CaptureCoreProcessRuntime::updateCaptureProgressView(
     if (update) {
         payload.insert(QStringLiteral("ok"), update->ok);
         payload.insert(QStringLiteral("state_changed"), update->stateChanged);
-        payload.insert(QStringLiteral("path"), update->path);
-        payload.insert(QStringLiteral("bytes_written"), QString::number(update->bytesWritten));
-        payload.insert(QStringLiteral("record_count"), QString::number(update->recordCount));
         if (!update->error.isEmpty()) payload.insert(QStringLiteral("error"), update->error);
     }
 
     QJsonObject counts;
     counts.insert(QStringLiteral("queued_bytes"), QString::number(status.queuedBytes));
     counts.insert(QStringLiteral("overrun_bytes"), QString::number(status.overrunBytes));
-    counts.insert(QStringLiteral("record_count"), update ? QString::number(update->recordCount) : QStringLiteral("0"));
+    counts.insert(QStringLiteral("record_count"), QString::number(m_captureProgressRecordCount));
 
     publishChange(m_viewStore.updateView(CanMonitorCore::CoreViewName::CaptureProgress,
                                          payload,

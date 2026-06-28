@@ -7,6 +7,8 @@
 #include <QJsonObject>
 #include <QTimer>
 
+#include <algorithm>
+
 namespace CanMonitorCore {
 
 CoreProcessClientRuntime::CoreProcessClientRuntime(QObject* parent)
@@ -26,6 +28,7 @@ CoreProcessClientRuntime::CoreProcessClientRuntime(QObject* parent)
             qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
             this,
             [this](int exitCode, QProcess::ExitStatus status) {
+                m_connectRetryScheduled = false;
                 m_client.disconnectFromServer();
                 m_lastMessage = QStringLiteral("core process exited: code %1 status %2")
                                     .arg(exitCode)
@@ -91,6 +94,7 @@ bool CoreProcessClientRuntime::stopTransport(QString* errorOut) {
 }
 
 void CoreProcessClientRuntime::stop() {
+    m_connectRetryScheduled = false;
     m_client.disconnectFromServer();
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
@@ -114,6 +118,8 @@ QJsonObject CoreProcessClientRuntime::statusJson() const {
     return QJsonObject{{QStringLiteral("core_process_active"), isActive()},
                        {QStringLiteral("core_process_ipc_connected"), m_client.isConnected()},
                        {QStringLiteral("core_process_server_name"), m_serverName},
+                       {QStringLiteral("core_process_ipc_connect_attempts"), m_connectAttempts},
+                       {QStringLiteral("core_process_ipc_retry_scheduled"), m_connectRetryScheduled},
                        {QStringLiteral("core_process_message"), m_lastMessage}};
 }
 
@@ -244,6 +250,8 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     m_serverName = makeServerName();
     m_stdoutBuffer.clear();
     m_startupSeen = false;
+    m_connectRetryScheduled = false;
+    m_connectAttempts = 0;
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
     m_lastMessage = QStringLiteral("starting core process");
@@ -260,7 +268,7 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     }
 
     emit stateChanged(true, m_lastMessage);
-    QTimer::singleShot(150, this, &CoreProcessClientRuntime::connectIpc);
+    scheduleConnectIpc(150);
     if (errorOut) errorOut->clear();
     return true;
 }
@@ -269,7 +277,11 @@ void CoreProcessClientRuntime::connectClientSignals() {
     connect(&m_client, &CoreIpcClientRuntime::connectedChanged, this, [this](bool connected) {
         m_lastMessage = connected ? QStringLiteral("core IPC connected") : QStringLiteral("core IPC disconnected");
         if (connected) {
+            m_connectRetryScheduled = false;
+            m_connectAttempts = 0;
             sendPendingTransportStartIfReady();
+        } else if (isActive()) {
+            scheduleConnectIpc(250);
         }
         emit stateChanged(isActive(), m_lastMessage);
     });
@@ -299,7 +311,7 @@ void CoreProcessClientRuntime::connectClientSignals() {
         const QString message = detail.isEmpty() ? error : QStringLiteral("%1: %2").arg(error, detail);
         emit errorOccurred(QStringLiteral("core IPC error: %1").arg(message));
         if (isActive() && !m_client.isConnected()) {
-            QTimer::singleShot(250, this, &CoreProcessClientRuntime::connectIpc);
+            scheduleConnectIpc(250);
         }
     });
 }
@@ -321,7 +333,7 @@ void CoreProcessClientRuntime::readStandardOutput() {
             m_startupSeen = true;
             m_lastMessage = QStringLiteral("core process ready");
             emit stateChanged(true, m_lastMessage);
-            connectIpc();
+            scheduleConnectIpc(0);
         }
     }
 }
@@ -333,11 +345,17 @@ void CoreProcessClientRuntime::readStandardError() {
 }
 
 void CoreProcessClientRuntime::connectIpc() {
+    m_connectRetryScheduled = false;
     if (!isActive() || m_client.isConnected() || m_serverName.isEmpty()) return;
+    ++m_connectAttempts;
     m_client.connectToServer(m_serverName);
-    if (!m_startupSeen) {
-        QTimer::singleShot(250, this, &CoreProcessClientRuntime::connectIpc);
-    }
+    if (!m_client.isConnected()) scheduleConnectIpc(m_startupSeen ? 250 : 150);
+}
+
+void CoreProcessClientRuntime::scheduleConnectIpc(int delayMs) {
+    if (m_connectRetryScheduled || !isActive() || m_client.isConnected() || m_serverName.isEmpty()) return;
+    m_connectRetryScheduled = true;
+    QTimer::singleShot(std::max(0, delayMs), this, &CoreProcessClientRuntime::connectIpc);
 }
 
 bool CoreProcessClientRuntime::queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut) {
@@ -347,7 +365,7 @@ bool CoreProcessClientRuntime::queuePendingTransportStart(const QString& mode, c
     }
     m_pendingTransportMode = mode;
     m_pendingTransportEndpoint = endpoint;
-    connectIpc();
+    scheduleConnectIpc(0);
     if (errorOut) errorOut->clear();
     return true;
 }
