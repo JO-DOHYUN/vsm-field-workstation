@@ -59,10 +59,6 @@ constexpr int kRoutineControlWriteUiMinIntervalMs = 250;
 constexpr int kHostTxQueueUiMinIntervalMs = 250;
 constexpr int kControlKeyboardLegacyPulseMs = 120;
 constexpr double kControlKeyboardSteerHoldDeg = 45.0;
-constexpr int kLiveProjectionSoftBacklog = 128;
-constexpr int kLiveProjectionHardBacklog = 256;
-constexpr int kLiveProjectionMaxFlushFrames = 16;
-constexpr int kLiveProjectionFlushBudgetMs = 1;
 constexpr int kLiveTruthMaxDisplayStateUpdates = 512;
 constexpr int kLiveTruthMaxGraphUpdates = 128;
 constexpr int kRawLedgerUiFlushIntervalMs = 250;
@@ -1983,16 +1979,12 @@ int AppController::replaySnapshotObservedIdCount() const {
     return replaySnapshotStateMap().size();
 }
 
-qint64 AppController::pendingLiveFrameCount() const {
-    return qint64(m_pendingLiveFrames.size()) - qint64(m_pendingLiveFrameOffset);
-}
-
 QJsonObject AppController::livePathTraceObject() {
     const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
+    m_livePathTelemetry.pendingLiveRows = 0;
     m_livePathTelemetry.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
-    m_livePathTelemetry.liveFlushTimerActive = m_liveFlushTimer.isActive();
-    m_livePathTelemetry.liveViewFlushTimerActive = m_liveViewFlushTimer.isActive();
+    m_livePathTelemetry.liveFlushTimerActive = false;
+    m_livePathTelemetry.liveViewFlushTimerActive = false;
     m_livePathTelemetry.livePanelActive = m_livePanelActive;
     m_livePathTelemetry.liveUiPaused = m_liveUiPaused;
     const qint64 workerEmitWallMs = m_workerLivePathTrace.value(QStringLiteral("frames_received_last_emit_wall_ms")).toString().toLongLong();
@@ -2334,9 +2326,6 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
                 m_controlRuntime.setTestRunning(false);
                 m_controlKeepaliveTimer.stop();
                 m_controlPatternTimer.stop();
-                m_pendingLiveFrames.clear();
-                m_pendingLiveFrameOffset = 0;
-                m_liveFlushTimer.stop();
             }
             emit connectedChanged();
             emit typedEvidenceChanged();
@@ -2371,12 +2360,6 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
                 ensureTimeAnchorForFrame(QStringLiteral("live"), frame.tExtUs);
                 timeTexts << timeTextForSourceUs(QStringLiteral("live"), frame.tExtUs);
             }
-            m_pendingLiveFrames.clear();
-            m_pendingLiveFrameOffset = 0;
-            m_liveFlushTimer.stop();
-            m_pendingLiveViewFrames.clear();
-            m_pendingLiveViewTimeTexts.clear();
-            m_liveViewFlushTimer.stop();
             if (m_liveUiPaused || !m_livePanelActive) {
                 const quint64 dropped = quint64(frames.size());
                 if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += dropped;
@@ -2451,259 +2434,6 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
     }
     m_transportSession.updateDrainEventTrace(drainEventTraceObject());
     requestTransportDiagnosticsRefresh(false);
-}
-
-namespace {
-quint64 liveProjectionFrameKey(const FrameRecord& frame) {
-    quint64 key = (quint64(frame.bus) << 56);
-    if (frame.ext) key |= (quint64(1) << 55);
-    if (frame.rtr) key |= (quint64(1) << 54);
-    key |= quint64(frame.canId & 0x1FFFFFFFU);
-    return key;
-}
-
-}
-
-void AppController::appendPendingLiveFrames(const FrameRecordList& frames) {
-    if (frames.isEmpty()) return;
-    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
-        ++m_livePathTelemetry.legacyLiveRouteSuppressed;
-        m_liveSampledViewDrops += quint64(frames.size());
-        return;
-    }
-    m_livePathTelemetry.appendPendingFrames += quint64(frames.size());
-    if (m_pendingLiveFrameOffset > 0 &&
-        (m_pendingLiveFrameOffset >= 4096 || (m_pendingLiveFrameOffset * 2) >= m_pendingLiveFrames.size())) {
-        compactPendingLiveFrames();
-    }
-    m_pendingLiveFrames.reserve(std::min<qsizetype>(kLiveProjectionHardBacklog, m_pendingLiveFrames.size() + frames.size()));
-    for (const FrameRecord& frame : frames) {
-        m_pendingLiveFrames.push_back(frame);
-    }
-    if (m_pendingLiveFrames.size() > kLiveProjectionHardBacklog && m_pendingLiveFrameOffset > 0) {
-        m_pendingLiveFrames = m_pendingLiveFrames.mid(m_pendingLiveFrameOffset);
-        m_pendingLiveFrameOffset = 0;
-    }
-    const int excess = std::max(0, int(m_pendingLiveFrames.size()) - kLiveProjectionHardBacklog);
-    if (excess > 0) {
-        m_liveProjectionDroppedFrames += quint64(excess);
-        m_pendingLiveFrames.erase(m_pendingLiveFrames.begin(), m_pendingLiveFrames.begin() + excess);
-        m_pendingLiveFrameOffset = 0;
-    }
-    if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) {
-        coalescePendingLiveFramesToLatest();
-    }
-    m_liveProjectionMaxBacklog = std::max(m_liveProjectionMaxBacklog, int(pendingLiveFrameCount()));
-    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
-}
-
-int AppController::liveFlushChunkForBacklog(qint64 backlog) const {
-    Q_UNUSED(backlog);
-    return std::min(m_liveFlushChunk, kLiveProjectionMaxFlushFrames);
-}
-
-int AppController::liveFlushBudgetForBacklog(qint64 backlog) const {
-    Q_UNUSED(backlog);
-    return std::min(m_liveFlushBudgetMs, kLiveProjectionFlushBudgetMs);
-}
-
-void AppController::compactPendingLiveFrames() {
-    if (m_pendingLiveFrameOffset <= 0) return;
-    if (m_pendingLiveFrameOffset >= m_pendingLiveFrames.size()) {
-        m_pendingLiveFrames.clear();
-        m_pendingLiveFrameOffset = 0;
-        return;
-    }
-    if (m_pendingLiveFrameOffset < 4096 && (m_pendingLiveFrameOffset * 2) < m_pendingLiveFrames.size()) return;
-    m_pendingLiveFrames = m_pendingLiveFrames.mid(m_pendingLiveFrameOffset);
-    m_pendingLiveFrameOffset = 0;
-}
-
-void AppController::coalescePendingLiveFramesToLatest() {
-    const qint64 pending = pendingLiveFrameCount();
-    if (pending <= kLiveProjectionSoftBacklog || pending <= 1) return;
-
-    QHash<quint64, FrameRecord> latestByKey;
-    latestByKey.reserve(int(std::min<qint64>(pending, kLiveProjectionHardBacklog)));
-    quint64 replaced = 0;
-    for (int index = m_pendingLiveFrameOffset; index < m_pendingLiveFrames.size(); ++index) {
-        const FrameRecord& frame = m_pendingLiveFrames.at(index);
-        const quint64 key = liveProjectionFrameKey(frame);
-        auto it = latestByKey.find(key);
-        if (it == latestByKey.end()) {
-            latestByKey.insert(key, frame);
-            continue;
-        }
-        if (frame.tExtUs >= it.value().tExtUs) it.value() = frame;
-        ++replaced;
-    }
-
-    FrameRecordList coalesced;
-    coalesced.reserve(latestByKey.size());
-    for (auto it = latestByKey.cbegin(); it != latestByKey.cend(); ++it) coalesced.push_back(it.value());
-    std::sort(coalesced.begin(), coalesced.end(), [](const FrameRecord& a, const FrameRecord& b) {
-        if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
-        if (a.bus != b.bus) return a.bus < b.bus;
-        return a.canId < b.canId;
-    });
-
-    m_pendingLiveFrames.swap(coalesced);
-    m_pendingLiveFrameOffset = 0;
-    m_liveProjectionDroppedFrames += replaced;
-}
-
-void AppController::flushPendingLiveFrames() {
-    ++m_livePathTelemetry.liveFlushCalls;
-    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
-        if (pendingLiveFrameCount() > 0) {
-            ++m_livePathTelemetry.legacyLiveRouteSuppressed;
-            m_liveSampledViewDrops += quint64(std::max<qint64>(0, pendingLiveFrameCount()));
-        }
-        m_pendingLiveFrames.clear();
-        m_pendingLiveFrameOffset = 0;
-        m_livePathTelemetry.pendingLiveRows = 0;
-        return;
-    }
-    if (pendingLiveFrameCount() > kLiveProjectionSoftBacklog) coalescePendingLiveFramesToLatest();
-    const qint64 backlogBefore = pendingLiveFrameCount();
-    if (backlogBefore <= 0) {
-        compactPendingLiveFrames();
-        m_livePathTelemetry.pendingLiveRows = 0;
-        return;
-    }
-
-    QElapsedTimer budget;
-    budget.start();
-    const QString liveSource = QStringLiteral("live");
-    const int sourceStartOffset = m_pendingLiveFrameOffset;
-    const int targetChunk = liveFlushChunkForBacklog(backlogBefore);
-    const int budgetMs = liveFlushBudgetForBacklog(backlogBefore);
-    int processed = 0;
-    while (m_pendingLiveFrameOffset < m_pendingLiveFrames.size()) {
-        const FrameRecord& fr = m_pendingLiveFrames[m_pendingLiveFrameOffset++];
-        ensureTimeAnchorForFrame(liveSource, fr.tExtUs);
-        if (m_transportModeKey != QStringLiteral("typed")) ingestFrame(fr, liveSource);
-        ++processed;
-        if (processed >= targetChunk) break;
-        if (processed >= m_liveFlushMinChunk && budget.elapsed() >= budgetMs) break;
-    }
-
-    const int sourceEndOffset = m_pendingLiveFrameOffset;
-    const int processedCount = std::max(0, sourceEndOffset - sourceStartOffset);
-    m_livePathTelemetry.liveFlushProcessed += quint64(processedCount);
-    const int elapsedMs = int(budget.elapsed());
-    m_liveProjectionLastFlushMs = elapsedMs;
-    if (m_pendingLiveFrameOffset < m_pendingLiveFrames.size() &&
-        (processed >= targetChunk || (processed >= m_liveFlushMinChunk && elapsedMs >= budgetMs))) {
-        ++m_liveProjectionFlushBudgetHits;
-    }
-    const int viewCount = std::min(processedCount, m_liveViewChunk);
-    if (viewCount > 0) {
-        const int viewStartOffset = sourceEndOffset - viewCount;
-        if (processedCount > viewCount) {
-            m_liveSampledViewDrops += processedCount - viewCount;
-        }
-        FrameRecordList viewChunk;
-        viewChunk.reserve(viewCount);
-        QStringList timeTexts;
-        timeTexts.reserve(viewCount);
-        for (int index = viewStartOffset; index < sourceEndOffset; ++index) {
-            const FrameRecord& fr = m_pendingLiveFrames.at(index);
-            viewChunk.push_back(fr);
-            timeTexts << timeTextForSourceUs(liveSource, fr.tExtUs);
-        }
-        queueLiveViewBatch(viewChunk, timeTexts);
-    }
-
-    compactPendingLiveFrames();
-
-    const qint64 backlogAfter = pendingLiveFrameCount();
-    m_livePathTelemetry.pendingLiveRows = quint64(std::max<qint64>(0, backlogAfter));
-    if (backlogAfter > 0) m_liveFlushTimer.start(backlogAfter > kLiveProjectionSoftBacklog ? 24 : 16);
-}
-
-void AppController::queueLiveViewBatch(const FrameRecordList& frames, const QStringList& timeTexts) {
-    if (frames.isEmpty() || timeTexts.isEmpty()) return;
-    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
-        ++m_livePathTelemetry.legacyLiveRouteSuppressed;
-        const int count = std::min(int(frames.size()), int(timeTexts.size()));
-        m_liveSampledViewDrops += quint64(std::max(0, count));
-        return;
-    }
-
-    const int count = std::min(int(frames.size()), int(timeTexts.size()));
-    ++m_livePathTelemetry.queueLiveViewCalls;
-    m_livePathTelemetry.queueLiveViewFrames += quint64(count);
-    if (m_liveUiPaused || !m_livePanelActive) {
-        if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += quint64(count);
-        if (!m_livePanelActive) m_livePathTelemetry.liveViewPanelDrops += quint64(count);
-        m_liveSampledViewDrops += quint64(count);
-        return;
-    }
-
-    const int keepLimit = std::max(1, m_liveViewChunk * 2);
-    m_pendingLiveViewFrames.reserve(keepLimit);
-    m_pendingLiveViewTimeTexts.reserve(keepLimit);
-
-    if (count >= keepLimit) {
-        m_pendingLiveViewFrames.clear();
-        m_pendingLiveViewTimeTexts.clear();
-        const int start = count - keepLimit;
-        for (int i = start; i < count; ++i) {
-            m_pendingLiveViewFrames.push_back(frames.at(i));
-            m_pendingLiveViewTimeTexts.push_back(timeTexts.at(i));
-        }
-        if (count > keepLimit) m_liveSampledViewDrops += count - keepLimit;
-    } else {
-        for (int i = 0; i < count; ++i) {
-            m_pendingLiveViewFrames.push_back(frames.at(i));
-            m_pendingLiveViewTimeTexts.push_back(timeTexts.at(i));
-        }
-
-        const int excess = int(m_pendingLiveViewFrames.size()) - keepLimit;
-        if (excess > 0) {
-            m_pendingLiveViewFrames.erase(m_pendingLiveViewFrames.begin(), m_pendingLiveViewFrames.begin() + excess);
-            m_pendingLiveViewTimeTexts.erase(m_pendingLiveViewTimeTexts.begin(), m_pendingLiveViewTimeTexts.begin() + excess);
-            m_liveSampledViewDrops += excess;
-        }
-    }
-
-    int flushDelayMs = 320;
-    if (projectionBackpressureActive()) flushDelayMs = std::max(flushDelayMs, 500);
-    if (!m_liveViewFlushTimer.isActive()) m_liveViewFlushTimer.start(flushDelayMs);
-}
-
-void AppController::flushQueuedLiveViewBatch() {
-    CanMonitorPerf::ScopedProbe probe("app.live_view_flush", m_pendingLiveViewFrames.size(), 3000);
-    ++m_livePathTelemetry.liveViewFlushCalls;
-    if (m_coreProcessMode && m_transportModeKey == QStringLiteral("typed")) {
-        if (!m_pendingLiveViewFrames.isEmpty()) {
-            ++m_livePathTelemetry.legacyLiveRouteSuppressed;
-            m_liveSampledViewDrops += quint64(m_pendingLiveViewFrames.size());
-        }
-        m_pendingLiveViewFrames.clear();
-        m_pendingLiveViewTimeTexts.clear();
-        return;
-    }
-    if (m_pendingLiveViewFrames.isEmpty()) return;
-    if (m_liveUiPaused || !m_livePanelActive) {
-        const quint64 dropped = quint64(m_pendingLiveViewFrames.size());
-        if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += dropped;
-        if (!m_livePanelActive) m_livePathTelemetry.liveViewPanelDrops += dropped;
-        m_pendingLiveViewFrames.clear();
-        m_pendingLiveViewTimeTexts.clear();
-        return;
-    }
-
-    FrameRecordList batch;
-    QStringList timeTexts;
-    batch.swap(m_pendingLiveViewFrames);
-    timeTexts.swap(m_pendingLiveViewTimeTexts);
-    CanMonitorPerf::ScopedProbe appendProbe("frame_model.append_live_batch", batch.size(), 3000);
-    ++m_livePathTelemetry.appendLiveBatchCalls;
-    m_livePathTelemetry.appendLiveBatchFrames += quint64(batch.size());
-    m_liveFrames.appendLiveBatch(batch, timeTexts);
-    m_livePathTelemetry.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
 }
 
 void AppController::processReplayRebuildStep() {
@@ -2891,13 +2621,6 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     m_replayRebuildTimer.setSingleShot(true);
     connect(&m_replayRebuildTimer, &QTimer::timeout, this, [this]() {
         processReplayRebuildStep();
-    });
-
-    m_liveFlushTimer.setSingleShot(true);
-    m_liveFlushTimer.setInterval(12);
-    connect(&m_liveFlushTimer, &QTimer::timeout, this, [this]() {
-        ++m_livePathTelemetry.liveFlushTimerFireCount;
-        flushPendingLiveFrames();
     });
 
     m_transportDiagnosticsTimer.setSingleShot(true);
@@ -3119,12 +2842,6 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     });
     m_analysisTimer.start();
 
-    m_liveViewFlushTimer.setSingleShot(true);
-    connect(&m_liveViewFlushTimer, &QTimer::timeout, this, [this]() {
-        ++m_livePathTelemetry.liveViewFlushTimerFireCount;
-        flushQueuedLiveViewBatch();
-    });
-
     m_derivedSummaryTimer.setSingleShot(true);
     m_derivedSummaryTimer.setInterval(220);
     connect(&m_derivedSummaryTimer, &QTimer::timeout, this, [this]() {
@@ -3254,8 +2971,8 @@ CanMonitorPerf::RuntimeOwnerSnapshot AppController::runtimeOwnerSnapshot() const
     snapshot.graphSelectedKeys = quint64(std::max<qsizetype>(0, m_graphSelectedKeys.size()));
     snapshot.liveGraphSeries = quint64(std::max<qsizetype>(0, m_liveGraphHistory.size()));
     snapshot.liveGraphPointsEstimate = liveGraphPointEstimate();
-    snapshot.pendingLiveRows = quint64(std::max<qint64>(0, pendingLiveFrameCount()));
-    snapshot.pendingLiveViewRows = quint64(std::max<qsizetype>(0, m_pendingLiveViewFrames.size()));
+    snapshot.pendingLiveRows = 0;
+    snapshot.pendingLiveViewRows = 0;
     snapshot.analysisTimingRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeTimingRows.size()));
     snapshot.analysisValueRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeValueRows.size()));
     snapshot.analysisAlarmRows = quint64(std::max<qsizetype>(0, m_liveAnalysisRuntimeAlarmRows.size()));
@@ -3473,9 +3190,6 @@ bool AppController::alarmScopeActive() const {
 
 int AppController::timingProjectionIntervalMs() const {
     int interval = m_timingPanelActive ? 240 : 1050;
-    const qint64 backlog = pendingLiveFrameCount();
-    if (backlog > (m_liveFlushChunk * 2)) interval += 320;
-    else if (backlog > m_liveFlushChunk) interval += 160;
     if (projectionBackpressureActive()) interval = std::max(interval, m_timingPanelActive ? 760 : 1480);
     return interval;
 }
@@ -3483,9 +3197,6 @@ int AppController::timingProjectionIntervalMs() const {
 int AppController::valueProjectionIntervalMs() const {
     int interval = m_valuePanelActive ? 170 : 1850;
     if (m_valuePanelActive && m_livePanelActive) interval = std::max(interval, 220);
-    const qint64 backlog = pendingLiveFrameCount();
-    if (backlog > (m_liveFlushChunk * 2)) interval += 260;
-    else if (backlog > m_liveFlushChunk) interval += 120;
     if (projectionBackpressureActive()) interval = std::max(interval, m_valuePanelActive ? 560 : 2200);
     return interval;
 }
@@ -3493,18 +3204,12 @@ int AppController::valueProjectionIntervalMs() const {
 int AppController::valueDetailProjectionIntervalMs() const {
     int interval = m_valuePanelActive ? 260 : 1200;
     if (m_valuePanelActive && m_livePanelActive) interval = std::max(interval, 340);
-    const qint64 backlog = pendingLiveFrameCount();
-    if (backlog > (m_liveFlushChunk * 2)) interval += 220;
-    else if (backlog > m_liveFlushChunk) interval += 120;
     if (projectionBackpressureActive()) interval = std::max(interval, m_valuePanelActive ? 620 : 1500);
     return interval;
 }
 
 int AppController::alarmProjectionIntervalMs() const {
     int interval = m_alarmPanelActive ? 420 : 2200;
-    const qint64 backlog = pendingLiveFrameCount();
-    if (backlog > (m_liveFlushChunk * 2)) interval += 480;
-    else if (backlog > m_liveFlushChunk) interval += 240;
     if (projectionBackpressureActive()) interval = std::max(interval, m_alarmPanelActive ? 980 : 2600);
     return interval;
 }
@@ -3516,8 +3221,6 @@ bool AppController::projectionDue(qint64 lastMs, int minIntervalMs) const {
 
 
 bool AppController::projectionBackpressureActive() const {
-    const qint64 backlog = pendingLiveFrameCount();
-    if (backlog > kLiveProjectionSoftBacklog) return true;
     if (m_transportModeKey == QStringLiteral("typed") && m_lastStats.rxFps1s >= 900) return true;
     return false;
 }
@@ -4092,7 +3795,6 @@ QString AppController::analysisContextText() const {
                 .arg(timingCumulativeCount()).arg(valueCumulativeCount()).arg(alarmCumulativeCount());
     parts << QStringLiteral("표시 행 T/V/A %1/%2/%3").arg(m_timingModel.count()).arg(m_valueModel.count()).arg(m_alarmModel.count());
     parts << QStringLiteral("현재 컨텍스트 %1").arg(viewStateSummaryFor(viewStateForSource(sourceKey)));
-    if (pendingLiveFrameCount() > 0) parts << QStringLiteral("live 큐 %1프레임").arg(pendingLiveFrameCount());
     if (m_liveProjectionWorkerSampledFrames > 0) parts << QStringLiteral("live projection 샘플링 누적 %1프레임").arg(m_liveProjectionWorkerSampledFrames);
     if (m_liveProjectionSampledControlEvidenceRecords > 0) parts << QStringLiteral("control evidence projection 샘플링 누적 %1건").arg(m_liveProjectionSampledControlEvidenceRecords);
     if (m_liveSampledViewDrops > 0) parts << QStringLiteral("live 표시 샘플링 누적 %1프레임").arg(m_liveSampledViewDrops);
@@ -5849,7 +5551,6 @@ QString AppController::liveStatsSummary() const {
     parts << QStringLiteral("FIFO %1").arg(fifoOverflowTotal());
     parts << QStringLiteral("EP %1").arg(errPassiveCount());
     parts << QStringLiteral("BO %1").arg(busOffCount());
-    if (pendingLiveFrameCount() > 0) parts << QStringLiteral("큐 %1").arg(pendingLiveFrameCount());
     if (m_liveProjectionWorkerSampledFrames > 0) parts << QStringLiteral("projection 샘플링 %1").arg(m_liveProjectionWorkerSampledFrames);
     if (m_liveProjectionSampledControlEvidenceRecords > 0) parts << QStringLiteral("control 샘플링 %1").arg(m_liveProjectionSampledControlEvidenceRecords);
     if (m_liveSampledViewDrops > 0) parts << QStringLiteral("표시 샘플링 %1").arg(m_liveSampledViewDrops);
@@ -6526,7 +6227,7 @@ void AppController::updateTransportDiagnostics() {
     m_transportSession.updateLiveRuntime(nowWallMs,
                                          m_lastLiveFrameWallMs,
                                          m_lastLiveStatsWallMs,
-                                         int(pendingLiveFrameCount()),
+                                         0,
                                          m_liveSampledViewDrops,
                                          m_liveProjectionProjectedFrames,
                                          m_liveProjectionWorkerSampledFrames,
@@ -6550,7 +6251,7 @@ void AppController::updateTransportDiagnostics() {
             << "Live runtime"
             << "capture_bytes" << m_logRecordedBytes
             << "capture_records" << m_logRecordedFrameCount
-            << "pending_projection" << pendingLiveFrameCount()
+            << "pending_projection" << 0
             << "projected" << m_liveProjectionProjectedFrames
             << "sampled" << (m_liveProjectionWorkerSampledFrames + m_liveSampledViewDrops)
             << "dropped" << (m_liveProjectionDroppedFrames + m_liveProjectionWorkerDroppedFrames)
@@ -6989,9 +6690,6 @@ void AppController::setPanelActive(const QString& key, bool active) {
     }
     if (analysisPaused()) return;
 
-    if (normalized == QStringLiteral("live")) {
-        flushQueuedLiveViewBatch();
-    }
     if (normalized == QStringLiteral("overview") || normalized == QStringLiteral("timing")) {
         m_timingRowsDirty = true;
     }
@@ -10230,7 +9928,7 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     liveStats.insert(QStringLiteral("fifo_overflow_total"), int(fifoOverflowTotal()));
     liveStats.insert(QStringLiteral("err_passive_1s"), errPassiveCount());
     liveStats.insert(QStringLiteral("bus_off_1s"), busOffCount());
-    liveStats.insert(QStringLiteral("projection_pending_frames"), int(pendingLiveFrameCount()));
+    liveStats.insert(QStringLiteral("projection_pending_frames"), 0);
     liveStats.insert(QStringLiteral("projection_observed_frames"), QString::number(m_liveProjectionObservedFrames));
     liveStats.insert(QStringLiteral("projection_projected_frames"), QString::number(m_liveProjectionProjectedFrames));
     liveStats.insert(QStringLiteral("projection_sampled_frames"), QString::number(m_liveProjectionWorkerSampledFrames + m_liveSampledViewDrops));
@@ -10510,9 +10208,6 @@ void AppController::clearFrames() {
     cancelReplayRebuild(false);
     m_replayCheckpoints.clear();
     clearReplaySnapshotState();
-    m_pendingLiveFrames.clear();
-    m_pendingLiveFrameOffset = 0;
-    m_liveFlushTimer.stop();
     m_liveSampledViewDrops = 0;
     m_liveProjectionObservedFrames = 0;
     m_liveProjectionProjectedFrames = 0;

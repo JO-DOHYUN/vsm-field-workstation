@@ -84,10 +84,41 @@ FrameRecord makeLiveFrame(quint32 canId = 0x321, quint64 tExtUs = 20'000, quint8
     return frame;
 }
 
+QJsonObject liveLatestRowFromFrame(const FrameRecord& frame) {
+    QJsonObject row;
+    row.insert(QStringLiteral("mono_us"), QString::number(frame.tExtUs));
+    row.insert(QStringLiteral("bus"), int(frame.bus));
+    row.insert(QStringLiteral("can_id"), int(frame.canId));
+    row.insert(QStringLiteral("ext"), frame.ext);
+    row.insert(QStringLiteral("rtr"), frame.rtr);
+    row.insert(QStringLiteral("dlc"), int(frame.dlc));
+    row.insert(QStringLiteral("data_hex"), QStringLiteral("1020"));
+    row.insert(QStringLiteral("seq"), int(frame.seq));
+    return row;
+}
+
 } // namespace
 
 class AppControllerLogFlowTest : public QObject {
     Q_OBJECT
+
+private:
+    void applyLiveLatestSnapshot(AppController& controller, const FrameRecordList& frames) {
+        QJsonArray rows;
+        for (const FrameRecord& frame : frames) rows.push_back(liveLatestRowFromFrame(frame));
+
+        QJsonObject change{{QStringLiteral("view_name"), QStringLiteral("live_latest")},
+                           {QStringLiteral("view_seq"), QStringLiteral("1")},
+                           {QStringLiteral("severity"), QStringLiteral("ok")}};
+        controller.handleCoreViewChanged(change);
+
+        QJsonObject snapshot;
+        snapshot.insert(QStringLiteral("view_name"), QStringLiteral("live_latest"));
+        snapshot.insert(QStringLiteral("view_seq"), QStringLiteral("1"));
+        snapshot.insert(QStringLiteral("severity"), QStringLiteral("ok"));
+        snapshot.insert(QStringLiteral("payload"), QJsonObject{{QStringLiteral("frames"), rows}});
+        controller.handleCoreViewSnapshotReady(1, true, snapshot, change);
+    }
 
 private slots:
     void initTestCase() {
@@ -406,9 +437,7 @@ private slots:
 
         FrameRecordList frames;
         frames.push_back(makeLiveFrame());
-        controller.appendPendingLiveFrames(frames);
-        controller.flushPendingLiveFrames();
-        controller.flushQueuedLiveViewBatch();
+        applyLiveLatestSnapshot(controller, frames);
 
         QCOMPARE(controller.liveFrames()->rowCount(), 1);
         const QJsonObject trace = controller.livePathTraceObject();
@@ -421,29 +450,10 @@ private slots:
         controller.clearModel();
         controller.m_transportModeKey = QStringLiteral("typed");
 
-        QJsonObject change{{QStringLiteral("view_name"), QStringLiteral("live_latest")},
-                           {QStringLiteral("view_seq"), QStringLiteral("1")},
-                           {QStringLiteral("severity"), QStringLiteral("ok")}};
-        controller.handleCoreViewChanged(change);
-
-        QJsonObject row;
-        row.insert(QStringLiteral("mono_us"), QStringLiteral("42000"));
-        row.insert(QStringLiteral("bus"), 1);
-        row.insert(QStringLiteral("can_id"), 0x321);
-        row.insert(QStringLiteral("ext"), false);
-        row.insert(QStringLiteral("rtr"), false);
-        row.insert(QStringLiteral("dlc"), 2);
-        row.insert(QStringLiteral("data_hex"), QStringLiteral("1020"));
-        row.insert(QStringLiteral("seq"), 7);
-
-        QJsonObject snapshot;
-        snapshot.insert(QStringLiteral("view_name"), QStringLiteral("live_latest"));
-        snapshot.insert(QStringLiteral("view_seq"), QStringLiteral("1"));
-        snapshot.insert(QStringLiteral("severity"), QStringLiteral("ok"));
-        snapshot.insert(QStringLiteral("payload"), QJsonObject{{QStringLiteral("frames"), QJsonArray{row}}});
-        controller.handleCoreViewSnapshotReady(1, true, snapshot, change);
-        controller.flushPendingLiveFrames();
-        controller.flushQueuedLiveViewBatch();
+        FrameRecordList frames;
+        frames.push_back(makeLiveFrame(0x321, 42'000, 1));
+        frames[0].seq = 7;
+        applyLiveLatestSnapshot(controller, frames);
 
         QCOMPARE(controller.liveFrames()->rowCount(), 1);
         const QModelIndex index = controller.liveFrames()->index(0, 0);
@@ -461,9 +471,7 @@ private slots:
 
         FrameRecordList frames;
         frames.push_back(makeLiveFrame());
-        controller.appendPendingLiveFrames(frames);
-        controller.flushPendingLiveFrames();
-        controller.flushQueuedLiveViewBatch();
+        applyLiveLatestSnapshot(controller, frames);
 
         QCOMPARE(controller.liveFrames()->rowCount(), 0);
         const QJsonObject trace = controller.livePathTraceObject();
@@ -479,9 +487,7 @@ private slots:
 
         FrameRecordList frames;
         frames.push_back(makeLiveFrame());
-        controller.appendPendingLiveFrames(frames);
-        controller.flushPendingLiveFrames();
-        controller.flushQueuedLiveViewBatch();
+        applyLiveLatestSnapshot(controller, frames);
 
         QCOMPARE(controller.liveFrames()->rowCount(), 0);
         const QJsonObject trace = controller.livePathTraceObject();

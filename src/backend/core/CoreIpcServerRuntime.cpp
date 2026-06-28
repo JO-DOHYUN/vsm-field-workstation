@@ -5,6 +5,7 @@
 #include <QJsonValue>
 #include <QLocalSocket>
 #include <QTimer>
+#include <QDateTime>
 
 #include <algorithm>
 #include <utility>
@@ -17,6 +18,27 @@ constexpr qint64 kIpcViewBackpressureBytes = 2 * 1024 * 1024;
 constexpr qint64 kIpcCriticalBackpressureBytes = 4 * 1024 * 1024;
 constexpr qint64 kIpcMaxSnapshotResponseBytes = 2 * 1024 * 1024;
 constexpr qsizetype kIpcMaxHostFrameBytes = 8192;
+
+qint64 viewPublishIntervalMs(CoreViewName viewName, CoreViewSeverity severity) {
+    if (severity == CoreViewSeverity::Fatal || severity == CoreViewSeverity::Error) {
+        return kIpcViewChangedCoalesceMs;
+    }
+    switch (viewName) {
+    case CoreViewName::LiveLatest:
+        return 50;  // 20 Hz display view ceiling.
+    case CoreViewName::CoreHealth:
+    case CoreViewName::FatalDiagnostics:
+    case CoreViewName::ControlAudit:
+        return 100;
+    case CoreViewName::TransportSummary:
+    case CoreViewName::CaptureProgress:
+    case CoreViewName::AnalysisSnapshot:
+    case CoreViewName::RawLedgerTail:
+    case CoreViewName::GraphBucket:
+        return 250;
+    }
+    return 250;
+}
 
 bool intInRange(const QJsonObject& object, const QString& key, int minValue, int maxValue, bool required, QString* errorOut) {
     const QJsonValue value = object.value(key);
@@ -99,6 +121,7 @@ void CoreIpcServerRuntime::close() {
     m_clients.clear();
     m_buffers.clear();
     m_pendingViewChanges.clear();
+    m_lastPublishedViewMs.clear();
     m_viewFlushScheduled = false;
     if (m_server.isListening()) {
         const QString name = m_server.serverName();
@@ -120,6 +143,7 @@ QString CoreIpcServerRuntime::serverName() const {
 QJsonObject CoreIpcServerRuntime::statusJson() const {
     return QJsonObject{{QStringLiteral("ipc_view_published"), QString::number(m_publishedViewNotifications)},
                        {QStringLiteral("ipc_view_coalesced"), QString::number(m_coalescedViewNotifications)},
+                       {QStringLiteral("ipc_view_deferred"), QString::number(m_deferredViewNotifications)},
                        {QStringLiteral("ipc_view_dropped"), QString::number(m_droppedViewNotifications)},
                        {QStringLiteral("ipc_snapshot_responses"), QString::number(m_snapshotResponses)},
                        {QStringLiteral("ipc_snapshot_dropped"), QString::number(m_droppedSnapshotResponses)},
@@ -136,29 +160,51 @@ void CoreIpcServerRuntime::publishViewChanged(const ViewChanged& change) {
         ++m_coalescedViewNotifications;
     }
     m_pendingViewChanges.insert(key, change);
+    scheduleViewChangeFlush(kIpcViewChangedCoalesceMs);
+}
+
+void CoreIpcServerRuntime::scheduleViewChangeFlush(qint64 delayMs) {
     if (m_viewFlushScheduled) return;
     m_viewFlushScheduled = true;
-    QTimer::singleShot(kIpcViewChangedCoalesceMs, this, &CoreIpcServerRuntime::flushPendingViewChanges);
+    QTimer::singleShot(std::max<qint64>(1, delayMs), this, &CoreIpcServerRuntime::flushPendingViewChanges);
 }
 
 void CoreIpcServerRuntime::flushPendingViewChanges() {
     m_viewFlushScheduled = false;
-    const auto pending = m_pendingViewChanges;
-    m_pendingViewChanges.clear();
-    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+    const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+    QHash<int, ViewChanged> ready;
+    qint64 nextDelayMs = -1;
+    for (auto it = m_pendingViewChanges.begin(); it != m_pendingViewChanges.end();) {
+        const ViewChanged& change = it.value();
+        const int key = it.key();
+        const qint64 intervalMs = viewPublishIntervalMs(change.viewName, change.severity);
+        const qint64 lastPublishedMs = m_lastPublishedViewMs.value(key, 0);
+        const bool due = lastPublishedMs <= 0 || (nowMs - lastPublishedMs) >= intervalMs;
+        if (due) {
+            ready.insert(key, change);
+            it = m_pendingViewChanges.erase(it);
+            continue;
+        }
+        const qint64 remainingMs = std::max<qint64>(1, intervalMs - (nowMs - lastPublishedMs));
+        nextDelayMs = nextDelayMs < 0 ? remainingMs : std::min(nextDelayMs, remainingMs);
+        ++m_deferredViewNotifications;
+        ++it;
+    }
+
+    for (auto it = ready.cbegin(); it != ready.cend(); ++it) {
         const ViewChanged& change = it.value();
         const QJsonObject message{{QStringLiteral("message_type"), QStringLiteral("view_changed")},
                                   {QStringLiteral("change"), change.toJson()}};
         ++m_publishedViewNotifications;
+        m_lastPublishedViewMs.insert(it.key(), nowMs);
         for (const auto& client : std::as_const(m_clients)) {
             if (client) {
                 sendObject(client, message);
             }
         }
     }
-    if (!m_pendingViewChanges.isEmpty() && !m_viewFlushScheduled) {
-        m_viewFlushScheduled = true;
-        QTimer::singleShot(kIpcViewChangedCoalesceMs, this, &CoreIpcServerRuntime::flushPendingViewChanges);
+    if (!m_pendingViewChanges.isEmpty()) {
+        scheduleViewChangeFlush(nextDelayMs > 0 ? nextDelayMs : kIpcViewChangedCoalesceMs);
     }
 }
 

@@ -56,6 +56,7 @@ private:
     void removeClient(QLocalSocket* socket);
     void handleMessage(QLocalSocket* socket, const QJsonObject& message);
     void flushPendingViewChanges();
+    void scheduleViewChangeFlush(qint64 delayMs);
     void sendObject(QLocalSocket* socket, const QJsonObject& object);
     QJsonObject baseResponse(const QJsonObject& request, const QString& messageType) const;
     QJsonObject errorResponse(const QJsonObject& request, const QString& code, const QString& detail) const;
@@ -65,9 +66,11 @@ private:
     QVector<QPointer<QLocalSocket>> m_clients;
     QHash<QLocalSocket*, QByteArray> m_buffers;
     QHash<int, ViewChanged> m_pendingViewChanges;
+    QHash<int, qint64> m_lastPublishedViewMs;
     bool m_viewFlushScheduled = false;
     quint64 m_publishedViewNotifications = 0;
     quint64 m_coalescedViewNotifications = 0;
+    quint64 m_deferredViewNotifications = 0;
     quint64 m_droppedViewNotifications = 0;
     quint64 m_snapshotResponses = 0;
     quint64 m_droppedSnapshotResponses = 0;

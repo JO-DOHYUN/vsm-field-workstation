@@ -62,6 +62,45 @@ private slots:
         server.close();
     }
 
+    void viewChangedNotificationsAreCadencedPerView() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-cadence-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy viewChangedSpy(&client, &CanMonitorCore::CoreIpcClientRuntime::viewChanged);
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        server.publishViewChanged(store.updateView(CanMonitorCore::CoreViewName::TransportSummary,
+                                                   QJsonObject{{QStringLiteral("seq"), 1}}));
+        QTRY_COMPARE(viewChangedSpy.size(), 1);
+        viewChangedSpy.clear();
+
+        for (int seq = 2; seq <= 5; ++seq) {
+            server.publishViewChanged(store.updateView(CanMonitorCore::CoreViewName::TransportSummary,
+                                                       QJsonObject{{QStringLiteral("seq"), seq}}));
+        }
+
+        QTest::qWait(100);
+        QCOMPARE(viewChangedSpy.size(), 0);
+        QTRY_COMPARE_WITH_TIMEOUT(viewChangedSpy.size(), 1, 500);
+        const QJsonObject changed = viewChangedSpy.takeFirst().at(0).toJsonObject();
+        QCOMPARE(changed.value(QStringLiteral("view_name")).toString(), QStringLiteral("transport_summary"));
+        QCOMPARE(changed.value(QStringLiteral("view_seq")).toString().toULongLong(), quint64(5));
+
+        const QJsonObject status = server.statusJson();
+        QVERIFY(status.value(QStringLiteral("ipc_view_coalesced")).toString().toULongLong() >= 3);
+        QVERIFY(status.value(QStringLiteral("ipc_view_deferred")).toString().toULongLong() > 0);
+
+        client.disconnectFromServer();
+        server.close();
+    }
+
     void clientSubmitsHostFrameAndReceivesWriteResult() {
         CanMonitorCore::CoreMaterializedViewStore store;
         const QString serverName = QStringLiteral("vsm-core-ipc-host-frame-test-%1-%2")
