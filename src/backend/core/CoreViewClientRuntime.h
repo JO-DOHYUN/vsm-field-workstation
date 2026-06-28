@@ -42,6 +42,7 @@ public:
         quint64 queryResponses = 0;
         quint64 skippedDisabled = 0;
         quint64 skippedInflight = 0;
+        quint64 timedOutInflight = 0;
         quint64 staleResponses = 0;
         int pendingViews = 0;
         int inflightViews = 0;
@@ -65,12 +66,14 @@ private:
         quint64 lastSeq = 0;
         quint64 pendingSeq = 0;
         quint64 inflightRequestId = 0;
+        qint64 inflightStartedMs = 0;
         bool pending = false;
         bool inflight = false;
         QJsonObject lastSnapshot;
     };
 
     static int indexOf(CoreViewName viewName);
+    static qint64 currentTimeMs();
     static quint64 jsonSeq(const QJsonObject& object, const QString& key);
     static bool parseChange(const QJsonObject& change, CoreViewName* viewName, quint64* viewSeq);
     std::optional<ViewRequest> makeRequest(CoreViewName viewName);

@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QStringList>
+#include <QTimer>
 
 namespace CanMonitorCore {
 
@@ -174,11 +175,13 @@ void CaptureCoreProcessRuntime::stopTransport() {
 }
 
 QJsonObject CaptureCoreProcessRuntime::statusJson() const {
-    return QJsonObject{{QStringLiteral("ipc_listening"), m_ipc.isListening()},
-                       {QStringLiteral("server_name"), m_ipc.serverName()},
-                       {QStringLiteral("transport_started"), m_transportRuntimeStarted},
-                       {QStringLiteral("transport_connected"), m_transportConnected},
-                       {QStringLiteral("transport_message"), m_transportMessage}};
+    QJsonObject out{{QStringLiteral("ipc_listening"), m_ipc.isListening()},
+                    {QStringLiteral("server_name"), m_ipc.serverName()},
+                    {QStringLiteral("transport_started"), m_transportRuntimeStarted},
+                    {QStringLiteral("transport_connected"), m_transportConnected},
+                    {QStringLiteral("transport_message"), m_transportMessage}};
+    out.insert(QStringLiteral("ipc"), m_ipc.statusJson());
+    return out;
 }
 
 void CaptureCoreProcessRuntime::ensureTransportRuntime() {
@@ -234,13 +237,37 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
             &CanMonitorTransport::SerialDrainRuntime::drainEventTraceChanged,
             this,
             [this](const QJsonObject& trace) {
+                const quint64 rawOverrunBytes = trace.value(QStringLiteral("drain_queue_overrun_bytes")).toVariant().toULongLong();
+                if (rawOverrunBytes > m_lastRawIngressOverrunBytes) {
+                    const quint64 deltaBytes = rawOverrunBytes - m_lastRawIngressOverrunBytes;
+                    m_lastRawIngressOverrunBytes = rawOverrunBytes;
+                    if (m_captureWriterRuntime) {
+                        QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                                  [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
+                                                   deltaBytes,
+                                                   rawOverrunBytes]() {
+                                                      if (worker) {
+                                                          worker->noteOverrun(0,
+                                                                              deltaBytes,
+                                                                              QStringLiteral("Host drain raw ingress overrun: %1 bytes total")
+                                                                                  .arg(rawOverrunBytes));
+                                                      }
+                                                  },
+                                                  Qt::QueuedConnection);
+                    }
+                }
                 updateTransportSummary(QJsonObject{{QStringLiteral("transport"), m_transportConnected ? QStringLiteral("connected") : QStringLiteral("idle")},
                                                    {QStringLiteral("message"), m_transportMessage},
                                                    {QStringLiteral("serial_owner"), QStringLiteral("core")},
-                                                   {QStringLiteral("drain_event_trace"), trace}},
-                                       m_transportConnected ? CoreViewSeverity::Ok : CoreViewSeverity::Warn,
+                                                   {QStringLiteral("drain_event_trace"), trace},
+                                                   {QStringLiteral("host_drain_overrun"), rawOverrunBytes > 0},
+                                                   {QStringLiteral("raw_ingress_invalid"), rawOverrunBytes > 0},
+                                                   {QStringLiteral("raw_ingress_overrun_bytes"), QString::number(rawOverrunBytes)}},
+                                       rawOverrunBytes > 0
+                                           ? CoreViewSeverity::Fatal
+                                           : (m_transportConnected ? CoreViewSeverity::Ok : CoreViewSeverity::Warn),
                                        QJsonObject{{QStringLiteral("raw_queue_used_bytes"), trace.value(QStringLiteral("drain_queue_used_bytes")).toVariant().toString()},
-                                                   {QStringLiteral("raw_queue_overrun_bytes"), trace.value(QStringLiteral("drain_queue_overrun_bytes")).toVariant().toString()}});
+                                                   {QStringLiteral("raw_queue_overrun_bytes"), QString::number(rawOverrunBytes)}});
             },
             Qt::QueuedConnection);
     connect(drain,
@@ -460,7 +487,7 @@ void CaptureCoreProcessRuntime::ensureRawLedgerRuntime() {
                                     {QStringLiteral("frames"), QJsonArray{}},
                                     {QStringLiteral("item_count"), 0},
                                     {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
-                                    {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+                                    {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
                 if (!error.isEmpty()) payload.insert(QStringLiteral("error"), error);
                 QJsonObject counts{{QStringLiteral("total_rows"), QStringLiteral("0")},
                                    {QStringLiteral("segment_bytes"), QStringLiteral("0")},
@@ -553,8 +580,20 @@ void CaptureCoreProcessRuntime::shutdownAnalysisRuntime() {
 
 void CaptureCoreProcessRuntime::queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch) {
     const FrameRecordList frames = batch.frames;
-    if (frames.isEmpty()) return;
     ensureAnalysisRuntime();
+    if (batch.overrunFrames > 0) {
+        QMetaObject::invokeMethod(m_analysisRuntime,
+                                  [worker = QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime>(m_analysisRuntime),
+                                   overrunFrames = batch.overrunFrames]() {
+                                      if (worker) {
+                                          worker->noteTruthLoss(overrunFrames,
+                                                                QStringLiteral("Analysis handoff overrun before core queue: %1 CAN_RX frames")
+                                                                    .arg(overrunFrames));
+                                      }
+                                  },
+                                  Qt::QueuedConnection);
+    }
+    if (frames.isEmpty()) return;
     QMetaObject::invokeMethod(m_analysisRuntime,
                               [worker = QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime>(m_analysisRuntime),
                                frames]() mutable {
@@ -622,6 +661,9 @@ void CaptureCoreProcessRuntime::updateAnalysisStatus(quint64 queuedFrames,
 }
 
 void CaptureCoreProcessRuntime::queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch) {
+    if (batch.overrunFrames > 0) {
+        m_rawLedgerDroppedHandoffFrames += batch.overrunFrames;
+    }
     queueRawLedgerFrames(batch.frames);
 }
 
@@ -689,7 +731,7 @@ void CaptureCoreProcessRuntime::updateRawLedgerTailView(const FrameRecordList& f
                         {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
                         {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
                         {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
-                        {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+                        {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
     QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
                        {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
@@ -722,7 +764,7 @@ void CaptureCoreProcessRuntime::updateRawLedgerStatusView(quint64 totalRows,
                         {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
                         {QStringLiteral("dropped_display_count"), QString::number(m_rawLedgerDroppedDisplayRows)},
                         {QStringLiteral("dropped_handoff_frames"), QString::number(m_rawLedgerDroppedHandoffFrames)},
-                        {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}};
+                        {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}};
     if (!lastError.isEmpty()) payload.insert(QStringLiteral("error"), lastError);
     QJsonObject counts{{QStringLiteral("total_rows"), QString::number(totalRows)},
                        {QStringLiteral("segment_bytes"), QString::number(segmentBytes)},
@@ -741,6 +783,7 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
     m_rawLedgerDroppedHandoffFrames = 0;
     m_rawLedgerLastTotalRows = 0;
     m_rawLedgerLastSegmentBytes = 0;
+    m_lastRawIngressOverrunBytes = 0;
     m_pipelineTransportPayload = QJsonObject{};
     m_pipelineTransportCheapCounts = QJsonObject{};
     m_analysisTransportPayload = QJsonObject{};
@@ -760,7 +803,7 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
                                                      {QStringLiteral("frames"), QJsonArray{}},
                                                      {QStringLiteral("item_count"), 0},
                                                      {QStringLiteral("item_cap"), kCoreRawLedgerTailViewCap},
-                                                     {QStringLiteral("source"), QStringLiteral("core_raw_ledger_writer")}},
+                                                     {QStringLiteral("source"), QStringLiteral("decoded_can_tail_view")}},
                                          CoreViewSeverity::Ok,
                                          QJsonObject{{QStringLiteral("total_rows"), QStringLiteral("0")},
                                                      {QStringLiteral("segment_bytes"), QStringLiteral("0")}}));
@@ -876,15 +919,37 @@ void CaptureCoreProcessRuntime::requestPipelineViewMirror(const QJsonObject& cha
     CoreViewName viewName = CoreViewName::CoreHealth;
     if (!coreViewNameFromString(change.value(QStringLiteral("view_name")).toString(), &viewName)) return;
 
-    const quint64 requestId = m_nextMirrorRequestId++;
-    m_pendingMirrorRequests.insert(requestId, viewName);
-    QMetaObject::invokeMethod(m_pipelineRuntime,
-                              "queryCoreView",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, coreViewNameToString(viewName)),
-                              Q_ARG(quint64, 0),
-                              Q_ARG(int, 256),
-                              Q_ARG(quint64, requestId));
+    m_pendingPipelineMirrorViews.insert(static_cast<int>(viewName), viewName);
+    if (m_pipelineMirrorFlushScheduled) return;
+    m_pipelineMirrorFlushScheduled = true;
+    QTimer::singleShot(50, this, &CaptureCoreProcessRuntime::flushPipelineViewMirrors);
+}
+
+void CaptureCoreProcessRuntime::flushPipelineViewMirrors() {
+    m_pipelineMirrorFlushScheduled = false;
+    if (!m_pipelineRuntime) {
+        m_pendingPipelineMirrorViews.clear();
+        return;
+    }
+
+    const auto pendingViews = m_pendingPipelineMirrorViews;
+    m_pendingPipelineMirrorViews.clear();
+    for (auto it = pendingViews.cbegin(); it != pendingViews.cend(); ++it) {
+        const CoreViewName viewName = it.value();
+        const quint64 requestId = m_nextMirrorRequestId++;
+        m_pendingMirrorRequests.insert(requestId, viewName);
+        QMetaObject::invokeMethod(m_pipelineRuntime,
+                                  "queryCoreView",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, coreViewNameToString(viewName)),
+                                  Q_ARG(quint64, 0),
+                                  Q_ARG(int, 256),
+                                  Q_ARG(quint64, requestId));
+    }
+    if (!m_pendingPipelineMirrorViews.isEmpty() && !m_pipelineMirrorFlushScheduled) {
+        m_pipelineMirrorFlushScheduled = true;
+        QTimer::singleShot(50, this, &CaptureCoreProcessRuntime::flushPipelineViewMirrors);
+    }
 }
 
 void CaptureCoreProcessRuntime::applyPipelineSnapshot(quint64 requestId,

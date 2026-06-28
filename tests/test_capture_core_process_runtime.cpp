@@ -54,7 +54,7 @@ private slots:
         snapshot = args.at(2).toJsonObject();
         const QJsonObject rawPayload = snapshot.value(QStringLiteral("payload")).toObject();
         QCOMPARE(rawPayload.value(QStringLiteral("source")).toString(),
-                 QStringLiteral("core_raw_ledger_writer"));
+                 QStringLiteral("decoded_can_tail_view"));
         QCOMPARE(rawPayload.value(QStringLiteral("frames")).toArray().size(), 0);
 
         client.disconnectFromServer();

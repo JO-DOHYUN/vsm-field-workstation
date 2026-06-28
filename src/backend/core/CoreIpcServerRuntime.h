@@ -8,6 +8,7 @@
 #include <QPointer>
 #include <QByteArray>
 #include <QVector>
+#include <QJsonObject>
 
 class QLocalSocket;
 
@@ -23,6 +24,7 @@ public:
     void close();
     bool isListening() const;
     QString serverName() const;
+    QJsonObject statusJson() const;
 
     void publishViewChanged(const ViewChanged& change);
     void publishHostFrameWriteResult(quint64 requestId, bool ok, const QString& summary, quint64 bytesWritten);
@@ -53,6 +55,7 @@ private:
     void readClient(QLocalSocket* socket);
     void removeClient(QLocalSocket* socket);
     void handleMessage(QLocalSocket* socket, const QJsonObject& message);
+    void flushPendingViewChanges();
     void sendObject(QLocalSocket* socket, const QJsonObject& object);
     QJsonObject baseResponse(const QJsonObject& request, const QString& messageType) const;
     QJsonObject errorResponse(const QJsonObject& request, const QString& code, const QString& detail) const;
@@ -61,6 +64,13 @@ private:
     QLocalServer m_server;
     QVector<QPointer<QLocalSocket>> m_clients;
     QHash<QLocalSocket*, QByteArray> m_buffers;
+    QHash<int, ViewChanged> m_pendingViewChanges;
+    bool m_viewFlushScheduled = false;
+    quint64 m_publishedViewNotifications = 0;
+    quint64 m_coalescedViewNotifications = 0;
+    quint64 m_droppedViewNotifications = 0;
+    quint64 m_disconnectedSlowClients = 0;
+    qint64 m_maxQueuedBytes = 0;
 };
 
 } // namespace CanMonitorCore

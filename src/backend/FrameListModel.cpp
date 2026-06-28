@@ -76,6 +76,26 @@ void FrameListModel::appendReplayBatch(const FrameRecordList& frames, const QStr
     appendBatch(frames, QStringLiteral("replay"), timeTexts);
 }
 
+void FrameListModel::replaceLiveBatch(const FrameRecordList& frames, const QStringList& timeTexts) {
+    beginResetModel();
+    m_rows.clear();
+    m_firstTimeUs = 0;
+    const int frameCount = int(frames.size());
+    const int keep = std::min(frameCount, m_limit);
+    const int start = std::max(0, frameCount - keep);
+    for (int i = start; i < frames.size(); ++i) {
+        const FrameRecord& fr = frames.at(i);
+        if (m_firstTimeUs == 0 || fr.tExtUs < m_firstTimeUs) m_firstTimeUs = fr.tExtUs;
+    }
+    for (int i = start; i < frames.size(); ++i) {
+        const FrameRecord& fr = frames.at(i);
+        const QString tt = (i < timeTexts.size()) ? timeTexts.at(i) : QString();
+        m_rows.push_front({fr, QStringLiteral("live"), tt, hexBytes(fr.data, fr.dlc), int(std::clamp<int>(fr.dlc, 0, 8))});
+    }
+    endResetModel();
+    emit countChanged();
+}
+
 void FrameListModel::append(const FrameRecord& fr, const QString& source, const QString& timeText) {
     if (m_firstTimeUs == 0 || fr.tExtUs < m_firstTimeUs) m_firstTimeUs = fr.tExtUs;
     beginInsertRows(QModelIndex(), 0, 0);

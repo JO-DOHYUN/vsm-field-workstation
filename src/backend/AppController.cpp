@@ -2365,11 +2365,53 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
             std::max<qint64>(m_livePathTelemetry.appSnapshotApplyMaxMs, applyTimer.elapsed());
         if (!frames.isEmpty()) {
             m_lastLiveFrameWallMs = QDateTime::currentMSecsSinceEpoch();
-            appendPendingLiveFrames(frames);
-            if (!m_liveFlushTimer.isActive()) {
-                m_liveFlushTimer.start(pendingLiveFrameCount() > m_liveFlushChunk ? 18 : 12);
+            QStringList timeTexts;
+            timeTexts.reserve(frames.size());
+            for (const FrameRecord& frame : frames) {
+                ensureTimeAnchorForFrame(QStringLiteral("live"), frame.tExtUs);
+                timeTexts << timeTextForSourceUs(QStringLiteral("live"), frame.tExtUs);
             }
+            m_pendingLiveFrames.clear();
+            m_pendingLiveFrameOffset = 0;
+            m_liveFlushTimer.stop();
+            m_pendingLiveViewFrames.clear();
+            m_pendingLiveViewTimeTexts.clear();
+            m_liveViewFlushTimer.stop();
+            if (m_liveUiPaused || !m_livePanelActive) {
+                const quint64 dropped = quint64(frames.size());
+                if (m_liveUiPaused) m_livePathTelemetry.liveViewPausedDrops += dropped;
+                if (!m_livePanelActive) m_livePathTelemetry.liveViewPanelDrops += dropped;
+                m_liveSampledViewDrops += dropped;
+            } else {
+                ++m_livePathTelemetry.appendLiveBatchCalls;
+                m_livePathTelemetry.appendLiveBatchFrames += quint64(frames.size());
+                m_liveFrames.replaceLiveBatch(frames, timeTexts);
+                m_livePathTelemetry.liveModelRows = quint64(std::max(0, m_liveFrames.count()));
+            }
+            m_livePathTelemetry.pendingLiveRows = 0;
         }
+    }
+    if (result.accepted && result.changed && result.viewName == QStringLiteral("capture_progress")) {
+        const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
+        const bool active = payload.value(QStringLiteral("capture_active")).toBool(m_logRecordingActive);
+        const QString path = payload.value(QStringLiteral("path")).toString();
+        m_logTypedSession = true;
+        m_logRecordingActive = active;
+        if (payload.contains(QStringLiteral("bytes_written"))) {
+            m_logRecordedBytes = jsonU64Value(payload, QStringLiteral("bytes_written"));
+        }
+        if (payload.contains(QStringLiteral("record_count"))) {
+            m_logRecordedFrameCount = jsonU64Value(payload, QStringLiteral("record_count"));
+        }
+        if (!path.isEmpty()) {
+            m_logTempPath = path;
+            m_logPath = path;
+            m_logSuggestedSavePath = path;
+            if (!active) m_logLastSavedPath = path;
+            emit logPathChanged();
+        }
+        requestLogStateRefresh(false);
+        requestTransportDiagnosticsRefresh(false);
     }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("analysis_snapshot")) {
         const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
@@ -6565,7 +6607,7 @@ void AppController::restoreSessionState() {
             ? defaultLogDirectory()
             : QDir::fromNativeSeparators(RuntimePaths::normalizeLocalPath(snapshot.logTargetDirectory));
         m_logTargetName = snapshot.logTargetName.trimmed();
-        setLiveUiPaused(snapshot.liveUiPaused);
+        setLiveUiPaused(false);
         m_replayRuntime.restoreSession(m_session);
 
         m_restoringSession = false;
@@ -6669,7 +6711,7 @@ void AppController::restoreSessionState() {
     m_logTargetDirectory = RuntimePaths::normalizeLocalPath(m_session.value(QStringLiteral("log/targetDirectory"), defaultLogDirectory()).toString());
     if (m_logTargetDirectory.trimmed().isEmpty()) m_logTargetDirectory = defaultLogDirectory();
     m_logTargetName = m_session.value(QStringLiteral("log/targetName")).toString().trimmed();
-    setLiveUiPaused(m_session.value(QStringLiteral("ui/livePaused"), false).toBool());
+    setLiveUiPaused(false);
 
     m_restoringSession = false;
     refreshTimingRows();
@@ -6730,7 +6772,7 @@ void AppController::saveSessionState() const {
         snapshot.replayFrameBusFilter = m_replayFrameView.busFilter();
         snapshot.replaySpeed = m_replaySpeed;
         snapshot.replayLoop = m_replayLoop;
-        snapshot.liveUiPaused = m_liveUiPaused;
+        snapshot.liveUiPaused = false;
         snapshot.logTargetDirectory = logTargetDirectory();
         snapshot.logTargetName = m_logTargetName;
 
@@ -6811,7 +6853,7 @@ void AppController::saveSessionState() const {
     m_session.setValue(QStringLiteral("frame/replayBusFilter"), m_replayFrameView.busFilter());
     m_session.setValue(QStringLiteral("replay/speed"), m_replaySpeed);
     m_session.setValue(QStringLiteral("replay/loop"), m_replayLoop);
-    m_session.setValue(QStringLiteral("ui/livePaused"), m_liveUiPaused);
+    m_session.setValue(QStringLiteral("ui/livePaused"), false);
     m_session.setValue(QStringLiteral("log/targetDirectory"), logTargetDirectory());
     m_session.setValue(QStringLiteral("log/targetName"), m_logTargetName);
     m_session.sync();

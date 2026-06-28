@@ -94,6 +94,51 @@ private slots:
         QCOMPARE(full.snapshot.payload.value(QStringLiteral("frames")).toArray().size(), 6);
     }
 
+    void rawLedgerQueryLimitAdjustsFirstSeq() {
+        CoreMaterializedViewStore store;
+
+        QJsonArray frames;
+        for (int i = 0; i < 6; ++i) frames.append(QJsonObject{{QStringLiteral("n"), i}});
+        QJsonObject payload;
+        payload.insert(QStringLiteral("first_seq"), QStringLiteral("100"));
+        payload.insert(QStringLiteral("last_seq"), QStringLiteral("105"));
+        payload.insert(QStringLiteral("total_rows"), QStringLiteral("106"));
+        payload.insert(QStringLiteral("frames"), frames);
+        payload.insert(QStringLiteral("item_count"), frames.size());
+        store.updateView(CoreViewName::RawLedgerTail, payload);
+
+        const auto limited = store.queryView({CoreViewName::RawLedgerTail, 0, 2});
+        QVERIFY(limited.changed);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("frames")).toArray().size(), 2);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("first_seq")).toString(), QStringLiteral("104"));
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("item_count")).toInt(), 2);
+    }
+
+    void queryLimitDoesNotTrimUnownedAnalysisArrays() {
+        CoreMaterializedViewStore store;
+
+        QJsonArray timingRows;
+        QJsonArray valueRows;
+        QJsonArray alarmRows;
+        for (int i = 0; i < 3; ++i) {
+            timingRows.append(QJsonObject{{QStringLiteral("id"), i}});
+            valueRows.append(QJsonObject{{QStringLiteral("id"), i}});
+            alarmRows.append(QJsonObject{{QStringLiteral("id"), i}});
+        }
+
+        QJsonObject payload;
+        payload.insert(QStringLiteral("timing_rows"), timingRows);
+        payload.insert(QStringLiteral("value_rows"), valueRows);
+        payload.insert(QStringLiteral("alarm_rows"), alarmRows);
+        store.updateView(CoreViewName::AnalysisSnapshot, payload);
+
+        const auto limited = store.queryView({CoreViewName::AnalysisSnapshot, 0, 1});
+        QVERIFY(limited.changed);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("timing_rows")).toArray().size(), 3);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("value_rows")).toArray().size(), 3);
+        QCOMPARE(limited.snapshot.payload.value(QStringLiteral("alarm_rows")).toArray().size(), 3);
+    }
+
     void arrayViewAcceptsExternalDropDelta() {
         CoreMaterializedViewStore store;
         store.setPolicy(CoreViewName::LiveLatest, 4);

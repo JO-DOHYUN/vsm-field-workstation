@@ -62,6 +62,7 @@ private:
     void handleAnalysisModelRequested(quint64 requestId, const QString& modelPath, bool modelEnabled);
     void publishChange(const ViewChanged& change);
     void requestPipelineViewMirror(const QJsonObject& change);
+    void flushPipelineViewMirrors();
     void applyPipelineSnapshot(quint64 requestId,
                                bool changed,
                                const QJsonObject& snapshot,
@@ -142,6 +143,7 @@ private:
     FrameRecordList m_pendingRawLedgerFrames;
     QJsonArray m_rawLedgerTailRows;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
+    QHash<int, CoreViewName> m_pendingPipelineMirrorViews;
     QQueue<quint64> m_pendingHostFrameRequests;
     CanMonitorControl::ControlCycleRuntime m_controlCycle;
     quint64 m_nextMirrorRequestId = 1;
@@ -152,6 +154,7 @@ private:
     quint64 m_rawLedgerLastBatchCount = 0;
     quint64 m_rawLedgerLastWriteMaxUs = 0;
     quint64 m_rawLedgerLastWriteFailures = 0;
+    quint64 m_lastRawIngressOverrunBytes = 0;
     QJsonObject m_pipelineTransportPayload;
     QJsonObject m_pipelineTransportCheapCounts;
     QJsonObject m_analysisTransportPayload;
@@ -159,6 +162,7 @@ private:
     CoreViewSeverity m_pipelineTransportSeverity = CoreViewSeverity::Ok;
     CoreViewSeverity m_analysisSeverity = CoreViewSeverity::Ok;
     bool m_rawLedgerDispatchInFlight = false;
+    bool m_pipelineMirrorFlushScheduled = false;
     bool m_transportRuntimeStarted = false;
     bool m_transportConnected = false;
     QString m_transportMessage = QStringLiteral("idle");

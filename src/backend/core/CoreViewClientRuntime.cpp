@@ -1,17 +1,22 @@
 #include "core/CoreViewClientRuntime.h"
 
+#include <QDateTime>
 #include <QJsonValue>
 
 #include <algorithm>
 
 namespace CanMonitorCore {
 
+namespace {
+constexpr qint64 kViewInflightTimeoutMs = 1500;
+}
+
 CoreViewClientRuntime::CoreViewClientRuntime() {
     setPolicy(CoreViewName::LiveLatest, 32, true);
     setPolicy(CoreViewName::RawLedgerTail, 256, true);
     setPolicy(CoreViewName::TransportSummary, 1, true);
     setPolicy(CoreViewName::CaptureProgress, 1, true);
-    setPolicy(CoreViewName::AnalysisSnapshot, 1, true);
+    setPolicy(CoreViewName::AnalysisSnapshot, 0, true);
     setPolicy(CoreViewName::FatalDiagnostics, 16, true);
 }
 
@@ -51,8 +56,16 @@ std::optional<CoreViewClientRuntime::ViewRequest> CoreViewClientRuntime::noteVie
     state.pending = true;
     state.pendingSeq = std::max(state.pendingSeq, viewSeq);
     if (state.inflight) {
-        ++m_status.skippedInflight;
-        return std::nullopt;
+        const qint64 nowMs = currentTimeMs();
+        if (state.inflightStartedMs > 0 && nowMs - state.inflightStartedMs >= kViewInflightTimeoutMs) {
+            state.inflight = false;
+            state.inflightRequestId = 0;
+            state.inflightStartedMs = 0;
+            ++m_status.timedOutInflight;
+        } else {
+            ++m_status.skippedInflight;
+            return std::nullopt;
+        }
     }
     return makeRequest(viewName);
 }
@@ -80,6 +93,7 @@ CoreViewClientRuntime::ApplyResult CoreViewClientRuntime::applySnapshot(quint64 
 
     state.inflight = false;
     state.inflightRequestId = 0;
+    state.inflightStartedMs = 0;
     ++m_status.queryResponses;
     result.accepted = true;
     result.changed = changed;
@@ -122,6 +136,7 @@ QJsonObject CoreViewClientRuntime::statusJson() const {
     out.insert(QStringLiteral("core_view_query_responses"), QString::number(s.queryResponses));
     out.insert(QStringLiteral("core_view_skipped_disabled"), QString::number(s.skippedDisabled));
     out.insert(QStringLiteral("core_view_skipped_inflight"), QString::number(s.skippedInflight));
+    out.insert(QStringLiteral("core_view_timed_out_inflight"), QString::number(s.timedOutInflight));
     out.insert(QStringLiteral("core_view_stale_responses"), QString::number(s.staleResponses));
     out.insert(QStringLiteral("core_view_pending_views"), s.pendingViews);
     out.insert(QStringLiteral("core_view_inflight_views"), s.inflightViews);
@@ -139,6 +154,10 @@ quint64 CoreViewClientRuntime::lastSeq(CoreViewName viewName) const {
 int CoreViewClientRuntime::indexOf(CoreViewName viewName) {
     const int index = static_cast<int>(viewName);
     return index >= 0 && index < kCoreViewCount ? index : 0;
+}
+
+qint64 CoreViewClientRuntime::currentTimeMs() {
+    return QDateTime::currentMSecsSinceEpoch();
 }
 
 quint64 CoreViewClientRuntime::jsonSeq(const QJsonObject& object, const QString& key) {
@@ -169,6 +188,7 @@ std::optional<CoreViewClientRuntime::ViewRequest> CoreViewClientRuntime::makeReq
     }
     state.inflight = true;
     state.inflightRequestId = m_nextRequestId++;
+    state.inflightStartedMs = currentTimeMs();
     ++m_status.queryRequests;
 
     ViewRequest request;

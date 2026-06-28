@@ -2,12 +2,70 @@
 
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLocalSocket>
+#include <QTimer>
 
 #include <algorithm>
 #include <utility>
 
 namespace CanMonitorCore {
+
+namespace {
+constexpr qint64 kIpcViewChangedCoalesceMs = 50;
+constexpr qint64 kIpcViewBackpressureBytes = 2 * 1024 * 1024;
+constexpr qint64 kIpcCriticalBackpressureBytes = 4 * 1024 * 1024;
+constexpr qsizetype kIpcMaxHostFrameBytes = 8192;
+
+bool intInRange(const QJsonObject& object, const QString& key, int minValue, int maxValue, bool required, QString* errorOut) {
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined()) {
+        if (required && errorOut) *errorOut = QStringLiteral("missing_%1").arg(key);
+        return !required;
+    }
+    if (!value.isDouble()) {
+        if (errorOut) *errorOut = QStringLiteral("invalid_%1").arg(key);
+        return false;
+    }
+    const int parsed = value.toInt();
+    if (parsed < minValue || parsed > maxValue) {
+        if (errorOut) *errorOut = QStringLiteral("out_of_range_%1").arg(key);
+        return false;
+    }
+    return true;
+}
+
+bool doubleInRange(const QJsonObject& object, const QString& key, double minValue, double maxValue, bool required, QString* errorOut) {
+    const QJsonValue value = object.value(key);
+    if (value.isUndefined()) {
+        if (required && errorOut) *errorOut = QStringLiteral("missing_%1").arg(key);
+        return !required;
+    }
+    if (!value.isDouble()) {
+        if (errorOut) *errorOut = QStringLiteral("invalid_%1").arg(key);
+        return false;
+    }
+    const double parsed = value.toDouble();
+    if (parsed < minValue || parsed > maxValue) {
+        if (errorOut) *errorOut = QStringLiteral("out_of_range_%1").arg(key);
+        return false;
+    }
+    return true;
+}
+
+bool validateControlPayload(const QString& action, const QJsonObject& payload, QString* errorOut) {
+    if (action == QStringLiteral("stop")) return true;
+    const bool cycleStart = action == QStringLiteral("start");
+    return intInRange(payload, QStringLiteral("signed_command"), -100000, 100000, true, errorOut) &&
+           intInRange(payload, QStringLiteral("rpm"), -100000, 100000, true, errorOut) &&
+           doubleInRange(payload, QStringLiteral("steering_deg"), -1080.0, 1080.0, true, errorOut) &&
+           intInRange(payload, QStringLiteral("motor_mode"), 0, 255, true, errorOut) &&
+           intInRange(payload, QStringLiteral("driving_mode"), 0, 255, true, errorOut) &&
+           intInRange(payload, QStringLiteral("bus"), 0, 255, true, errorOut) &&
+           intInRange(payload, QStringLiteral("period_ms"), 5, 5000, cycleStart, errorOut) &&
+           intInRange(payload, QStringLiteral("frame_gap_ms"), 0, 5000, cycleStart, errorOut);
+}
+}
 
 CoreIpcServerRuntime::CoreIpcServerRuntime(CoreMaterializedViewStore* viewStore, QObject* parent)
     : QObject(parent)
@@ -39,6 +97,8 @@ void CoreIpcServerRuntime::close() {
     }
     m_clients.clear();
     m_buffers.clear();
+    m_pendingViewChanges.clear();
+    m_viewFlushScheduled = false;
     if (m_server.isListening()) {
         const QString name = m_server.serverName();
         m_server.close();
@@ -56,13 +116,45 @@ QString CoreIpcServerRuntime::serverName() const {
     return m_server.serverName();
 }
 
+QJsonObject CoreIpcServerRuntime::statusJson() const {
+    return QJsonObject{{QStringLiteral("ipc_view_published"), QString::number(m_publishedViewNotifications)},
+                       {QStringLiteral("ipc_view_coalesced"), QString::number(m_coalescedViewNotifications)},
+                       {QStringLiteral("ipc_view_dropped"), QString::number(m_droppedViewNotifications)},
+                       {QStringLiteral("ipc_slow_client_disconnects"), QString::number(m_disconnectedSlowClients)},
+                       {QStringLiteral("ipc_max_queued_bytes"), QString::number(m_maxQueuedBytes)},
+                       {QStringLiteral("ipc_pending_views"), m_pendingViewChanges.size()},
+                       {QStringLiteral("ipc_clients"), m_clients.size()}};
+}
+
 void CoreIpcServerRuntime::publishViewChanged(const ViewChanged& change) {
-    const QJsonObject message{{QStringLiteral("message_type"), QStringLiteral("view_changed")},
-                              {QStringLiteral("change"), change.toJson()}};
-    for (const auto& client : std::as_const(m_clients)) {
-        if (client) {
-            sendObject(client, message);
+    const int key = static_cast<int>(change.viewName);
+    if (m_pendingViewChanges.contains(key)) {
+        ++m_coalescedViewNotifications;
+    }
+    m_pendingViewChanges.insert(key, change);
+    if (m_viewFlushScheduled) return;
+    m_viewFlushScheduled = true;
+    QTimer::singleShot(kIpcViewChangedCoalesceMs, this, &CoreIpcServerRuntime::flushPendingViewChanges);
+}
+
+void CoreIpcServerRuntime::flushPendingViewChanges() {
+    m_viewFlushScheduled = false;
+    const auto pending = m_pendingViewChanges;
+    m_pendingViewChanges.clear();
+    for (auto it = pending.cbegin(); it != pending.cend(); ++it) {
+        const ViewChanged& change = it.value();
+        const QJsonObject message{{QStringLiteral("message_type"), QStringLiteral("view_changed")},
+                                  {QStringLiteral("change"), change.toJson()}};
+        ++m_publishedViewNotifications;
+        for (const auto& client : std::as_const(m_clients)) {
+            if (client) {
+                sendObject(client, message);
+            }
         }
+    }
+    if (!m_pendingViewChanges.isEmpty() && !m_viewFlushScheduled) {
+        m_viewFlushScheduled = true;
+        QTimer::singleShot(kIpcViewChangedCoalesceMs, this, &CoreIpcServerRuntime::flushPendingViewChanges);
     }
 }
 
@@ -172,6 +264,10 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
             sendObject(socket, errorResponse(message, QStringLiteral("empty_transport_endpoint"), QString()));
             return;
         }
+        if (endpoint.size() > 512) {
+            sendObject(socket, errorResponse(message, QStringLiteral("transport_endpoint_too_long"), QString::number(endpoint.size())));
+            return;
+        }
         if (mode != QStringLiteral("serial") && mode != QStringLiteral("gateway_tcp")) {
             sendObject(socket, errorResponse(message, QStringLiteral("invalid_transport_mode"), mode));
             return;
@@ -192,6 +288,10 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
             sendObject(socket, errorResponse(message, QStringLiteral("empty_host_frame"), summary));
             return;
         }
+        if (frame.size() > kIpcMaxHostFrameBytes) {
+            sendObject(socket, errorResponse(message, QStringLiteral("host_frame_too_large"), QString::number(frame.size())));
+            return;
+        }
         emit hostFrameRequested(requestId, frame, summary);
         return;
     }
@@ -205,7 +305,13 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
             sendObject(socket, errorResponse(message, QStringLiteral("invalid_control_cycle_action"), action));
             return;
         }
-        emit controlCycleRequested(requestId, action, message.value(QStringLiteral("payload")).toObject());
+        const QJsonObject payload = message.value(QStringLiteral("payload")).toObject();
+        QString validationError;
+        if (!validateControlPayload(action, payload, &validationError)) {
+            sendObject(socket, errorResponse(message, QStringLiteral("invalid_control_cycle_payload"), validationError));
+            return;
+        }
+        emit controlCycleRequested(requestId, action, payload);
         return;
     }
     if (type == QStringLiteral("start_capture")) {
@@ -213,6 +319,10 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
         const QString sessionDir = message.value(QStringLiteral("session_dir")).toString();
         if (sessionDir.trimmed().isEmpty()) {
             sendObject(socket, errorResponse(message, QStringLiteral("empty_capture_session_dir"), QString()));
+            return;
+        }
+        if (sessionDir.size() > 1024) {
+            sendObject(socket, errorResponse(message, QStringLiteral("capture_session_dir_too_long"), QString::number(sessionDir.size())));
             return;
         }
         emit captureStartRequested(requestId, sessionDir, message.value(QStringLiteral("metadata")).toObject());
@@ -261,6 +371,19 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
 
 void CoreIpcServerRuntime::sendObject(QLocalSocket* socket, const QJsonObject& object) {
     if (!socket) return;
+    const qint64 queued = socket->bytesToWrite();
+    m_maxQueuedBytes = std::max(m_maxQueuedBytes, queued);
+    const bool viewNotification = object.value(QStringLiteral("message_type")).toString() == QStringLiteral("view_changed");
+    if (viewNotification && queued > kIpcViewBackpressureBytes) {
+        ++m_droppedViewNotifications;
+        return;
+    }
+    if (!viewNotification && queued > kIpcCriticalBackpressureBytes) {
+        ++m_disconnectedSlowClients;
+        emit protocolError(QStringLiteral("ipc critical response backpressure exceeded"));
+        socket->disconnectFromServer();
+        return;
+    }
     socket->write(QJsonDocument(object).toJson(QJsonDocument::Compact));
     socket->write("\n");
     socket->flush();

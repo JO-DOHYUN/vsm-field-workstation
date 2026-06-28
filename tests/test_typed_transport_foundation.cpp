@@ -187,6 +187,28 @@ private slots:
         QCOMPARE(parser.counters().frames, quint64(1));
     }
 
+    void includeFrameBytesDoesNotExposeDanglingPayload() {
+        QByteArray frame = makeTypedFrame(TypedRecordType::CanRxRaw, 12, makeCanPayload(7777, 1, 3, 0));
+        TypedTransportParser parser;
+        parser.append(frame);
+
+        auto record = parser.takeOne(true);
+        QVERIFY(record.has_value());
+        QVERIFY(!record->frameBytes.isEmpty());
+        QVERIFY(record->payload.isEmpty());
+
+        frame.fill(char(0));
+        parser.reset();
+        TypedRecord copied = *record;
+        record.reset();
+
+        const auto can = decodeTypedCanRaw(copied);
+        QVERIFY(can.has_value());
+        QCOMPARE(can->monoUs, quint64(7777));
+        QCOMPARE(can->bus, quint8(1));
+        QCOMPARE(can->total, quint32(3));
+    }
+
     void drainsHighRateTypedCanStreamWithoutRetainingConsumedBytes() {
         QByteArray stream;
         constexpr int frameCount = 1800;

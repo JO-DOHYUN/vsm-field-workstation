@@ -116,7 +116,6 @@ std::optional<TypedRecord> TypedTransportParser::takeOne(bool includeFrameBytes)
         record.header.payloadLength = payloadLength;
         if (includeFrameBytes) {
             record.frameBytes = QByteArray(reinterpret_cast<const char*>(p), frameLength);
-            record.payload = QByteArray::fromRawData(record.frameBytes.constData() + 9, payloadLength);
         } else {
             record.payload = QByteArray(reinterpret_cast<const char*>(p + 9), payloadLength);
         }

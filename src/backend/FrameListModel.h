@@ -33,6 +33,7 @@ public:
     void appendReplay(const FrameRecord& fr, const QString& timeText = QString());
     void appendLiveBatch(const FrameRecordList& frames, const QStringList& timeTexts = {});
     void appendReplayBatch(const FrameRecordList& frames, const QStringList& timeTexts = {});
+    void replaceLiveBatch(const FrameRecordList& frames, const QStringList& timeTexts = {});
 
 signals:
     void countChanged();

@@ -25,6 +25,18 @@ QVector<TypedRecord> takeSortedRecords(QHash<quint64, TypedRecord>& bucket) {
     return records;
 }
 
+QByteArray ownedPayloadForRecord(const TypedRecord& record) {
+    if (record.payload.size() == record.header.payloadLength) {
+        return record.payload;
+    }
+    const qsizetype payloadLength = qsizetype(record.header.payloadLength);
+    const qsizetype frameLength = kTypedTransportFrameOverhead + payloadLength;
+    if (record.frameBytes.size() >= frameLength) {
+        return record.frameBytes.mid(9, payloadLength);
+    }
+    return record.payload;
+}
+
 FrameRecord toFrameRecordFromSegmentEntry(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
     FrameRecord frame;
     frame.tExtUs = entry.monoUs;
@@ -226,7 +238,7 @@ bool LiveProjectionRuntime::queueSampledControlEvidence(QHash<quint64, TypedReco
     }
     TypedRecord compactRecord;
     compactRecord.header = record.header;
-    compactRecord.payload = record.payload;
+    compactRecord.payload = ownedPayloadForRecord(record);
     bucket.insert(key, std::move(compactRecord));
     return replaced;
 }

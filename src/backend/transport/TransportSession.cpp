@@ -532,7 +532,7 @@ QString TransportSession::summary() const {
                      .arg(m_mcp2515EventTotal)
                      .arg(m_lastBoardEventDetail, 4, 16, QLatin1Char('0')).toUpper();
     }
-    if (m_rawLedgerTotalRows > 0) parts << QStringLiteral("raw ledger %1 rows").arg(m_rawLedgerTotalRows);
+    if (m_rawLedgerTotalRows > 0) parts << QStringLiteral("decoded tail %1 rows").arg(m_rawLedgerTotalRows);
     return parts.join(QStringLiteral(" | "));
 }
 
@@ -719,7 +719,7 @@ QVariantList TransportSession::rows() const {
             boardEventDetailText(),
             m_boardEventFatalTotal > 0),
         row(QStringLiteral("live_truth"),
-            QStringLiteral("Live truth"),
+            QStringLiteral("Live latest view"),
             truthLevel,
             QStringLiteral("observed %1 emitted %2 pending %3")
                 .arg(m_truthObservedCanRxFrames)
@@ -737,16 +737,15 @@ QVariantList TransportSession::rows() const {
                 .arg(m_truthLoss),
             m_truthLoss > 0),
         row(QStringLiteral("raw_ledger"),
-            QStringLiteral("Raw ledger"),
+            QStringLiteral("Decoded CAN tail"),
             rawLedgerLevel,
             QStringLiteral("rows %1 visible %2 latest %3")
                 .arg(m_rawLedgerTotalRows)
                 .arg(m_rawLedgerVisibleRows)
                 .arg(m_rawLedgerLatestSeq),
-            QStringLiteral("segment_bytes %1 display_dropped %2 truth_preserved %3")
+            QStringLiteral("segment_bytes %1 display_dropped %2 truth capture.stream/index")
                 .arg(m_rawLedgerSegmentBytes)
-                .arg(m_rawLedgerDroppedDisplayRows)
-                .arg(m_rawLedgerDroppedDisplayRows == 0 ? QStringLiteral("yes") : QStringLiteral("check")),
+                .arg(m_rawLedgerDroppedDisplayRows),
             false),
         row(QStringLiteral("live_projection"),
             QStringLiteral("Live projection"),

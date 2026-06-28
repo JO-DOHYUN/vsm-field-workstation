@@ -14,7 +14,7 @@ public:
     CoreMaterializedViewStore();
 
     void clear();
-    void setPolicy(CoreViewName viewName, int maxItems);
+    void setPolicy(CoreViewName viewName, int maxItems, const QString& primaryArrayKey = {});
 
     ViewChanged updateView(CoreViewName viewName,
                            const QJsonObject& payload,
@@ -46,10 +46,11 @@ private:
 
     static int indexOf(CoreViewName viewName);
     static qint64 currentTimeMs();
-    QJsonObject payloadWithQueryLimit(const QJsonObject& payload, int limit) const;
+    QJsonObject payloadWithQueryLimit(CoreViewName viewName, const QJsonObject& payload, int limit) const;
 
     std::array<Entry, kCoreViewCount> m_entries;
     std::array<int, kCoreViewCount> m_maxItems;
+    std::array<QString, kCoreViewCount> m_primaryArrayKeys;
     quint64 m_nextViewSeq = 1;
 };
 

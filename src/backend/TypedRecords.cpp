@@ -2,6 +2,22 @@
 
 #include <cstring>
 
+namespace {
+
+QByteArray typedPayloadView(const TypedRecord& record) {
+    if (record.payload.size() == record.header.payloadLength) {
+        return record.payload;
+    }
+    const qsizetype payloadLength = qsizetype(record.header.payloadLength);
+    const qsizetype frameLength = kTypedTransportFrameOverhead + payloadLength;
+    if (payloadLength >= 0 && record.frameBytes.size() >= frameLength) {
+        return QByteArray::fromRawData(record.frameBytes.constData() + 9, payloadLength);
+    }
+    return record.payload;
+}
+
+} // namespace
+
 quint16 typedReadU16Le(const quint8* p) {
     return quint16(p[0]) | (quint16(p[1]) << 8);
 }
@@ -44,17 +60,19 @@ quint64 typedRecordMonoUs(const TypedRecord& record) {
         const auto first = decodeTypedCanRxSegmentEntry(record, 0);
         return first ? first->monoUs : 0;
     }
-    if (record.payload.size() < 8) return 0;
-    return typedReadU64Le(reinterpret_cast<const quint8*>(record.payload.constData()));
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < 8) return 0;
+    return typedReadU64Le(reinterpret_cast<const quint8*>(payload.constData()));
 }
 
 std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::CanRxRaw) && !record.isType(TypedRecordType::CanTxRaw)) {
         return std::nullopt;
     }
-    if (record.payload.size() < kTypedCanRawPayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedCanRawPayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedCanRawRecord out;
     out.txAudit = record.isType(TypedRecordType::CanTxRaw);
     out.monoUs = typedReadU64Le(p + 0);
@@ -73,9 +91,10 @@ std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record) {
 
 std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::CanRxSegment)) return std::nullopt;
-    if (record.payload.size() < kTypedCanRxSegmentHeaderSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedCanRxSegmentHeaderSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedCanRxSegmentHeader out;
     out.segmentSeq = typedReadU64Le(p + 0);
     out.firstCaptureSeq = typedReadU64Le(p + 8);
@@ -86,7 +105,7 @@ std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const Typed
     out.fifoBeforeSegment = typedReadU32Le(p + 24);
     if (out.entrySize < kTypedCanRxSegmentEntrySize) return std::nullopt;
     const qsizetype needed = kTypedCanRxSegmentHeaderSize + qsizetype(out.frameCount) * qsizetype(out.entrySize);
-    if (needed > record.payload.size()) return std::nullopt;
+    if (needed > payload.size()) return std::nullopt;
     return out;
 }
 
@@ -95,8 +114,9 @@ std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRe
     if (!header || frameIndex < 0 || frameIndex >= header->frameCount) return std::nullopt;
 
     const qsizetype offset = kTypedCanRxSegmentHeaderSize + frameIndex * qsizetype(header->entrySize);
-    if (offset + kTypedCanRxSegmentEntrySize > record.payload.size()) return std::nullopt;
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData() + offset);
+    const QByteArray payload = typedPayloadView(record);
+    if (offset + kTypedCanRxSegmentEntrySize > payload.size()) return std::nullopt;
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData() + offset);
 
     TypedCanRxSegmentEntry out;
     out.captureSeq = typedReadU64Le(p + 0);
@@ -136,9 +156,10 @@ quint64 typedCanRxFrameCount(const TypedRecord& record) {
 
 std::optional<TypedAdcSampleRecord> decodeTypedAdcSample(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::AdcSample)) return std::nullopt;
-    if (record.payload.size() < kTypedAdcSamplePayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedAdcSamplePayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedAdcSampleRecord out;
     out.monoUs = typedReadU64Le(p + 0);
     out.sampleTotal = typedReadU32Le(p + 8);
@@ -157,9 +178,10 @@ std::optional<TypedAdcSampleRecord> decodeTypedAdcSample(const TypedRecord& reco
 
 std::optional<TypedControlAckRecord> decodeTypedControlAck(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::ControlAck)) return std::nullopt;
-    if (record.payload.size() < kTypedControlAckPayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedControlAckPayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedControlAckRecord out;
     out.monoUs = typedReadU64Le(p + 0);
     out.commandId = typedReadU32Le(p + 8);
@@ -178,9 +200,10 @@ std::optional<TypedControlAckRecord> decodeTypedControlAck(const TypedRecord& re
 
 std::optional<TypedBoardEventRecord> decodeTypedBoardEvent(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::BoardEvent)) return std::nullopt;
-    if (record.payload.size() < kTypedBoardEventPayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedBoardEventPayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedBoardEventRecord out;
     out.monoUs = typedReadU64Le(p + 0);
     out.code = typedReadU16Le(p + 8);
@@ -191,9 +214,10 @@ std::optional<TypedBoardEventRecord> decodeTypedBoardEvent(const TypedRecord& re
 
 std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::BoardHealth)) return std::nullopt;
-    if (record.payload.size() < kTypedBoardHealthPayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedBoardHealthPayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedBoardHealthRecord out;
     out.monoUs = typedReadU64Le(p + 0);
     out.canRxTotal = typedReadU32Le(p + 8);
@@ -209,7 +233,7 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
     out.encoderTimerOk = p[46];
     out.flags = p[47];
     out.faultFlags = typedReadU32Le(p + 48);
-    if (record.payload.size() >= kTypedBoardHealthExtendedPayloadSize) {
+    if (payload.size() >= kTypedBoardHealthExtendedPayloadSize) {
         out.hasExtendedTransportCounters = true;
         out.serialEnqueueFailTotal = typedReadU32Le(p + 160);
         out.serialRingClearTotal = typedReadU32Le(p + 164);
@@ -220,7 +244,7 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
         out.mcpDrainBudgetHitTotal = typedReadU32Le(p + 184);
         out.canSegmentEnqueueFailTotal = typedReadU32Le(p + 188);
     }
-    if (record.payload.size() >= kTypedBoardHealthV5PayloadSize) {
+    if (payload.size() >= kTypedBoardHealthV5PayloadSize) {
         out.hasUplinkPoolCounters = true;
         out.uplinkLargePoolUsedBlocks = typedReadU32Le(p + 192);
         out.uplinkLargePoolCapacityBlocks = typedReadU32Le(p + 196);
@@ -236,9 +260,10 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
 
 std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& record) {
     if (!record.isType(TypedRecordType::Capability)) return std::nullopt;
-    if (record.payload.size() < kTypedCapabilityPayloadSize) return std::nullopt;
+    const QByteArray payload = typedPayloadView(record);
+    if (payload.size() < kTypedCapabilityPayloadSize) return std::nullopt;
 
-    const auto* p = reinterpret_cast<const quint8*>(record.payload.constData());
+    const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedCapabilityRecord out;
     out.monoUs = typedReadU64Le(p + 0);
     out.protocolVersion = p[8];
@@ -260,7 +285,7 @@ std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& re
     out.adcPeriodMs = p[33];
     out.laneCapabilityFlags = p[34];
     out.limitationFlags = p[35];
-    if (record.payload.size() >= kTypedCapabilityV2PayloadSize) {
+    if (payload.size() >= kTypedCapabilityV2PayloadSize) {
         out.busCount = p[36];
         out.busDescriptorSize = p[37];
         out.capabilityV2Flags = typedReadU16Le(p + 38);
@@ -269,7 +294,7 @@ std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& re
             out.buses.reserve(boundedBusCount);
             for (quint8 index = 0; index < boundedBusCount; ++index) {
                 const qsizetype offset = 40 + qsizetype(index) * out.busDescriptorSize;
-                if (record.payload.size() < offset + kTypedCapabilityBusDescriptorSize) break;
+                if (payload.size() < offset + kTypedCapabilityBusDescriptorSize) break;
                 TypedCapabilityBusDescriptor bus;
                 bus.busId = p[offset + 0];
                 bus.roleHint = p[offset + 1];
@@ -289,7 +314,7 @@ std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& re
             }
         }
     }
-    if (record.payload.size() >= kTypedCapabilityV3PayloadSize) {
+    if (payload.size() >= kTypedCapabilityV3PayloadSize) {
         out.supportedUplinkRecords = typedReadU32Le(p + 80);
         out.supportedDownlinkRecords = typedReadU32Le(p + 84);
         out.safetyFeatureFlags = typedReadU32Le(p + 88);

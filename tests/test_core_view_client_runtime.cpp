@@ -58,6 +58,15 @@ private slots:
         QCOMPARE(client.status().inflightViews, 1);
     }
 
+    void analysisSnapshotRequestsAreNotSingleRowLimited() {
+        CanMonitorCore::CoreViewClientRuntime client;
+
+        auto request = client.noteViewChanged(makeChange(QStringLiteral("analysis_snapshot"), 5));
+        QVERIFY(request.has_value());
+        QCOMPARE(request->viewName, QStringLiteral("analysis_snapshot"));
+        QCOMPARE(request->limit, 0);
+    }
+
 private:
     static QJsonObject makeChange(const QString& name, quint64 seq) {
         QJsonObject out;

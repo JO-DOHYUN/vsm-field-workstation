@@ -1,6 +1,7 @@
 #include "core/CoreMaterializedViewStore.h"
 
 #include <QDateTime>
+#include <QJsonValue>
 
 #include <algorithm>
 
@@ -25,12 +26,21 @@ QJsonArray tailArray(const QJsonArray& input, int limit) {
     return output;
 }
 
+quint64 jsonU64Value(const QJsonObject& object, const QString& key) {
+    const QJsonValue value = object.value(key);
+    if (value.isString()) return value.toString().toULongLong();
+    if (value.isDouble()) return quint64(value.toDouble());
+    return 0;
+}
+
 } // namespace
 
 CoreMaterializedViewStore::CoreMaterializedViewStore() {
     m_maxItems.fill(kDefaultViewItemCap);
-    setPolicy(CoreViewName::RawLedgerTail, kRawLedgerTailCap);
-    setPolicy(CoreViewName::GraphBucket, kGraphBucketCap);
+    m_primaryArrayKeys.fill(QString());
+    setPolicy(CoreViewName::LiveLatest, kDefaultViewItemCap, QStringLiteral("frames"));
+    setPolicy(CoreViewName::RawLedgerTail, kRawLedgerTailCap, QStringLiteral("frames"));
+    setPolicy(CoreViewName::GraphBucket, kGraphBucketCap, QStringLiteral("points"));
 }
 
 void CoreMaterializedViewStore::clear() {
@@ -40,8 +50,12 @@ void CoreMaterializedViewStore::clear() {
     m_nextViewSeq = 1;
 }
 
-void CoreMaterializedViewStore::setPolicy(CoreViewName viewName, int maxItems) {
-    m_maxItems[indexOf(viewName)] = std::max(1, maxItems);
+void CoreMaterializedViewStore::setPolicy(CoreViewName viewName, int maxItems, const QString& primaryArrayKey) {
+    const int index = indexOf(viewName);
+    m_maxItems[index] = std::max(1, maxItems);
+    if (!primaryArrayKey.isEmpty()) {
+        m_primaryArrayKeys[index] = primaryArrayKey;
+    }
 }
 
 ViewChanged CoreMaterializedViewStore::updateView(CoreViewName viewName,
@@ -115,7 +129,7 @@ ViewQueryResult CoreMaterializedViewStore::queryView(const ViewQuery& query) con
     result.change = entry.change;
     result.snapshot = entry.snapshot;
     if (query.limit > 0) {
-        result.snapshot.payload = payloadWithQueryLimit(result.snapshot.payload, query.limit);
+        result.snapshot.payload = payloadWithQueryLimit(query.viewName, result.snapshot.payload, query.limit);
     }
     return result;
 }
@@ -148,13 +162,23 @@ qint64 CoreMaterializedViewStore::currentTimeMs() {
     return QDateTime::currentMSecsSinceEpoch();
 }
 
-QJsonObject CoreMaterializedViewStore::payloadWithQueryLimit(const QJsonObject& payload, int limit) const {
+QJsonObject CoreMaterializedViewStore::payloadWithQueryLimit(CoreViewName viewName, const QJsonObject& payload, int limit) const {
+    if (limit <= 0) return payload;
+    const QString arrayKey = m_primaryArrayKeys.at(indexOf(viewName));
+    if (arrayKey.isEmpty()) return payload;
+
     QJsonObject output = payload;
-    for (auto it = output.begin(); it != output.end(); ++it) {
-        if (it->isArray()) {
-            const QJsonArray array = it->toArray();
-            if (array.size() > limit) {
-                it.value() = tailArray(array, limit);
+    const QJsonValue value = output.value(arrayKey);
+    if (value.isArray()) {
+        const QJsonArray array = value.toArray();
+        if (array.size() > limit) {
+            const QJsonArray limited = tailArray(array, limit);
+            output.insert(arrayKey, limited);
+            output.insert(QStringLiteral("item_count"), limited.size());
+            if (viewName == CoreViewName::RawLedgerTail) {
+                const quint64 removed = quint64(array.size() - limited.size());
+                output.insert(QStringLiteral("first_seq"),
+                              QString::number(jsonU64Value(output, QStringLiteral("first_seq")) + removed));
             }
         }
     }
