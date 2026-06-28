@@ -21,6 +21,7 @@
 #include <QThread>
 #include <QTimerEvent>
 #include <QVariantList>
+#include <QVector>
 
 namespace CanMonitorCore {
 
@@ -109,7 +110,7 @@ private:
                               quint64 snapshotMaxMs,
                               quint64 truthLoss);
     void queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch);
-    void queueRawLedgerFrames(const FrameRecordList& frames);
+    void queueRawLedgerFrames(const QVector<CanMonitorTransport::CanRxLite>& frames);
     void flushRawLedgerFrames(bool force = false);
     void updateRawLedgerTailView(const FrameRecordList& frames,
                                  quint64 firstSeq,
@@ -144,7 +145,7 @@ private:
     QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime> m_captureWriterRuntime;
     QPointer<CanMonitorTransport::RawLedgerWriterRuntime> m_rawLedgerRuntime;
     QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime> m_analysisRuntime;
-    FrameRecordList m_pendingRawLedgerFrames;
+    QVector<CanMonitorTransport::CanRxLite> m_pendingRawLedgerFrames;
     QJsonArray m_rawLedgerTailRows;
     QHash<quint64, CoreViewName> m_pendingMirrorRequests;
     QHash<int, CoreViewName> m_pendingPipelineMirrorViews;

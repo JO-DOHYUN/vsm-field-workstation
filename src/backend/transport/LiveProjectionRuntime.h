@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../CanTypes.h"
 #include "../TypedRecords.h"
+#include "transport/CoreDataBatches.h"
 
 #include <QElapsedTimer>
 #include <QHash>
@@ -28,7 +28,7 @@ public:
 
     struct IngestResult {
         QVector<TypedRecord> criticalRecords;
-        FrameRecordList projectedFrames;
+        QVector<CanRxLite> projectedFrames;
         Status status;
         bool statusDue = false;
     };
@@ -43,7 +43,7 @@ private:
     static bool isAlwaysCriticalRecord(const TypedRecord& record);
     static bool isControlCanId(quint32 canId);
     static bool isControlFeedbackCanRx(const TypedCanRawRecord& can);
-    static FrameRecord toFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can);
+    static CanRxLite toCanRxLite(const TypedRecord& record, const TypedCanRawRecord& can);
     static quint64 projectionKey(const TypedCanRawRecord& can);
     static quint64 projectionKey(quint8 bus, bool ext, bool rtr, quint32 canId);
     static quint64 controlEvidenceKey(quint8 bus, quint32 canId);

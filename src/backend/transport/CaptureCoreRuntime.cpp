@@ -124,35 +124,35 @@ QJsonObject mcpDetailsToJson(const QHash<quint16, quint64>& details) {
     return out;
 }
 
-FrameRecord frameFromCanRawRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
-    FrameRecord frame;
-    frame.tExtUs = can.monoUs;
+CanMonitorTransport::CanRxLite canRxLiteFromCanRawRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
+    CanMonitorTransport::CanRxLite frame;
+    frame.monoUs = can.monoUs;
     frame.canId = can.canId;
-    frame.ext = can.extended;
+    frame.extended = can.extended;
     frame.rtr = can.rtr;
     frame.dlc = can.dlc;
     frame.bus = can.bus;
-    frame.seq = quint8(record.header.seq & 0xFF);
+    frame.typedSeqLsb = quint8(record.header.seq & 0xFF);
     std::memcpy(frame.data, can.data, sizeof(frame.data));
     return frame;
 }
 
-FrameRecord frameFromSegmentEntryRecord(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
-    FrameRecord frame;
-    frame.tExtUs = entry.monoUs;
+CanMonitorTransport::CanRxLite canRxLiteFromSegmentEntryRecord(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
+    CanMonitorTransport::CanRxLite frame;
+    frame.monoUs = entry.monoUs;
     frame.canId = entry.canId;
-    frame.ext = entry.extended;
+    frame.extended = entry.extended;
     frame.rtr = entry.rtr;
     frame.dlc = entry.dlc;
     frame.bus = entry.bus;
-    frame.seq = quint8(record.header.seq & 0xFF);
+    frame.typedSeqLsb = quint8(record.header.seq & 0xFF);
     frame.hasCaptureSeq = true;
     frame.captureSeq = entry.captureSeq;
     std::memcpy(frame.data, entry.data, sizeof(frame.data));
     return frame;
 }
 
-QString frameDataHex(const FrameRecord& frame) {
+QString frameDataHex(const CanMonitorTransport::CanRxLite& frame) {
     QByteArray bytes;
     bytes.reserve(8);
     for (quint8 byte : frame.data) {
@@ -161,25 +161,25 @@ QString frameDataHex(const FrameRecord& frame) {
     return QString::fromLatin1(bytes.toHex());
 }
 
-QJsonObject frameToViewRow(const FrameRecord& frame) {
+QJsonObject frameToViewRow(const CanMonitorTransport::CanRxLite& frame) {
     QJsonObject row;
-    row.insert(QStringLiteral("mono_us"), QString::number(frame.tExtUs));
+    row.insert(QStringLiteral("mono_us"), QString::number(frame.monoUs));
     row.insert(QStringLiteral("bus"), int(frame.bus));
     row.insert(QStringLiteral("can_id"), int(frame.canId));
-    row.insert(QStringLiteral("ext"), frame.ext);
+    row.insert(QStringLiteral("ext"), frame.extended);
     row.insert(QStringLiteral("rtr"), frame.rtr);
     row.insert(QStringLiteral("dlc"), int(frame.dlc));
     row.insert(QStringLiteral("data_hex"), frameDataHex(frame));
-    row.insert(QStringLiteral("seq"), int(frame.seq));
+    row.insert(QStringLiteral("seq"), int(frame.typedSeqLsb));
     if (frame.hasCaptureSeq) {
         row.insert(QStringLiteral("capture_seq"), QString::number(frame.captureSeq));
     }
     return row;
 }
 
-CanMonitorCore::CaptureSeqRange captureRangeForFrames(const QVector<FrameRecord>& frames) {
+CanMonitorCore::CaptureSeqRange captureRangeForFrames(const QVector<CanMonitorTransport::CanRxLite>& frames) {
     CanMonitorCore::CaptureSeqRange range;
-    for (const FrameRecord& frame : frames) {
+    for (const CanMonitorTransport::CanRxLite& frame : frames) {
         if (!frame.hasCaptureSeq) continue;
         if (!range.valid) {
             range.valid = true;
@@ -227,7 +227,7 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
                                                             qint64 handshakeElapsedMs,
                                                             quint64 parseBacklogBytes) {
     Result out;
-    FrameRecordList liveLatestFrames;
+    QVector<CanRxLite> liveLatestFrames;
     TypedCaptureFrameList captureBatch;
     captureBatch.reserve(kCoreLocalBatchSize);
     auto flushCaptureBatch = [this, &captureBatch, &out]() {
@@ -265,7 +265,7 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
 }
 
 void CaptureCoreRuntime::ingestRecordForViews(const TypedRecord& record,
-                                              FrameRecordList& liveLatestFrames,
+                                              QVector<CanRxLite>& liveLatestFrames,
                                               Result& result) {
     if (m_options.emitCanRxFrames) {
         const qsizetype before = result.analysisFrames.frames.size();
@@ -417,16 +417,16 @@ void CaptureCoreRuntime::ingestCriticalRecord(const TypedRecord& record, Result&
                                                         m_coreEvidenceCheapCounts));
 }
 
-void CaptureCoreRuntime::updateLiveLatestView(const FrameRecordList& frames, Result& result) {
+void CaptureCoreRuntime::updateLiveLatestView(const QVector<CanRxLite>& frames, Result& result) {
     if (frames.isEmpty()) return;
 
     quint64 droppedThisUpdate = 0;
-    for (const FrameRecord& frame : frames) {
+    for (const CanRxLite& frame : frames) {
         const quint64 key = liveLatestKeyForFrame(frame);
         if (!m_liveLatestByKey.contains(key) && m_liveLatestByKey.size() >= kCoreLiveLatestMaxKeys) {
             auto oldest = m_liveLatestByKey.begin();
             for (auto it = m_liveLatestByKey.begin(); it != m_liveLatestByKey.end(); ++it) {
-                if (it.value().tExtUs < oldest.value().tExtUs) {
+                if (it.value().monoUs < oldest.value().monoUs) {
                     oldest = it;
                 }
             }
@@ -437,21 +437,21 @@ void CaptureCoreRuntime::updateLiveLatestView(const FrameRecordList& frames, Res
         m_liveLatestByKey.insert(key, frame);
     }
 
-    QVector<FrameRecord> latestFrames;
+    QVector<CanRxLite> latestFrames;
     latestFrames.reserve(m_liveLatestByKey.size());
     for (auto it = m_liveLatestByKey.cbegin(); it != m_liveLatestByKey.cend(); ++it) {
         latestFrames.push_back(it.value());
     }
-    std::sort(latestFrames.begin(), latestFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-        if (a.tExtUs != b.tExtUs) return a.tExtUs < b.tExtUs;
+    std::sort(latestFrames.begin(), latestFrames.end(), [](const CanRxLite& a, const CanRxLite& b) {
+        if (a.monoUs != b.monoUs) return a.monoUs < b.monoUs;
         if (a.bus != b.bus) return a.bus < b.bus;
-        if (a.ext != b.ext) return a.ext < b.ext;
+        if (a.extended != b.extended) return a.extended < b.extended;
         if (a.rtr != b.rtr) return a.rtr < b.rtr;
         return a.canId < b.canId;
     });
 
     QJsonArray rows;
-    for (const FrameRecord& frame : latestFrames) {
+    for (const CanRxLite& frame : latestFrames) {
         rows.append(frameToViewRow(frame));
     }
 
@@ -550,10 +550,10 @@ void CaptureCoreRuntime::updateStatusViews(const Result& ingestResult, Result& o
     }
 }
 
-void CaptureCoreRuntime::appendCanRxFrames(const TypedRecord& record, FrameRecordList& out) const {
+void CaptureCoreRuntime::appendCanRxFrames(const TypedRecord& record, QVector<CanRxLite>& out) const {
     if (record.isType(TypedRecordType::CanRxRaw)) {
         const auto can = decodeTypedCanRaw(record);
-        if (can && !can->txAudit) out.push_back(frameFromCanRawRecord(record, *can));
+        if (can && !can->txAudit) out.push_back(canRxLiteFromCanRawRecord(record, *can));
         return;
     }
     if (!record.isType(TypedRecordType::CanRxSegment)) return;
@@ -562,7 +562,7 @@ void CaptureCoreRuntime::appendCanRxFrames(const TypedRecord& record, FrameRecor
     out.reserve(out.size() + header->frameCount);
     for (qsizetype index = 0; index < header->frameCount; ++index) {
         const auto entry = decodeTypedCanRxSegmentEntry(record, index);
-        if (entry) out.push_back(frameFromSegmentEntryRecord(record, *entry));
+        if (entry) out.push_back(canRxLiteFromSegmentEntryRecord(record, *entry));
     }
 }
 
@@ -583,9 +583,9 @@ QVector<CanMonitorCore::ViewChanged> CaptureCoreRuntime::viewChanges() const {
     return m_viewStore.changes();
 }
 
-quint64 CaptureCoreRuntime::liveLatestKeyForFrame(const FrameRecord& frame) {
+quint64 CaptureCoreRuntime::liveLatestKeyForFrame(const CanRxLite& frame) {
     quint64 key = (quint64(frame.bus) << 56);
-    if (frame.ext) key |= (quint64(1) << 55);
+    if (frame.extended) key |= (quint64(1) << 55);
     if (frame.rtr) key |= (quint64(1) << 54);
     key |= quint64(frame.canId & 0x1FFFFFFFU);
     return key;

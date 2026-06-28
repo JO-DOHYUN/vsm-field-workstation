@@ -81,6 +81,8 @@ private:
         ProcessStarting,
         IpcConnecting,
         IpcConnected,
+        TransportOpening,
+        TransportConnected,
         Degraded,
         Stopping,
     };
@@ -93,6 +95,7 @@ private:
     void scheduleConnectIpc(int delayMs);
     void scheduleStartupTimeout();
     void setLifecycleState(LifecycleState state, const QString& message = QString());
+    void noteViewChanged(const QJsonObject& change);
     static QString lifecycleStateText(LifecycleState state);
     bool queuePendingTransportStart(const QString& mode, const QString& endpoint, QString* errorOut);
     void sendPendingTransportStartIfReady();
@@ -108,8 +111,12 @@ private:
     LifecycleState m_lifecycleState = LifecycleState::Stopped;
     qint64 m_lifecycleStateChangedMs = 0;
     quint64 m_lifecycleGeneration = 0;
+    quint64 m_startupTimeouts = 0;
+    quint64 m_ipcConnectTimeouts = 0;
+    quint64 m_transportOpenTimeouts = 0;
     bool m_startupSeen = false;
     bool m_connectRetryScheduled = false;
+    bool m_transportOpenPending = false;
     int m_connectAttempts = 0;
 };
 

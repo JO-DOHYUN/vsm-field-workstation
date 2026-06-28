@@ -503,7 +503,7 @@ private slots:
         QVERIFY(eventRows.at(8).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("0X0618:1")));
         QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_truth"));
         QVERIFY(rows.at(9).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth_loss 0")));
-        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("raw_ledger"));
+        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("decoded_can_tail"));
         QVERIFY(rows.at(10).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("segment_bytes 4096")));
         QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
         QVERIFY(rows.at(11).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));

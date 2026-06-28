@@ -48,6 +48,9 @@ bool CoreProcessClientRuntime::startSerial(const QString& executablePath, const 
     }
     if (isActive() && m_client.isConnected()) {
         m_client.startTransport(QStringLiteral("serial"), endpoint);
+        m_transportOpenPending = true;
+        setLifecycleState(LifecycleState::TransportOpening, QStringLiteral("opening core serial transport: %1").arg(endpoint));
+        scheduleStartupTimeout();
         if (errorOut) errorOut->clear();
         return true;
     }
@@ -65,6 +68,9 @@ bool CoreProcessClientRuntime::startGatewayTcp(const QString& executablePath, co
     }
     if (isActive() && m_client.isConnected()) {
         m_client.startTransport(QStringLiteral("gateway_tcp"), normalized);
+        m_transportOpenPending = true;
+        setLifecycleState(LifecycleState::TransportOpening, QStringLiteral("opening core gateway transport: %1").arg(normalized));
+        scheduleStartupTimeout();
         if (errorOut) errorOut->clear();
         return true;
     }
@@ -99,6 +105,7 @@ void CoreProcessClientRuntime::stop() {
     m_client.disconnectFromServer();
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
+    m_transportOpenPending = false;
     if (m_process.state() == QProcess::NotRunning) {
         setLifecycleState(LifecycleState::Stopped, QStringLiteral("core process stopped"));
         return;
@@ -126,6 +133,10 @@ QJsonObject CoreProcessClientRuntime::statusJson() const {
                        {QStringLiteral("core_process_state"), lifecycleStateText(m_lifecycleState)},
                        {QStringLiteral("core_process_state_since_ms"), QString::number(m_lifecycleStateChangedMs)},
                        {QStringLiteral("core_process_ipc_connect_attempts"), m_connectAttempts},
+                       {QStringLiteral("core_process_startup_timeouts"), QString::number(m_startupTimeouts)},
+                       {QStringLiteral("core_process_ipc_connect_timeouts"), QString::number(m_ipcConnectTimeouts)},
+                       {QStringLiteral("core_process_transport_open_timeouts"), QString::number(m_transportOpenTimeouts)},
+                       {QStringLiteral("core_process_transport_open_pending"), m_transportOpenPending},
                        {QStringLiteral("core_process_ipc_retry_scheduled"), m_connectRetryScheduled},
                        {QStringLiteral("core_process_message"), m_lastMessage}};
 }
@@ -297,7 +308,10 @@ void CoreProcessClientRuntime::connectClientSignals() {
             setLifecycleState(LifecycleState::Stopped, QStringLiteral("core IPC disconnected"));
         }
     });
-    connect(&m_client, &CoreIpcClientRuntime::viewChanged, this, &CoreProcessClientRuntime::viewChanged);
+    connect(&m_client, &CoreIpcClientRuntime::viewChanged, this, [this](const QJsonObject& change) {
+        noteViewChanged(change);
+        emit viewChanged(change);
+    });
     connect(&m_client,
             &CoreIpcClientRuntime::viewSnapshotReceived,
             this,
@@ -380,11 +394,18 @@ void CoreProcessClientRuntime::scheduleStartupTimeout() {
     const quint64 generation = m_lifecycleGeneration;
     QTimer::singleShot(5000, this, [this, generation]() {
         if (generation != m_lifecycleGeneration || !isActive() || m_client.isConnected()) return;
+        if (m_startupSeen) ++m_ipcConnectTimeouts;
+        else ++m_startupTimeouts;
         setLifecycleState(LifecycleState::Degraded,
                           m_startupSeen
                               ? QStringLiteral("core IPC connect timeout")
                               : QStringLiteral("core process startup timeout"));
         scheduleConnectIpc(250);
+    });
+    QTimer::singleShot(5000, this, [this, generation]() {
+        if (generation != m_lifecycleGeneration || !isActive() || !m_transportOpenPending) return;
+        ++m_transportOpenTimeouts;
+        setLifecycleState(LifecycleState::Degraded, QStringLiteral("core transport open timeout"));
     });
 }
 
@@ -410,6 +431,10 @@ QString CoreProcessClientRuntime::lifecycleStateText(LifecycleState state) {
         return QStringLiteral("ipc_connecting");
     case LifecycleState::IpcConnected:
         return QStringLiteral("ipc_connected");
+    case LifecycleState::TransportOpening:
+        return QStringLiteral("transport_opening");
+    case LifecycleState::TransportConnected:
+        return QStringLiteral("transport_connected");
     case LifecycleState::Degraded:
         return QStringLiteral("degraded");
     case LifecycleState::Stopping:
@@ -435,8 +460,33 @@ void CoreProcessClientRuntime::sendPendingTransportStartIfReady() {
         return;
     }
     m_client.startTransport(m_pendingTransportMode, m_pendingTransportEndpoint);
+    m_transportOpenPending = true;
+    setLifecycleState(LifecycleState::TransportOpening,
+                      QStringLiteral("opening core %1 transport").arg(m_pendingTransportMode));
+    scheduleStartupTimeout();
     m_pendingTransportMode.clear();
     m_pendingTransportEndpoint.clear();
+}
+
+void CoreProcessClientRuntime::noteViewChanged(const QJsonObject& change) {
+    if (change.value(QStringLiteral("view_name")).toString() != QStringLiteral("transport_summary")) return;
+    const QJsonObject counts = change.value(QStringLiteral("cheap_counts")).toObject();
+    if (counts.value(QStringLiteral("connected")).isBool()) {
+        const bool connected = counts.value(QStringLiteral("connected")).toBool();
+        m_transportOpenPending = false;
+        setLifecycleState(connected ? LifecycleState::TransportConnected : LifecycleState::Degraded,
+                          connected ? QStringLiteral("core transport connected") : QStringLiteral("core transport disconnected"));
+        return;
+    }
+    const QString transport = counts.value(QStringLiteral("transport")).toString();
+    if (transport.startsWith(QStringLiteral("opening_"))) {
+        m_transportOpenPending = true;
+        setLifecycleState(LifecycleState::TransportOpening, QStringLiteral("core transport %1").arg(transport));
+    } else if (transport == QStringLiteral("stopped") || transport == QStringLiteral("idle")) {
+        m_transportOpenPending = false;
+        setLifecycleState(m_client.isConnected() ? LifecycleState::IpcConnected : LifecycleState::IpcConnecting,
+                          QStringLiteral("core transport %1").arg(transport));
+    }
 }
 
 QString CoreProcessClientRuntime::makeServerName() {

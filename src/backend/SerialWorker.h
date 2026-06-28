@@ -160,6 +160,7 @@ private:
     void emitTypedStorageUpdate(const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate& update);
     void emitHostTxQueueStatus(const CanMonitorTransport::HostTxRuntime::Status& status);
     void queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFrameBatch& batch);
+    void queueRawLedgerFrames(const QVector<CanMonitorTransport::CanRxLite>& frames);
     void queueRawLedgerFrames(const FrameRecordList& frames);
     void flushQueuedRawLedgerRecords(bool force = false);
     void flushRawLedgerHandoffSync();

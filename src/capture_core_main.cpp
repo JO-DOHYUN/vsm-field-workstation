@@ -49,6 +49,7 @@ int runSelfTest() {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    qRegisterMetaType<CanMonitorTransport::CanRxLite>("CanMonitorTransport::CanRxLite");
     qRegisterMetaType<CanMonitorTransport::AnalysisFrameBatch>("CanMonitorTransport::AnalysisFrameBatch");
     qRegisterMetaType<CanMonitorTransport::RawLedgerFrameBatch>("CanMonitorTransport::RawLedgerFrameBatch");
     QCoreApplication app(argc, argv);

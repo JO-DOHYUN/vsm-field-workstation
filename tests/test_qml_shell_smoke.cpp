@@ -725,12 +725,12 @@ private slots:
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(truthKey.toString(), QStringLiteral("live_truth"));
 
-        QVariant rawLedgerKey;
+        QVariant decodedTailKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
-                                          Q_RETURN_ARG(QVariant, rawLedgerKey),
+                                          Q_RETURN_ARG(QVariant, decodedTailKey),
                                           Q_ARG(QVariant, QVariant(10)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
-        QCOMPARE(rawLedgerKey.toString(), QStringLiteral("raw_ledger"));
+        QCOMPARE(decodedTailKey.toString(), QStringLiteral("decoded_can_tail"));
 
         QVariant captureKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",

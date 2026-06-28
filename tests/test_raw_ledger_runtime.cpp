@@ -222,7 +222,7 @@ private slots:
         QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::IdTextRole, 7).toString(), QStringLiteral("LEDGER ERR"));
         QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::DlcRole, 7).toInt(), -1);
         QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::BusRole, 7).toInt(), -1);
-        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::SourceRole, 7).toString(), QStringLiteral("ledger-error"));
+        QCOMPARE(RawFrameTableModel::unreadableRowValue(RawFrameTableModel::SourceRole, 7).toString(), QStringLiteral("decoded-tail-error"));
     }
 };
 

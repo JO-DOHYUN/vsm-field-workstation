@@ -254,7 +254,10 @@ class Gateway:
         self.stop_event = threading.Event()
         self.client_lock = threading.Lock()
         self.serial_lock = threading.Lock()
+        self.forward_queue_lock = threading.Lock()
         self.forward_queue: queue.Queue[bytes] = queue.Queue(maxsize=max(1, int(args.tcp_queue_chunks)))
+        self.forward_queue_bytes = 0
+        self.forward_queue_byte_cap = max(1024, int(args.tcp_queue_bytes))
         self.client: socket.socket | None = None
         self.server: socket.socket | None = None
         self.serial = None
@@ -271,6 +274,8 @@ class Gateway:
             "tcp_queue_dropped_chunks": 0,
             "tcp_queue_dropped_bytes": 0,
             "tcp_queue_max_chunks": 0,
+            "tcp_queue_max_bytes": 0,
+            "tcp_queue_byte_cap": self.forward_queue_byte_cap,
             "tcp_no_client_dropped_chunks": 0,
             "tcp_no_client_dropped_bytes": 0,
             "serial_read_errors": 0,
@@ -301,6 +306,8 @@ class Gateway:
                 break
             dropped_chunks += 1
             dropped_bytes += len(data)
+            with self.forward_queue_lock:
+                self.forward_queue_bytes = max(0, self.forward_queue_bytes - len(data))
         if dropped_chunks:
             self.stats["tcp_queue_dropped_chunks"] += dropped_chunks
             self.stats["tcp_queue_dropped_bytes"] += dropped_bytes
@@ -313,11 +320,29 @@ class Gateway:
             self.stats["tcp_no_client_dropped_chunks"] += 1
             self.stats["tcp_no_client_dropped_bytes"] += len(data)
             return
+        with self.forward_queue_lock:
+            if self.forward_queue_bytes + len(data) > self.forward_queue_byte_cap:
+                self.stats["tcp_queue_dropped_chunks"] += 1
+                self.stats["tcp_queue_dropped_bytes"] += len(data)
+                self.events.write("tcp_queue_drop",
+                                  reason="forward_queue_byte_cap",
+                                  chunks=1,
+                                  bytes=len(data),
+                                  queued_bytes=self.forward_queue_bytes,
+                                  cap_bytes=self.forward_queue_byte_cap)
+                return
+            try:
+                self.forward_queue.put_nowait(data)
+                self.forward_queue_bytes += len(data)
+                self.stats["tcp_queue_enqueued_chunks"] += 1
+                self.stats["tcp_queue_enqueued_bytes"] += len(data)
+                self.stats["tcp_queue_max_chunks"] = max(self.stats["tcp_queue_max_chunks"], self.forward_queue.qsize())
+                self.stats["tcp_queue_max_bytes"] = max(self.stats["tcp_queue_max_bytes"], self.forward_queue_bytes)
+                return
+            except queue.Full:
+                pass
         try:
-            self.forward_queue.put_nowait(data)
-            self.stats["tcp_queue_enqueued_chunks"] += 1
-            self.stats["tcp_queue_enqueued_bytes"] += len(data)
-            self.stats["tcp_queue_max_chunks"] = max(self.stats["tcp_queue_max_chunks"], self.forward_queue.qsize())
+            raise queue.Full
         except queue.Full:
             self.stats["tcp_queue_dropped_chunks"] += 1
             self.stats["tcp_queue_dropped_bytes"] += len(data)
@@ -331,6 +356,9 @@ class Gateway:
         self.server.settimeout(0.2)
         self.events.write("tcp_listen", host=self.args.listen_host, port=self.args.listen_port)
         ready = {
+            "plane": "optional_debug_tap",
+            "production_pass_substitute": False,
+            "backpressure_policy": "fixed_cap_non_blocking_drop_with_counter",
             "host": self.args.listen_host,
             "port": self.args.listen_port,
             "serial_port": self.args.port,
@@ -397,6 +425,8 @@ class Gateway:
                 data = self.forward_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
+            with self.forward_queue_lock:
+                self.forward_queue_bytes = max(0, self.forward_queue_bytes - len(data))
             with self.client_lock:
                 client = self.client
             if client is None:
@@ -482,7 +512,15 @@ class Gateway:
                     pass
             capture = self.writer.close(finalize)
             self.stats["ended_utc"] = now_iso()
-            result = {"ok": finalize, "stats": self.stats, "capture": capture}
+            result = {
+                "ok": finalize,
+                "plane": "optional_debug_tap",
+                "production_pass_substitute": False,
+                "normal_mode_required_off": True,
+                "backpressure_policy": "fixed_cap_non_blocking_drop_with_counter",
+                "stats": self.stats,
+                "capture": capture,
+            }
             (self.out_dir / "gateway.meta.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             (self.out_dir / "result.json").write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
             (self.out_dir / "summary.md").write_text(
@@ -517,6 +555,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--duration", type=float, default=0.0, help="0 means run until interrupted")
     parser.add_argument("--read-size", type=int, default=65536)
     parser.add_argument("--tcp-queue-chunks", type=int, default=256)
+    parser.add_argument("--tcp-queue-bytes", type=int, default=16 * 1024 * 1024)
     parser.add_argument("--segment-bytes", type=int, default=256 * 1024 * 1024)
     parser.add_argument("--flush-interval", type=float, default=0.5)
     parser.add_argument("--serial-timeout", type=float, default=0.05)

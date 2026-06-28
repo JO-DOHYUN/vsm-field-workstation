@@ -736,14 +736,14 @@ QVariantList TransportSession::rows() const {
                 .arg(m_truthLastFlushMs)
                 .arg(m_truthLoss),
             m_truthLoss > 0),
-        row(QStringLiteral("raw_ledger"),
+        row(QStringLiteral("decoded_can_tail"),
             QStringLiteral("Decoded CAN tail"),
             rawLedgerLevel,
             QStringLiteral("rows %1 visible %2 latest %3")
                 .arg(m_rawLedgerTotalRows)
                 .arg(m_rawLedgerVisibleRows)
                 .arg(m_rawLedgerLatestSeq),
-            QStringLiteral("segment_bytes %1 display_dropped %2 truth capture.stream/index")
+            QStringLiteral("segment_bytes %1 display_dropped %2 derived view; authoritative truth capture.stream/index")
                 .arg(m_rawLedgerSegmentBytes)
                 .arg(m_rawLedgerDroppedDisplayRows),
             false),

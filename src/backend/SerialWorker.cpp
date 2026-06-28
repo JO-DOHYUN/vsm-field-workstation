@@ -634,6 +634,16 @@ void SerialWorker::queueRawLedgerFrames(const CanMonitorTransport::RawLedgerFram
     queueRawLedgerFrames(batch.frames);
 }
 
+void SerialWorker::queueRawLedgerFrames(const QVector<CanMonitorTransport::CanRxLite>& frames) {
+    if (frames.isEmpty()) return;
+    FrameRecordList converted;
+    converted.reserve(frames.size());
+    for (const CanMonitorTransport::CanRxLite& frame : frames) {
+        converted.push_back(CanMonitorTransport::frameRecordFromCanRxLite(frame));
+    }
+    queueRawLedgerFrames(converted);
+}
+
 void SerialWorker::queueRawLedgerFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     CanMonitorPerf::ScopedProbe probe("ledger.queue_frames", frames.size(), 2000);

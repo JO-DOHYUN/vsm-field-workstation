@@ -1,6 +1,7 @@
 #pragma once
 
 #include "analysis/AnalysisRuntime.h"
+#include "transport/CoreDataBatches.h"
 
 #include <QElapsedTimer>
 #include <QObject>
@@ -34,6 +35,7 @@ public slots:
     void reset();
     void setConfig(const CanMonitorAnalysis::AnalysisRuntime::Config& config);
     void enqueueFrames(FrameRecordList frames);
+    void enqueueCanRxFrames(QVector<CanMonitorTransport::CanRxLite> frames);
     void noteTruthLoss(quint64 frames, const QString& reason);
     void forceSnapshot();
 
@@ -69,7 +71,7 @@ private:
     static QVariantList rowsToVariantList(const QVector<QVariantMap>& rows);
 
     CanMonitorAnalysis::AnalysisRuntime m_runtime;
-    std::deque<FrameRecord> m_queue;
+    std::deque<CanMonitorTransport::CanRxLite> m_queue;
     qsizetype m_capacityFrames = 0;
     bool m_pumpScheduled = false;
     bool m_statusEmitScheduled = false;

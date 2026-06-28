@@ -84,6 +84,9 @@ QJsonObject RuntimeOwnerSnapshot::toJson() const {
     obj.insert(QStringLiteral("raw_ledger_rows"), QString::number(rawLedgerRows));
     obj.insert(QStringLiteral("raw_ledger_visible_rows"), QString::number(rawLedgerVisibleRows));
     obj.insert(QStringLiteral("raw_ledger_cache_rows"), QString::number(rawLedgerCacheRows));
+    obj.insert(QStringLiteral("decoded_tail_rows"), QString::number(rawLedgerRows));
+    obj.insert(QStringLiteral("decoded_tail_visible_rows"), QString::number(rawLedgerVisibleRows));
+    obj.insert(QStringLiteral("decoded_tail_cache_rows"), QString::number(rawLedgerCacheRows));
     obj.insert(QStringLiteral("graph_series_count"), QString::number(graphSeriesCount));
     obj.insert(QStringLiteral("graph_selected_keys"), QString::number(graphSelectedKeys));
     obj.insert(QStringLiteral("live_graph_series"), QString::number(liveGraphSeries));

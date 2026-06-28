@@ -123,7 +123,7 @@ QVariant RawFrameTableModel::unreadableRowValue(int role, quint64 sourceRow) {
     case FlagsRole:
         return QStringLiteral("INVALID");
     case SourceRole:
-        return QStringLiteral("ledger-error");
+        return QStringLiteral("decoded-tail-error");
     case ValidRole:
         return false;
     default:
@@ -135,7 +135,7 @@ QString RawFrameTableModel::summary() const {
     const QString displayText = hasActiveFilter()
         ? QStringLiteral("filtered %1 / tail %2 / truth %3").arg(count()).arg(m_tailRows.size()).arg(m_totalRows)
         : QStringLiteral("tail %1 / truth %2").arg(m_tailRows.size()).arg(m_totalRows);
-    QString text = QStringLiteral("%1 | ledger %2 KB | display dropped %3 | writer max %4 us")
+    QString text = QStringLiteral("%1 | decoded tail %2 KB | display dropped %3 | writer max %4 us")
         .arg(displayText)
         .arg(m_segmentBytes / 1024)
         .arg(droppedDisplayRows())

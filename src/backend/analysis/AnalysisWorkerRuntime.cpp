@@ -4,6 +4,7 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <utility>
 
 namespace {
 constexpr int kAnalysisPumpMaxFrames = 4096;
@@ -49,6 +50,15 @@ void AnalysisWorkerRuntime::setConfig(const AnalysisRuntime::Config& config) {
 }
 
 void AnalysisWorkerRuntime::enqueueFrames(FrameRecordList frames) {
+    QVector<CanMonitorTransport::CanRxLite> liteFrames;
+    liteFrames.reserve(frames.size());
+    for (const FrameRecord& frame : std::as_const(frames)) {
+        liteFrames.push_back(CanMonitorTransport::canRxLiteFromFrameRecord(frame));
+    }
+    enqueueCanRxFrames(std::move(liteFrames));
+}
+
+void AnalysisWorkerRuntime::enqueueCanRxFrames(QVector<CanMonitorTransport::CanRxLite> frames) {
     if (frames.isEmpty()) {
         emit handoffDrained();
         return;
@@ -106,8 +116,9 @@ void AnalysisWorkerRuntime::pump() {
     batch.reserve(std::min<int>(kAnalysisPumpMaxFrames, int(m_queue.size())));
 
     while (!m_queue.empty() && processed < kAnalysisPumpMaxFrames) {
-        const FrameRecord frame = m_queue.front();
+        const CanMonitorTransport::CanRxLite liteFrame = m_queue.front();
         m_queue.pop_front();
+        const FrameRecord frame = CanMonitorTransport::frameRecordFromCanRxLite(liteFrame);
         m_latestUs = std::max(m_latestUs, frame.tExtUs);
         batch.push_back(frame);
         ++processed;

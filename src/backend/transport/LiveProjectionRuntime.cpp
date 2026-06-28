@@ -37,15 +37,15 @@ QByteArray ownedPayloadForRecord(const TypedRecord& record) {
     return record.payload;
 }
 
-FrameRecord toFrameRecordFromSegmentEntry(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
-    FrameRecord frame;
-    frame.tExtUs = entry.monoUs;
+CanMonitorTransport::CanRxLite toCanRxLiteFromSegmentEntry(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
+    CanMonitorTransport::CanRxLite frame;
+    frame.monoUs = entry.monoUs;
     frame.canId = entry.canId;
-    frame.ext = entry.extended;
+    frame.extended = entry.extended;
     frame.rtr = entry.rtr;
     frame.dlc = entry.dlc;
     frame.bus = entry.bus;
-    frame.seq = quint8(record.header.seq & 0xFF);
+    frame.typedSeqLsb = quint8(record.header.seq & 0xFF);
     frame.hasCaptureSeq = true;
     frame.captureSeq = entry.captureSeq;
     std::memcpy(frame.data, entry.data, sizeof(frame.data));
@@ -72,12 +72,12 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const Ty
     result.status = m_status;
 
     QHash<quint64, int> frameIndexByKey;
-    FrameRecordList coalescedFrames;
+    QVector<CanRxLite> coalescedFrames;
     coalescedFrames.reserve(1);
 
     quint64 observedCanRxInBatch = 0;
     bool sampledControlEvidenceInBatch = false;
-    auto processCanRx = [&](quint8 bus, quint32 canId, const quint8 data[8], const FrameRecord& frame) {
+    auto processCanRx = [&](quint8 bus, quint32 canId, const quint8 data[8], const CanRxLite& frame) {
         ++m_status.observedCanRxFrames;
         ++observedCanRxInBatch;
         if (bus == 0) ++m_status.observedBus0CanRxFrames;
@@ -91,7 +91,7 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const Ty
                 record);
         }
 
-        const quint64 key = projectionKey(bus, frame.ext, frame.rtr, canId);
+        const quint64 key = projectionKey(bus, frame.extended, frame.rtr, canId);
         auto existing = frameIndexByKey.find(key);
         if (existing != frameIndexByKey.end()) {
             coalescedFrames[*existing] = frame;
@@ -105,7 +105,7 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const Ty
     if (record.isType(TypedRecordType::CanRxRaw)) {
         const auto can = decodeTypedCanRaw(record);
         if (can) {
-            processCanRx(can->bus, can->canId, can->data, toFrameRecord(record, *can));
+            processCanRx(can->bus, can->canId, can->data, toCanRxLite(record, *can));
         }
     } else if (record.isType(TypedRecordType::CanRxSegment)) {
         const auto header = decodeTypedCanRxSegmentHeader(record);
@@ -114,7 +114,7 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const Ty
             for (qsizetype index = 0; index < header->frameCount; ++index) {
                 const auto entry = decodeTypedCanRxSegmentEntry(record, index);
                 if (!entry) continue;
-                processCanRx(entry->bus, entry->canId, entry->data, toFrameRecordFromSegmentEntry(record, *entry));
+                processCanRx(entry->bus, entry->canId, entry->data, toCanRxLiteFromSegmentEntry(record, *entry));
             }
         }
     } else if (record.isType(TypedRecordType::ControlAck)) {
@@ -145,15 +145,15 @@ LiveProjectionRuntime::IngestResult LiveProjectionRuntime::ingestRecord(const Ty
     }
 
     if (coalescedFrames.size() > m_maxFramesPerBatch) {
-        std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-            return a.tExtUs < b.tExtUs;
+        std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const CanRxLite& a, const CanRxLite& b) {
+            return a.monoUs < b.monoUs;
         });
         const int removeCount = coalescedFrames.size() - m_maxFramesPerBatch;
         coalescedFrames.erase(coalescedFrames.begin(), coalescedFrames.begin() + removeCount);
         m_status.workerDroppedCanRxFrames += quint64(removeCount);
     }
-    std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const FrameRecord& a, const FrameRecord& b) {
-        return a.tExtUs < b.tExtUs;
+    std::sort(coalescedFrames.begin(), coalescedFrames.end(), [](const CanRxLite& a, const CanRxLite& b) {
+        return a.monoUs < b.monoUs;
     });
 
     result.projectedFrames = coalescedFrames;
@@ -196,15 +196,15 @@ bool LiveProjectionRuntime::isControlFeedbackCanRx(const TypedCanRawRecord& can)
     return isControlCanId(can.canId);
 }
 
-FrameRecord LiveProjectionRuntime::toFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
-    FrameRecord frame;
-    frame.tExtUs = can.monoUs;
+CanRxLite LiveProjectionRuntime::toCanRxLite(const TypedRecord& record, const TypedCanRawRecord& can) {
+    CanRxLite frame;
+    frame.monoUs = can.monoUs;
     frame.canId = can.canId;
-    frame.ext = can.extended;
+    frame.extended = can.extended;
     frame.rtr = can.rtr;
     frame.dlc = can.dlc;
     frame.bus = can.bus;
-    frame.seq = quint8(record.header.seq & 0xFF);
+    frame.typedSeqLsb = quint8(record.header.seq & 0xFF);
     std::memcpy(frame.data, can.data, sizeof(frame.data));
     return frame;
 }

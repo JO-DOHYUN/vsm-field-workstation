@@ -11,6 +11,7 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <utility>
 
 namespace CanMonitorCore {
 
@@ -599,7 +600,7 @@ void CaptureCoreProcessRuntime::shutdownAnalysisRuntime() {
 }
 
 void CaptureCoreProcessRuntime::queueAnalysisFrames(const CanMonitorTransport::AnalysisFrameBatch& batch) {
-    const FrameRecordList frames = batch.frames;
+    const QVector<CanMonitorTransport::CanRxLite> frames = batch.frames;
     ensureAnalysisRuntime();
     if (batch.overrunFrames > 0) {
         QMetaObject::invokeMethod(m_analysisRuntime,
@@ -617,7 +618,7 @@ void CaptureCoreProcessRuntime::queueAnalysisFrames(const CanMonitorTransport::A
     QMetaObject::invokeMethod(m_analysisRuntime,
                               [worker = QPointer<CanMonitorAnalysis::AnalysisWorkerRuntime>(m_analysisRuntime),
                                frames]() mutable {
-                                  if (worker) worker->enqueueFrames(std::move(frames));
+                                  if (worker) worker->enqueueCanRxFrames(std::move(frames));
                               },
                               Qt::QueuedConnection);
 }
@@ -687,11 +688,11 @@ void CaptureCoreProcessRuntime::queueRawLedgerFrames(const CanMonitorTransport::
     queueRawLedgerFrames(batch.frames);
 }
 
-void CaptureCoreProcessRuntime::queueRawLedgerFrames(const FrameRecordList& frames) {
+void CaptureCoreProcessRuntime::queueRawLedgerFrames(const QVector<CanMonitorTransport::CanRxLite>& frames) {
     if (frames.isEmpty()) return;
     ensureRawLedgerRuntime();
     m_pendingRawLedgerFrames.reserve(m_pendingRawLedgerFrames.size() + frames.size());
-    for (const FrameRecord& frame : frames) {
+    for (const CanMonitorTransport::CanRxLite& frame : frames) {
         m_pendingRawLedgerFrames.push_back(frame);
     }
     if (m_pendingRawLedgerFrames.size() > kCoreRawLedgerPendingFrameCap) {
@@ -707,9 +708,14 @@ void CaptureCoreProcessRuntime::flushRawLedgerFrames(bool force) {
     if (!m_rawLedgerRuntime || m_pendingRawLedgerFrames.isEmpty()) return;
     if (m_rawLedgerDispatchInFlight && !force) return;
 
-    FrameRecordList frames = std::move(m_pendingRawLedgerFrames);
+    QVector<CanMonitorTransport::CanRxLite> liteFrames = std::move(m_pendingRawLedgerFrames);
     m_pendingRawLedgerFrames.clear();
     m_rawLedgerDispatchInFlight = true;
+    FrameRecordList frames;
+    frames.reserve(liteFrames.size());
+    for (const CanMonitorTransport::CanRxLite& frame : std::as_const(liteFrames)) {
+        frames.push_back(CanMonitorTransport::frameRecordFromCanRxLite(frame));
+    }
     QMetaObject::invokeMethod(m_rawLedgerRuntime,
                               [worker = QPointer<CanMonitorTransport::RawLedgerWriterRuntime>(m_rawLedgerRuntime),
                                frames = std::move(frames)]() mutable {

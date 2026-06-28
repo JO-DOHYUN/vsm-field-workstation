@@ -68,19 +68,19 @@ public:
     LiveTruthRuntime::Status truthStatus() const { return m_liveTruth.status(); }
 
 private:
-    void appendCanRxFrames(const TypedRecord& record, FrameRecordList& out) const;
-    void ingestRecordForViews(const TypedRecord& record, FrameRecordList& liveLatestFrames, Result& result);
+    void appendCanRxFrames(const TypedRecord& record, QVector<CanRxLite>& out) const;
+    void ingestRecordForViews(const TypedRecord& record, QVector<CanRxLite>& liveLatestFrames, Result& result);
     void pushCaptureBatch(TypedCaptureFrameList&& batch, Result& result);
     void ingestCriticalRecord(const TypedRecord& record, Result& result);
-    void updateLiveLatestView(const FrameRecordList& frames, Result& result);
+    void updateLiveLatestView(const QVector<CanRxLite>& frames, Result& result);
     void updateStatusViews(const Result& ingestResult, Result& out);
-    static quint64 liveLatestKeyForFrame(const FrameRecord& frame);
+    static quint64 liveLatestKeyForFrame(const CanRxLite& frame);
 
     TypedEvidencePipelineRuntime m_pipeline;
     LiveProjectionRuntime m_liveProjection;
     LiveTruthRuntime m_liveTruth;
     CanMonitorCore::CoreMaterializedViewStore m_viewStore;
-    QHash<quint64, FrameRecord> m_liveLatestByKey;
+    QHash<quint64, CanRxLite> m_liveLatestByKey;
     QJsonObject m_coreEvidenceTransportPayload;
     QJsonObject m_coreEvidenceCheapCounts;
     CanMonitorCore::CoreViewSeverity m_coreEvidenceSeverity = CanMonitorCore::CoreViewSeverity::Ok;

@@ -59,10 +59,10 @@ constexpr int kRoutineControlWriteUiMinIntervalMs = 250;
 constexpr int kHostTxQueueUiMinIntervalMs = 250;
 constexpr int kControlKeyboardLegacyPulseMs = 120;
 constexpr double kControlKeyboardSteerHoldDeg = 45.0;
-constexpr int kLiveTruthMaxDisplayStateUpdates = 512;
-constexpr int kLiveTruthMaxGraphUpdates = 128;
+constexpr int kLiveLatestMaxDisplayStateUpdates = 512;
+constexpr int kLiveLatestMaxGraphUpdates = 128;
 constexpr int kRawLedgerUiFlushIntervalMs = 250;
-constexpr int kRawLedgerUiPendingFrameCap = 1024;
+constexpr int kRawLedgerUiPendingFrameCap = 128;
 constexpr int kTransportDiagnosticsFlushIntervalMs = 250;
 constexpr quint64 kLiveGraphBackpressureSampleGapUs = 20'000ULL;
 constexpr int kLiveGraphSeriesHardPointLimit = 20000;
@@ -6200,7 +6200,7 @@ void AppController::flushPendingRawLedgerUiCommit() {
     const QString path = m_pendingRawLedgerUiPath;
     clearPendingRawLedgerUiCommit();
     if (!frames.isEmpty()) {
-        CanMonitorPerf::ScopedProbe probe("app.raw_ledger_ui_commit", frames.size(), 1500);
+        CanMonitorPerf::ScopedProbe probe("app.decoded_tail_ui_commit", frames.size(), 200);
         m_rawFrameTable.applyCommittedTailFrames(frames, firstSeq, totalRows, segmentBytes, path);
         requestLiveStatsRefresh(false);
     }
@@ -8708,7 +8708,7 @@ QVariantList AppController::verificationScenarioCatalog() const {
             map.insert(QStringLiteral("load"), key.contains(QStringLiteral("60s")) ? QStringLiteral("full fixture, 384 ID slots, PCAN 2000fps 60s") : QStringLiteral("full fixture, 384 ID slots, 1000fps per selected source 30s"));
             map.insert(QStringLiteral("model"), QStringLiteral("tests/fixtures/full_load_truth_stress_model.json"));
             map.insert(QStringLiteral("stress"), QStringLiteral("0x510-0x5AF: timing + range + reserved + flag + graph peak, noise IDs mixed"));
-            map.insert(QStringLiteral("acceptance"), QStringLiteral("sender manifest, capture/ledger parity, AnalysisRuntime rows, graph min/max/latest, performance snapshot"));
+            map.insert(QStringLiteral("acceptance"), QStringLiteral("sender manifest, capture/decoded-tail parity, AnalysisRuntime rows, graph min/max/latest, performance snapshot"));
         } else if (key.contains(QStringLiteral("truth"))) {
             map.insert(QStringLiteral("load"), QStringLiteral("smoke fixture, 64 ID slots, 1000fps per selected source 30s"));
             map.insert(QStringLiteral("model"), QStringLiteral("tests/fixtures/analysis_truth_stress_model.json"));
@@ -9947,6 +9947,15 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     liveStats.insert(QStringLiteral("raw_ledger_cache_misses"), QString::number(m_rawFrameTable.ledgerCacheMisses()));
     liveStats.insert(QStringLiteral("raw_ledger_read_fail"), QString::number(m_rawFrameTable.ledgerReadFailCount()));
     liveStats.insert(QStringLiteral("raw_ledger_file_read_fail"), QString::number(m_rawFrameTable.ledgerFileReadFailCount()));
+    liveStats.insert(QStringLiteral("decoded_tail_rows"), QString::number(m_rawFrameTable.totalRows()));
+    liveStats.insert(QStringLiteral("decoded_tail_visible_rows"), m_rawFrameTable.count());
+    liveStats.insert(QStringLiteral("decoded_tail_segment_bytes"), QString::number(m_rawFrameTable.segmentBytes()));
+    liveStats.insert(QStringLiteral("decoded_tail_latest_seq"), QString::number(m_rawFrameTable.latestSeq()));
+    liveStats.insert(QStringLiteral("decoded_tail_cache_rows"), m_rawFrameTable.ledgerCacheRows());
+    liveStats.insert(QStringLiteral("decoded_tail_cache_hits"), QString::number(m_rawFrameTable.ledgerCacheHits()));
+    liveStats.insert(QStringLiteral("decoded_tail_cache_misses"), QString::number(m_rawFrameTable.ledgerCacheMisses()));
+    liveStats.insert(QStringLiteral("decoded_tail_read_fail"), QString::number(m_rawFrameTable.ledgerReadFailCount()));
+    liveStats.insert(QStringLiteral("decoded_tail_file_read_fail"), QString::number(m_rawFrameTable.ledgerFileReadFailCount()));
     root.insert(QStringLiteral("live_stats"), liveStats);
     root.insert(QStringLiteral("performance_snapshot"), CanMonitorPerf::PerformanceProbeRuntime::snapshot(80));
     root.insert(QStringLiteral("ui_responsiveness"), m_uiResponsiveness.toJson());
@@ -10024,6 +10033,8 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     counts.insert(QStringLiteral("live_frame_rows"), m_liveFrames.count());
     counts.insert(QStringLiteral("raw_ledger_rows"), QString::number(m_rawFrameTable.totalRows()));
     counts.insert(QStringLiteral("raw_ledger_visible_rows"), m_rawFrameTable.count());
+    counts.insert(QStringLiteral("decoded_tail_rows"), QString::number(m_rawFrameTable.totalRows()));
+    counts.insert(QStringLiteral("decoded_tail_visible_rows"), m_rawFrameTable.count());
     counts.insert(QStringLiteral("replay_frame_rows"), m_replayFrames.count());
     counts.insert(QStringLiteral("recent_frame_rows"), m_recentFrames.count());
     counts.insert(QStringLiteral("replay_timing_markers"), replayTimingMarkerCount());
