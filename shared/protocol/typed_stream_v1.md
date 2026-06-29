@@ -100,6 +100,30 @@ Payload length: 44 bytes.
 28  raw_u16          u16_le[8]
 ```
 
+## CAPABILITY Extensions
+
+Minimum payload length: 36 bytes. Newer CSM firmware may emit 224-byte
+`CAPABILITY` records. VSM treats these fields as the product/profile contract:
+
+```text
+192 firmware_profile                 u8   1 passive product, 2 full instrumented
+194 vehicle_impact_state             u8   1 possible, 2 configured passive, 3 verified passive
+195 host_command_rx                  u8
+196 control_path                     u8
+198 dtr_reset_sensitive              u8
+199 passive_acceptance_allowed       u8
+208 bus0_mode                        u8
+209 bus0_ack_capability              u8
+210 bus0_error_frame_capability      u8
+211 bus0_transceiver_reset_safe      u8
+212..215 bus1 same layout
+216 usb_cdc_dtr_session_required     u8
+217 usb_cdc_dtr_session_only         u8
+```
+
+`usb_cdc_dtr_session_only=1` means DTR is only a USB CDC session gate. It must
+not enable host downlink, control, reset watchdog, CAN TX, or MCP normal mode.
+
 ## BOARD_HEALTH
 
 Minimum payload length: 52 bytes. Existing CSM firmware may emit only this base

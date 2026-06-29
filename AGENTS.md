@@ -39,7 +39,7 @@
 - live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라 capture-core ownership 문제로 먼저 의심한다.
 - VSM long-run live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다.
 - VSM field/product 기본 실행은 Passive-Safe 2+1 기준이다: `vsm-ui.exe + vsm-capture-core.exe`가 기본 2프로세스이고, debug/tap은 기본 OFF인 별도 plane이다.
-- Passive Product profile에서는 VSM이 serial read-only로 열고 DTR/RTS를 건드리지 않으며 host TX, control cycle, COM-owning lab gateway를 실행하지 않는다.
+- Passive Product profile에서는 VSM이 serial read-only로 열고, CSM capability가 요구하는 Arduino CDC session gate 목적의 DTR만 허용하며, RTS/host TX/control cycle/COM-owning lab gateway를 실행하지 않는다.
 - Full/Instrumented profile은 bench/lab 전용이며 실차 PASS나 passive product acceptance로 주장하지 않는다.
 - `capture.stream/index`만 authoritative truth이며 UI/graph/raw tail/analysis rows는 bounded materialized view로 다룬다.
 - live/capture-core 리팩토링은 데이터 흐름도, owner/consumer/drop policy, 기존 owner 위반 검색을 먼저 끝낸 뒤 기능 이동과 구 경로 삭제를 진행한다.

@@ -10,7 +10,8 @@ VSM 제품 기본 실행은 실차 CAN/차량 상태에 영향을 주지 않는 
 기본값이다.
 
 - Serial open: `ReadOnly`
-- DTR/RTS: no-touch
+- DTR/RTS: RTS no-touch. DTR may be asserted only as a read-only Arduino CDC
+  session gate when the CSM `CAPABILITY` declares `usb_cdc_dtr_session_only=1`.
 - Host TX: disabled
 - Control cycle: disabled
 - COM-owning lab gateway: disabled

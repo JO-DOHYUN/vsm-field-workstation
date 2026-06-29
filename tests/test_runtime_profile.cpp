@@ -8,15 +8,17 @@ class RuntimeProfileTest : public QObject {
     Q_OBJECT
 
 private slots:
-    void passiveProductIsReadOnlyAndNoTouch() {
+    void passiveProductIsReadOnlyAndCdcSessionOnly() {
         const RuntimeProfile profile = passiveProductProfile();
         QCOMPARE(profile.key(), QStringLiteral("passive_product"));
         QCOMPARE(profile.kind(), RuntimeProfileKind::PassiveProduct);
-        QCOMPARE(profile.impactState(), VehicleImpactState::BlockedUnknown);
+        QCOMPARE(profile.impactState(), VehicleImpactState::ConfiguredPassive);
         const RuntimeTransportPolicy policy = profile.transportPolicy();
         QVERIFY(policy.serialOpenMode.testFlag(QIODevice::ReadOnly));
         QVERIFY(!policy.serialOpenMode.testFlag(QIODevice::WriteOnly));
-        QVERIFY(!policy.touchDtr);
+        QVERIFY(policy.touchDtr);
+        QVERIFY(policy.dtrAsserted);
+        QVERIFY(policy.dtrSessionOnly);
         QVERIFY(!policy.touchRts);
         QVERIFY(!policy.hostTxEnabled);
         QVERIFY(!policy.controlCycleEnabled);

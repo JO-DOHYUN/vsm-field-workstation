@@ -7,7 +7,8 @@ VSM product default is `passive_product`.
 - Core process: `vsm-capture-core.exe --profile passive_product`
 - Optional debug/tap: default OFF, separate plane
 - Serial open: read-only
-- DTR/RTS: no-touch
+- DTR/RTS: DTR is allowed only as a CSM-declared Arduino CDC session gate; RTS
+  remains no-touch.
 - Host TX/control/lab gateway: disabled
 - `profile_status` is a Core materialized view and exposes this runtime contract.
 

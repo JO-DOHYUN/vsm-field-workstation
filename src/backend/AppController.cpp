@@ -494,6 +494,29 @@ std::optional<TypedCapabilityRecord> capabilityFromCoreJson(const QJsonObject& o
     out.firmwareBuildId = quint32(jsonU64Value(object, QStringLiteral("firmware_build_id")));
     out.hostTxQueueSize = quint16(jsonU64Value(object, QStringLiteral("host_tx_queue_size")));
     out.capabilityV3Flags = quint16(jsonU64Value(object, QStringLiteral("capability_v3_flags")));
+    out.hasFirmwareIdentity = object.value(QStringLiteral("has_firmware_identity")).toBool(false);
+    out.firmwareIdentityVersion = quint8(std::clamp(object.value(QStringLiteral("firmware_identity_version")).toInt(0), 0, 255));
+    out.firmwareDirty = object.value(QStringLiteral("firmware_dirty")).toBool(true);
+    out.firmwareIrqMode = quint8(std::clamp(object.value(QStringLiteral("firmware_irq_mode")).toInt(0), 0, 255));
+    out.firmwareBuildEpoch = quint32(jsonU64Value(object, QStringLiteral("firmware_build_epoch")));
+    out.mcpSpiHz = quint32(jsonU64Value(object, QStringLiteral("mcp_spi_hz")));
+    out.canRecordDrainBudget = quint16(jsonU64Value(object, QStringLiteral("can_record_drain_budget")));
+    out.serialRingKiB = quint16(jsonU64Value(object, QStringLiteral("serial_ring_kib")));
+    out.firmwareGitSha = object.value(QStringLiteral("firmware_git_sha")).toString();
+    out.firmwareEnvName = object.value(QStringLiteral("firmware_env_name")).toString();
+    out.hasPassivePolicy = object.value(QStringLiteral("has_passive_policy")).toBool(false);
+    out.firmwareProfile = quint8(std::clamp(object.value(QStringLiteral("firmware_profile")).toInt(0), 0, 255));
+    out.profileLockState = quint8(std::clamp(object.value(QStringLiteral("profile_lock_state")).toInt(0), 0, 255));
+    out.vehicleImpactState = quint8(std::clamp(object.value(QStringLiteral("capability_vehicle_impact_state")).toInt(0), 0, 255));
+    out.hostCommandRx = object.value(QStringLiteral("host_command_rx")).toBool(false);
+    out.controlPath = object.value(QStringLiteral("control_path")).toBool(false);
+    out.usbBackpressureIsolated = object.value(QStringLiteral("usb_backpressure_isolated")).toBool(false);
+    out.dtrResetSensitive = object.value(QStringLiteral("dtr_reset_sensitive")).toBool(false);
+    out.passiveAcceptanceAllowed = object.value(QStringLiteral("passive_acceptance_allowed")).toBool(false);
+    out.hardwareSafetyCaseId = quint32(jsonU64Value(object, QStringLiteral("hardware_safety_case_id")));
+    out.benchVerificationId = quint32(jsonU64Value(object, QStringLiteral("bench_verification_id")));
+    out.usbCdcDtrSessionRequired = object.value(QStringLiteral("usb_cdc_dtr_session_required")).toBool(false);
+    out.usbCdcDtrSessionOnly = object.value(QStringLiteral("usb_cdc_dtr_session_only")).toBool(false);
     const QJsonArray buses = object.value(QStringLiteral("buses")).toArray();
     out.buses.reserve(buses.size());
     for (const QJsonValue& value : buses) {
@@ -4640,11 +4663,14 @@ QVariantList AppController::runtimeProfileDiagnostics() const {
                 policy.serialWriteAllowed() ? QStringLiteral("Serial write-capable profile; lab/bench only.") : QStringLiteral("Read-only serial open; no host TX path."));
     rows << row(QStringLiteral("line_state_policy"),
                 QStringLiteral("DTR/RTS policy"),
-                QStringLiteral("DTR %1 / RTS %2")
+                QStringLiteral("DTR %1%2 / RTS %3")
                     .arg(policy.touchDtr ? QStringLiteral("touch") : QStringLiteral("no-touch"),
+                         policy.dtrSessionOnly ? QStringLiteral(" session-only") : QString(),
                          policy.touchRts ? QStringLiteral("touch") : QStringLiteral("no-touch")),
-                (policy.touchDtr || policy.touchRts) ? QStringLiteral("error") : QStringLiteral("ok"),
-                QStringLiteral("Passive product must not toggle USB serial modem-control lines."));
+                ((policy.touchDtr && !policy.dtrSessionOnly) || policy.touchRts) ? QStringLiteral("error") : QStringLiteral("ok"),
+                policy.dtrSessionOnly
+                    ? QStringLiteral("DTR is used only to establish Arduino CDC uplink; serial remains read-only and host/control paths stay blocked.")
+                    : QStringLiteral("Passive product must not use serial modem-control lines unless the CSM declares a session-only CDC gate."));
     rows << row(QStringLiteral("host_control_policy"),
                 QStringLiteral("Host/control policy"),
                 QStringLiteral("host_tx %1 / control %2 / lab_gateway %3")
@@ -4658,9 +4684,11 @@ QVariantList AppController::runtimeProfileDiagnostics() const {
                 board.profileMatchResult,
                 board.csmActiveCapable ? QStringLiteral("error") : (board.csmPassiveCapabilityCandidate ? QStringLiteral("warn") : QStringLiteral("warn")),
                 board.capabilitySeen
-                    ? QStringLiteral("active_capable %1 passive_candidate %2; hardware safety evidence still required")
+                    ? QStringLiteral("active_capable %1 passive_candidate %2 dtr_session %3 dtr_reset_sensitive %4; hardware safety evidence still required")
                           .arg(board.csmActiveCapable ? QStringLiteral("yes") : QStringLiteral("no"),
-                               board.csmPassiveCapabilityCandidate ? QStringLiteral("yes") : QStringLiteral("no"))
+                               board.csmPassiveCapabilityCandidate ? QStringLiteral("yes") : QStringLiteral("no"),
+                               board.usbCdcDtrSessionRequired ? QStringLiteral("required") : QStringLiteral("not-required"),
+                               board.dtrResetSensitive ? QStringLiteral("yes") : QStringLiteral("no"))
                     : QStringLiteral("waiting for CSM CAPABILITY; passive acceptance forbidden"));
     return rows;
 }

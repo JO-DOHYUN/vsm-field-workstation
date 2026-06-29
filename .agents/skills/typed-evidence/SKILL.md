@@ -8,7 +8,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 ## Invariants
 - Legacy 20-byte packet path remains compatibility mode.
 - Production truth is the typed board stream original bytes.
-- Passive Product VSM must be a read-only typed evidence consumer: no serial write, no DTR/RTS touch, no host TX/control, no COM-owning gateway.
+- Passive Product VSM must be a read-only typed evidence consumer: no serial write, no RTS touch, no host TX/control, no COM-owning gateway. DTR may be asserted only as a CSM-declared Arduino CDC session gate and must not enable downlink/control/reset behavior.
 - Voltage raw, board health/event, CAN RX, CAN TX audit, and control ack remain separate evidence types.
 - Voltage samples must not be represented as fake CAN frames.
 - Live production stream is typed evidence only; legacy 20-byte remains replay/import compatibility.
@@ -38,5 +38,5 @@ description: Use when working on board typed stream parsing, typed capture stora
 - analysis input queue grows without a hard bound or overflow diagnostic
 - display drop is reported as parser/storage/CSM CAN drop
 - debug gateway raw capture is used to claim PASS when VSM `capture.stream` is missing, stale, or corrupt
-- passive product profile allows host TX/control/gateway execution
+- passive product profile allows host TX/control/gateway execution or non-session-only serial line control
 - UI consumes raw typed evidence directly instead of querying Core materialized views

@@ -12,7 +12,7 @@ Use this skill when the task can affect long-run memory, queue backpressure, raw
 ## Non-Negotiable Invariants
 - Production truth is the accepted CSM typed stream raw bytes.
 - Product default is Passive-Safe 2+1: UI queries Core views, Core owns read-only transport, optional debug/tap is default OFF.
-- Passive Product profile must not open serial read/write, touch DTR/RTS, send host TX, run control cycle, or start a COM-owning gateway.
+- Passive Product profile must not open serial read/write, touch RTS, send host TX, run control cycle, or start a COM-owning gateway. DTR may be asserted only as a read-only Arduino CDC session gate when the CSM capability declares it session-only.
 - Live hot path must not pass full `TypedRecordList` through Qt queued signals.
 - Live parser output must not create both `payload` and `frameBytes` owning `QByteArray` per frame.
 - Capture truth, analysis input, raw ledger, and UI projection must have separate ownership boundaries.
@@ -142,5 +142,5 @@ snapshots, graph buckets, and transport summaries are derived materialized views
 - UI consumes raw/typed stream directly instead of querying derived views.
 - A UI view query performs full replay/capture scan on demand.
 - Debug gateway/profiler writer code runs in normal live production mode.
-- Passive Product runtime starts any host TX/control/gateway_tcp route.
+- Passive Product runtime starts any host TX/control/gateway_tcp route or non-session-only serial line control.
 - A test passes for 30s but no 10m/1h memory evidence exists.

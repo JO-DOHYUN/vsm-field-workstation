@@ -88,6 +88,29 @@ QJsonObject capabilityToJson(const TypedCapabilityRecord& capability) {
     out.insert(QStringLiteral("firmware_build_id"), u64Text(capability.firmwareBuildId));
     out.insert(QStringLiteral("host_tx_queue_size"), int(capability.hostTxQueueSize));
     out.insert(QStringLiteral("capability_v3_flags"), int(capability.capabilityV3Flags));
+    out.insert(QStringLiteral("has_firmware_identity"), capability.hasFirmwareIdentity);
+    out.insert(QStringLiteral("firmware_identity_version"), int(capability.firmwareIdentityVersion));
+    out.insert(QStringLiteral("firmware_dirty"), capability.firmwareDirty);
+    out.insert(QStringLiteral("firmware_irq_mode"), int(capability.firmwareIrqMode));
+    out.insert(QStringLiteral("firmware_build_epoch"), u64Text(capability.firmwareBuildEpoch));
+    out.insert(QStringLiteral("mcp_spi_hz"), u64Text(capability.mcpSpiHz));
+    out.insert(QStringLiteral("can_record_drain_budget"), int(capability.canRecordDrainBudget));
+    out.insert(QStringLiteral("serial_ring_kib"), int(capability.serialRingKiB));
+    out.insert(QStringLiteral("firmware_git_sha"), capability.firmwareGitSha);
+    out.insert(QStringLiteral("firmware_env_name"), capability.firmwareEnvName);
+    out.insert(QStringLiteral("has_passive_policy"), capability.hasPassivePolicy);
+    out.insert(QStringLiteral("firmware_profile"), int(capability.firmwareProfile));
+    out.insert(QStringLiteral("profile_lock_state"), int(capability.profileLockState));
+    out.insert(QStringLiteral("capability_vehicle_impact_state"), int(capability.vehicleImpactState));
+    out.insert(QStringLiteral("host_command_rx"), capability.hostCommandRx);
+    out.insert(QStringLiteral("control_path"), capability.controlPath);
+    out.insert(QStringLiteral("usb_backpressure_isolated"), capability.usbBackpressureIsolated);
+    out.insert(QStringLiteral("dtr_reset_sensitive"), capability.dtrResetSensitive);
+    out.insert(QStringLiteral("passive_acceptance_allowed"), capability.passiveAcceptanceAllowed);
+    out.insert(QStringLiteral("hardware_safety_case_id"), u64Text(capability.hardwareSafetyCaseId));
+    out.insert(QStringLiteral("bench_verification_id"), u64Text(capability.benchVerificationId));
+    out.insert(QStringLiteral("usb_cdc_dtr_session_required"), capability.usbCdcDtrSessionRequired);
+    out.insert(QStringLiteral("usb_cdc_dtr_session_only"), capability.usbCdcDtrSessionOnly);
     QJsonArray buses;
     for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
         buses.append(QJsonObject{{QStringLiteral("bus_id"), int(bus.busId)},

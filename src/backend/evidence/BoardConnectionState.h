@@ -19,6 +19,13 @@ public:
         bool controlCapable = false;
         bool csmActiveCapable = false;
         bool csmPassiveCapabilityCandidate = false;
+        bool csmPassivePolicySeen = false;
+        bool usbCdcDtrSessionRequired = false;
+        bool usbCdcDtrSessionOnly = false;
+        bool dtrResetSensitive = false;
+        bool passiveAcceptanceAllowed = false;
+        quint8 firmwareProfile = 0;
+        quint8 vehicleImpactState = 0;
         quint8 profileMajor = 0;
         quint8 profileMinor = 0;
         quint8 safetyState = 0;

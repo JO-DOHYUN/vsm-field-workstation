@@ -28,6 +28,7 @@ QJsonObject RuntimeTransportPolicy::toJson() const {
     return QJsonObject{{QStringLiteral("serial_open_mode"), serialOpenModeText()},
                        {QStringLiteral("serial_write_allowed"), serialWriteAllowed()},
                        {QStringLiteral("dtr_policy"), touchDtr ? (dtrAsserted ? QStringLiteral("assert_true") : QStringLiteral("assert_false")) : QStringLiteral("no_touch")},
+                       {QStringLiteral("dtr_session_only"), dtrSessionOnly},
                        {QStringLiteral("rts_policy"), touchRts ? (rtsAsserted ? QStringLiteral("assert_true") : QStringLiteral("assert_false")) : QStringLiteral("no_touch")},
                        {QStringLiteral("host_tx_enabled"), hostTxEnabled},
                        {QStringLiteral("control_enabled"), controlCycleEnabled},
@@ -90,25 +91,30 @@ QString vehicleImpactStateToString(VehicleImpactState state) {
     return QStringLiteral("unknown");
 }
 
-RuntimeProfile passiveProductProfile() {
+RuntimeProfile passiveCdcSessionProfile() {
     RuntimeTransportPolicy policy;
     policy.serialOpenMode = QIODevice::ReadOnly;
-    policy.touchDtr = false;
-    policy.dtrAsserted = false;
+    policy.touchDtr = true;
+    policy.dtrAsserted = true;
+    policy.dtrSessionOnly = true;
     policy.touchRts = false;
     policy.rtsAsserted = false;
     policy.hostTxEnabled = false;
     policy.controlCycleEnabled = false;
     policy.labGatewayEnabled = false;
     return RuntimeProfile(RuntimeProfileKind::PassiveProduct,
-                          VehicleImpactState::BlockedUnknown,
+                          VehicleImpactState::ConfiguredPassive,
                           QStringLiteral("passive_product"),
                           QStringLiteral("Passive Product"),
-                          QStringLiteral("Read-only production profile: no host CAN TX, no control cycle, no DTR/RTS touch, no COM-owning lab gateway."),
+                          QStringLiteral("Read-only production profile: DTR is asserted only to establish Arduino CDC uplink; no serial writes, host CAN TX, control cycle, or COM-owning lab gateway."),
                           policy,
                           false,
                           true,
                           true);
+}
+
+RuntimeProfile passiveProductProfile() {
+    return passiveCdcSessionProfile();
 }
 
 RuntimeProfile fullInstrumentedProfile() {
@@ -137,6 +143,7 @@ RuntimeProfile runtimeProfileFromString(const QString& value, bool* okOut) {
     if (normalized.isEmpty() ||
         normalized == QStringLiteral("passive") ||
         normalized == QStringLiteral("passive_product") ||
+        normalized == QStringLiteral("passive_cdc_session") ||
         normalized == QStringLiteral("product")) {
         if (okOut) *okOut = true;
         return passiveProductProfile();

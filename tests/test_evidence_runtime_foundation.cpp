@@ -178,6 +178,35 @@ private slots:
         QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
     }
 
+    void passiveCdcSessionPolicyIsNotActiveControl() {
+        TypedCapabilityRecord passive = capability();
+        passive.supportsCanTxRaw = false;
+        passive.supportedDownlinkRecords = 0;
+        passive.hostTxQueueSize = 0;
+        passive.buses.clear();
+        passive.hasPassivePolicy = true;
+        passive.firmwareProfile = 1;
+        passive.vehicleImpactState = 2;
+        passive.hostCommandRx = false;
+        passive.controlPath = false;
+        passive.usbCdcDtrSessionRequired = true;
+        passive.usbCdcDtrSessionOnly = true;
+        passive.dtrResetSensitive = false;
+
+        CanMonitorEvidence::BoardConnectionState state;
+        state.setSerialOpen(true);
+        state.ingestCapability(passive);
+
+        const auto snapshot = state.snapshot();
+        QVERIFY(snapshot.csmPassivePolicySeen);
+        QVERIFY(snapshot.usbCdcDtrSessionRequired);
+        QVERIFY(snapshot.usbCdcDtrSessionOnly);
+        QVERIFY(!snapshot.dtrResetSensitive);
+        QVERIFY(!snapshot.csmActiveCapable);
+        QVERIFY(snapshot.csmPassiveCapabilityCandidate);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
+    }
+
     void boardAliveExpiresOnWallClockWhenStreamStops() {
         CanMonitorEvidence::BoardConnectionState state(kTypedTransportVersion, 2'000'000, 2'500);
 

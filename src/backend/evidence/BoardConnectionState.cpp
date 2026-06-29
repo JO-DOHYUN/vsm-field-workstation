@@ -2,6 +2,46 @@
 
 namespace CanMonitorEvidence {
 
+namespace {
+
+constexpr quint8 kCsmFirmwareProfilePassiveProduct = 1;
+constexpr quint8 kCsmVehicleImpactVerifiedPassive = 3;
+
+bool hasBoardTxOrControl(const TypedCapabilityRecord& capability) {
+    for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
+        if (bus.txSupported || bus.controlTxAllowed) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool hasHostActivePath(const TypedCapabilityRecord& capability) {
+    if (capability.hasPassivePolicy) {
+        return capability.hostCommandRx ||
+               capability.controlPath ||
+               capability.supportedDownlinkRecords != 0 ||
+               capability.hostTxQueueSize != 0 ||
+               hasBoardTxOrControl(capability);
+    }
+    return capability.supportsCanTxRaw ||
+           capability.supportedDownlinkRecords != 0 ||
+           capability.hostTxQueueSize != 0 ||
+           hasBoardTxOrControl(capability);
+}
+
+bool hasControlPath(const TypedCapabilityRecord& capability) {
+    if (!capability.hasPassivePolicy && capability.supportsCanTxRaw) {
+        return true;
+    }
+    return capability.controlPath ||
+           capability.supportedDownlinkRecords != 0 ||
+           capability.hostTxQueueSize != 0 ||
+           hasBoardTxOrControl(capability);
+}
+
+} // namespace
+
 BoardConnectionState::BoardConnectionState(quint8 requiredProtocolVersion,
                                            quint64 healthFreshWindowUs,
                                            quint64 healthFreshWindowMs)
@@ -92,30 +132,35 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
         : 0;
     out.profileMajor = m_capabilitySeen ? m_capability.profileMajor : 0;
     out.profileMinor = m_capabilitySeen ? m_capability.profileMinor : 0;
+    out.csmPassivePolicySeen = m_capabilitySeen && m_capability.hasPassivePolicy;
+    out.usbCdcDtrSessionRequired = m_capabilitySeen && m_capability.usbCdcDtrSessionRequired;
+    out.usbCdcDtrSessionOnly = m_capabilitySeen && m_capability.usbCdcDtrSessionOnly;
+    out.dtrResetSensitive = m_capabilitySeen && m_capability.dtrResetSensitive;
+    out.passiveAcceptanceAllowed = m_capabilitySeen && m_capability.passiveAcceptanceAllowed;
+    out.firmwareProfile = m_capabilitySeen ? m_capability.firmwareProfile : 0;
+    out.vehicleImpactState = m_capabilitySeen ? m_capability.vehicleImpactState : 0;
     out.safetyState = m_healthSeen ? m_health.safetyState : 0;
     out.faultFlags = m_healthSeen ? m_health.faultFlags : 0;
-    bool busActiveCapable = false;
-    if (m_capabilitySeen) {
-        for (const TypedCapabilityBusDescriptor& bus : m_capability.buses) {
-            if (bus.txSupported || bus.controlTxAllowed) {
-                busActiveCapable = true;
-                break;
-            }
-        }
-    }
-    out.csmActiveCapable = m_capabilitySeen &&
-        (m_capability.supportsCanTxRaw ||
-         m_capability.supportedDownlinkRecords != 0 ||
-         m_capability.hostTxQueueSize != 0 ||
-         busActiveCapable);
+
+    const bool activePath = m_capabilitySeen && hasHostActivePath(m_capability);
+    out.csmActiveCapable = activePath;
     out.csmPassiveCapabilityCandidate = m_capabilitySeen &&
         !out.csmActiveCapable &&
+        (!m_capability.hasPassivePolicy ||
+         (m_capability.firmwareProfile == kCsmFirmwareProfilePassiveProduct &&
+          !m_capability.hostCommandRx &&
+          !m_capability.controlPath)) &&
         m_capability.supportsCanRxRaw &&
         m_capability.supportsBoardHealth;
     if (!m_capabilitySeen) {
         out.profileMatchResult = QStringLiteral("blocked_unknown");
     } else if (out.csmActiveCapable) {
         out.profileMatchResult = QStringLiteral("blocked_active_csm");
+    } else if (out.csmPassiveCapabilityCandidate &&
+               m_capability.hasPassivePolicy &&
+               m_capability.vehicleImpactState == kCsmVehicleImpactVerifiedPassive &&
+               m_capability.passiveAcceptanceAllowed) {
+        out.profileMatchResult = QStringLiteral("verified_passive");
     } else if (out.csmPassiveCapabilityCandidate) {
         out.profileMatchResult = QStringLiteral("csm_passive_candidate_hardware_unverified");
     } else {
@@ -130,7 +175,7 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
         && m_capability.supportsBoardHealth;
 
     out.controlCapable = out.boardAlive
-        && m_capability.supportsCanTxRaw
+        && hasControlPath(m_capability)
         && safetyAllowsControlStandby()
         && m_health.faultFlags == 0;
 
@@ -140,7 +185,7 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
     else if (!m_capability.supportsBoardHealth) out.reason = QStringLiteral("BOARD_HEALTH not advertised");
     else if (!out.healthSeen) out.reason = QStringLiteral("waiting for BOARD_HEALTH");
     else if (!out.healthFresh) out.reason = QStringLiteral("BOARD_HEALTH stale");
-    else if (!m_capability.supportsCanTxRaw) out.reason = QStringLiteral("CAN_TX_RAW audit not advertised");
+    else if (!hasControlPath(m_capability)) out.reason = QStringLiteral("monitor-only passive CSM");
     else if (!safetyAllowsControlStandby()) out.reason = QStringLiteral("board safety state blocks control");
     else if (m_health.faultFlags != 0) out.reason = QStringLiteral("board fault flags active");
     else out.reason = QStringLiteral("board alive");

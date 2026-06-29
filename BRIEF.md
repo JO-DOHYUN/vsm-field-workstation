@@ -10,7 +10,7 @@
 
 ## Must Preserve
 - Field/product default is Passive-Safe 2+1: `vsm-ui.exe + vsm-capture-core.exe`, optional debug/tap plane default OFF.
-- Passive Product profile must not affect the vehicle bus: serial read-only, DTR/RTS no-touch, host TX disabled, control disabled, COM-owning lab gateway disabled.
+- Passive Product profile must not affect the vehicle bus: serial read-only, DTR asserted only as an Arduino CDC session gate when declared by CSM capability, RTS no-touch, host TX disabled, control disabled, COM-owning lab gateway disabled.
 - Full Instrumented profile is bench/lab only and must not be used as passive product acceptance.
 - COM open is not board alive; valid `CAPABILITY` and fresh `BOARD_HEALTH` are required.
 - `capture.stream/index` is the only authoritative truth.

@@ -24,6 +24,7 @@ struct RuntimeTransportPolicy {
     bool dtrAsserted = false;
     bool touchRts = false;
     bool rtsAsserted = false;
+    bool dtrSessionOnly = false;
     bool hostTxEnabled = false;
     bool controlCycleEnabled = false;
     bool labGatewayEnabled = false;
@@ -72,6 +73,7 @@ private:
 
 QString runtimeProfileKindToString(RuntimeProfileKind kind);
 QString vehicleImpactStateToString(VehicleImpactState state);
+RuntimeProfile passiveCdcSessionProfile();
 RuntimeProfile passiveProductProfile();
 RuntimeProfile fullInstrumentedProfile();
 RuntimeProfile runtimeProfileFromString(const QString& value, bool* okOut = nullptr);

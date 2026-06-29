@@ -322,6 +322,50 @@ std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& re
         out.firmwareBuildId = typedReadU32Le(p + 96);
         out.hostTxQueueSize = typedReadU16Le(p + 100);
         out.capabilityV3Flags = typedReadU16Le(p + 102);
+        out.supportsCanRxRaw =
+            (out.supportedUplinkRecords & (1u << static_cast<quint8>(TypedRecordType::CanRxRaw))) != 0 ||
+            (out.supportedUplinkRecords & (1u << static_cast<quint8>(TypedRecordType::CanRxSegment))) != 0;
+        out.supportsCanTxRaw =
+            (out.supportedUplinkRecords & (1u << static_cast<quint8>(TypedRecordType::CanTxRaw))) != 0;
+        out.supportsBoardHealth =
+            (out.supportedUplinkRecords & (1u << static_cast<quint8>(TypedRecordType::BoardHealth))) != 0;
+        out.supportsBoardEvent =
+            (out.supportedUplinkRecords & (1u << static_cast<quint8>(TypedRecordType::BoardEvent))) != 0;
+    }
+    if (payload.size() >= kTypedCapabilityV4PayloadSize) {
+        out.hasFirmwareIdentity = true;
+        out.firmwareIdentityVersion = p[112];
+        out.firmwareDirty = p[113] != 0;
+        out.firmwareIrqMode = p[114];
+        out.firmwareBuildEpoch = typedReadU32Le(p + 116);
+        out.firmwareBuildId = typedReadU32Le(p + 120);
+        out.mcpSpiHz = typedReadU32Le(p + 124);
+        out.canRecordDrainBudget = typedReadU16Le(p + 128);
+        out.serialRingKiB = typedReadU16Le(p + 130);
+        out.firmwareGitSha = QString::fromLatin1(reinterpret_cast<const char*>(p + 132), 12).trimmed();
+        out.firmwareEnvName = QString::fromLatin1(reinterpret_cast<const char*>(p + 144), 48).trimmed();
+    }
+    if (payload.size() >= kTypedCapabilityV5PayloadSize) {
+        out.hasPassivePolicy = true;
+        out.firmwareProfile = p[192];
+        out.profileLockState = p[193];
+        out.vehicleImpactState = p[194];
+        out.hostCommandRx = p[195] != 0;
+        out.controlPath = p[196] != 0;
+        out.usbBackpressureIsolated = p[197] != 0;
+        out.dtrResetSensitive = p[198] != 0;
+        out.passiveAcceptanceAllowed = p[199] != 0;
+        out.hardwareSafetyCaseId = typedReadU32Le(p + 200);
+        out.benchVerificationId = typedReadU32Le(p + 204);
+        for (int index = 0; index < 2; ++index) {
+            const qsizetype offset = 208 + qsizetype(index) * 4;
+            out.busMode[index] = p[offset + 0];
+            out.busAckCapable[index] = p[offset + 1] != 0;
+            out.busErrorFrameCapable[index] = p[offset + 2] != 0;
+            out.busTransceiverResetSafe[index] = p[offset + 3] != 0;
+        }
+        out.usbCdcDtrSessionRequired = p[216] != 0;
+        out.usbCdcDtrSessionOnly = p[217] != 0;
     }
     return out;
 }

@@ -340,6 +340,7 @@ void TransportSession::updateCoreTransportSummary(const QJsonObject& payload) {
         m_serialOpenMode = policy.value(QStringLiteral("serial_open_mode")).toString(m_serialOpenMode);
         m_dtrPolicy = policy.value(QStringLiteral("dtr_policy")).toString(m_dtrPolicy);
         m_rtsPolicy = policy.value(QStringLiteral("rts_policy")).toString(m_rtsPolicy);
+        m_dtrSessionOnly = policy.value(QStringLiteral("dtr_session_only")).toBool(m_dtrSessionOnly);
         m_hostTxEnabled = policy.value(QStringLiteral("host_tx_enabled")).toBool(m_hostTxEnabled);
         m_controlEnabled = policy.value(QStringLiteral("control_enabled")).toBool(m_controlEnabled);
         m_labGatewayEnabled = policy.value(QStringLiteral("lab_gateway_enabled")).toBool(m_labGatewayEnabled);
@@ -490,8 +491,10 @@ QString TransportSession::boardEventLevel() const {
 }
 
 QString TransportSession::level() const {
+    const bool dtrPolicyAllowed = m_dtrPolicy == QStringLiteral("no_touch") ||
+                                  (m_dtrPolicy == QStringLiteral("assert_true") && m_dtrSessionOnly);
     const bool passiveUnsafePolicy = m_serialOpenMode != QStringLiteral("read_only") ||
-                                     m_dtrPolicy != QStringLiteral("no_touch") ||
+                                     !dtrPolicyAllowed ||
                                      m_rtsPolicy != QStringLiteral("no_touch") ||
                                      m_hostTxEnabled ||
                                      m_controlEnabled ||
@@ -632,8 +635,10 @@ QVariantList TransportSession::rows() const {
     const QString drainTraceRowLevel = drainTraceLevel(m_drainEventTrace);
     const QString analysisQueueLevel = m_analysisOverrunFrames > 0 || m_analysisTruthLoss > 0 ? QStringLiteral("ERR")
         : (m_analysisCapacityFrames > 0 && m_analysisMaxQueuedFrames > (m_analysisCapacityFrames * 3 / 4) ? QStringLiteral("WARN") : QStringLiteral("OK"));
+    const bool dtrPolicyAllowed = m_dtrPolicy == QStringLiteral("no_touch") ||
+                                  (m_dtrPolicy == QStringLiteral("assert_true") && m_dtrSessionOnly);
     const bool passiveUnsafePolicy = m_serialOpenMode != QStringLiteral("read_only") ||
-                                     m_dtrPolicy != QStringLiteral("no_touch") ||
+                                     !dtrPolicyAllowed ||
                                      m_rtsPolicy != QStringLiteral("no_touch") ||
                                      m_hostTxEnabled ||
                                      m_controlEnabled ||
@@ -648,7 +653,7 @@ QVariantList TransportSession::rows() const {
             QStringLiteral("%1 / %2").arg(m_runtimeProfileKey, m_vehicleImpactState),
             QStringLiteral("serial %1 dtr %2 rts %3 host_tx %4 control %5 lab_gateway %6")
                 .arg(m_serialOpenMode,
-                     m_dtrPolicy,
+                     m_dtrSessionOnly ? QStringLiteral("%1(session-only)").arg(m_dtrPolicy) : m_dtrPolicy,
                      m_rtsPolicy,
                      m_hostTxEnabled ? QStringLiteral("on") : QStringLiteral("off"),
                      m_controlEnabled ? QStringLiteral("on") : QStringLiteral("off"),

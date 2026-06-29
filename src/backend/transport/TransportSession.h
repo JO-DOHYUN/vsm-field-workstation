@@ -203,6 +203,7 @@ private:
     QString m_serialOpenMode = QStringLiteral("read_only");
     QString m_dtrPolicy = QStringLiteral("no_touch");
     QString m_rtsPolicy = QStringLiteral("no_touch");
+    bool m_dtrSessionOnly = false;
     bool m_hostTxEnabled = false;
     bool m_controlEnabled = false;
     bool m_labGatewayEnabled = false;
