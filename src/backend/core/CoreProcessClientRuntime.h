@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/CoreIpcClientRuntime.h"
+#include "core/RuntimeProfile.h"
 #include "core/CoreViewClientRuntime.h"
 
 #include <QByteArray>
@@ -25,6 +26,8 @@ public:
     bool isActive() const;
     bool isIpcConnected() const;
     QString serverName() const { return m_serverName; }
+    RuntimeProfile runtimeProfile() const { return m_runtimeProfile; }
+    void setRuntimeProfile(const RuntimeProfile& profile) { if (!isActive()) m_runtimeProfile = profile; }
     QJsonObject statusJson() const;
 
     bool requestView(const CoreViewClientRuntime::ViewRequest& request);
@@ -103,6 +106,7 @@ private:
 
     QProcess m_process;
     CoreIpcClientRuntime m_client;
+    RuntimeProfile m_runtimeProfile = runtimeProfileFromEnvironmentOrDefault();
     QByteArray m_stdoutBuffer;
     QString m_serverName;
     QString m_pendingTransportMode;

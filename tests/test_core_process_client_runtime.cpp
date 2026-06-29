@@ -45,6 +45,7 @@ private slots:
 
     void rejectsInvalidGatewayEndpoint() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
         QString error;
         QVERIFY(!runtime.startGatewayTcp(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE),
                                          QStringLiteral("COM7"),
@@ -53,8 +54,19 @@ private slots:
         QVERIFY(!runtime.isActive());
     }
 
+    void passiveProfileRejectsGatewayBeforeProcessStart() {
+        CanMonitorCore::CoreProcessClientRuntime runtime;
+        QString error;
+        QVERIFY(!runtime.startGatewayTcp(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE),
+                                         QStringLiteral("tcp://127.0.0.1:9"),
+                                         &error));
+        QVERIFY(error.contains(QStringLiteral("runtime profile")));
+        QVERIFY(!runtime.isActive());
+    }
+
     void launchesGatewayModeAndKeepsIpcAlive() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
         QSignalSpy snapshotSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::viewSnapshotReady);
 
         QString error;
@@ -87,6 +99,7 @@ private slots:
 
     void startsGatewayViaIpcOnExistingCoreProcess() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
         QSignalSpy snapshotSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::viewSnapshotReady);
 
         QString error;
@@ -125,6 +138,7 @@ private slots:
 
     void queuesTransportStartUntilIpcConnects() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
         QSignalSpy snapshotSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::viewSnapshotReady);
 
         QString error;
@@ -161,6 +175,7 @@ private slots:
 
     void reportsHostFrameFailureWhenCoreTransportIsNotStarted() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
         QSignalSpy writeSpy(&runtime, &CanMonitorCore::CoreProcessClientRuntime::hostFrameWriteResult);
 
         QString error;
@@ -181,6 +196,7 @@ private slots:
 
     void acceptsControlCycleCommandsOverIpc() {
         CanMonitorCore::CoreProcessClientRuntime runtime;
+        runtime.setRuntimeProfile(CanMonitorCore::fullInstrumentedProfile());
 
         QString error;
         QVERIFY2(runtime.startServerOnly(QStringLiteral(CAN_MONITOR_CORE_PROCESS_EXE), &error), qPrintable(error));

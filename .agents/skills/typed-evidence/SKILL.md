@@ -8,6 +8,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 ## Invariants
 - Legacy 20-byte packet path remains compatibility mode.
 - Production truth is the typed board stream original bytes.
+- Passive Product VSM must be a read-only typed evidence consumer: no serial write, no DTR/RTS touch, no host TX/control, no COM-owning gateway.
 - Voltage raw, board health/event, CAN RX, CAN TX audit, and control ack remain separate evidence types.
 - Voltage samples must not be represented as fake CAN frames.
 - Live production stream is typed evidence only; legacy 20-byte remains replay/import compatibility.
@@ -18,6 +19,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 - UI projection/drop/sampling may reduce displayed raw rows only; truth analysis must consume every accepted `CAN_RX_RAW` or report `truth_loss`.
 - Live truth state keys must include bus identity, at minimum `bus + canId + ext + rtr`.
 - Debug gateway capture is opt-in and external to the normal app hot loop; it can preserve raw serial evidence, but it does not replace VSM final capture validation.
+- COM-owning debug gateway is Full/Instrumented lab-only and cannot be used as passive field acceptance.
 - `capture.stream/index` is the authoritative typed evidence truth; UI/raw tail/graph/analysis rows are bounded derived views.
 
 ## Workflow
@@ -36,4 +38,5 @@ description: Use when working on board typed stream parsing, typed capture stora
 - analysis input queue grows without a hard bound or overflow diagnostic
 - display drop is reported as parser/storage/CSM CAN drop
 - debug gateway raw capture is used to claim PASS when VSM `capture.stream` is missing, stale, or corrupt
+- passive product profile allows host TX/control/gateway execution
 - UI consumes raw typed evidence directly instead of querying Core materialized views

@@ -73,9 +73,10 @@ void addDecodedTailSemantics(QJsonObject& payload) {
 
 } // namespace
 
-CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(QObject* parent)
+CaptureCoreProcessRuntime::CaptureCoreProcessRuntime(RuntimeProfile profile, QObject* parent)
     : QObject(parent)
-    , m_ipc(&m_viewStore, this) {
+    , m_profile(std::move(profile))
+    , m_ipc(&m_viewStore, m_profile, this) {
     connect(&m_ipc,
             &CoreIpcServerRuntime::hostFrameRequested,
             this,
@@ -151,6 +152,8 @@ void CaptureCoreProcessRuntime::startSerial(const QString& portName) {
     m_transportMessage = QStringLiteral("opening serial: %1").arg(portName);
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("opening_serial")},
                                        {QStringLiteral("endpoint"), portName},
+                                       {QStringLiteral("runtime_profile"), m_profile.key()},
+                                       {QStringLiteral("transport_policy"), m_profile.transportPolicy().toJson()},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")}},
                            CoreViewSeverity::Warn,
                            QJsonObject{{QStringLiteral("transport"), QStringLiteral("opening_serial")}});
@@ -161,6 +164,22 @@ void CaptureCoreProcessRuntime::startSerial(const QString& portName) {
 }
 
 void CaptureCoreProcessRuntime::startGatewayTcp(const QString& endpoint) {
+    if (!m_profile.transportPolicy().labGatewayEnabled) {
+        const QString message = QStringLiteral("Gateway TCP is disabled by runtime profile: %1").arg(m_profile.key());
+        m_transportConnected = false;
+        m_transportMessage = message;
+        updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("gateway_tcp_blocked")},
+                                           {QStringLiteral("endpoint"), endpoint},
+                                           {QStringLiteral("runtime_profile"), m_profile.key()},
+                                           {QStringLiteral("transport_policy"), m_profile.transportPolicy().toJson()},
+                                           {QStringLiteral("serial_owner"), QStringLiteral("core")},
+                                           {QStringLiteral("message"), message}},
+                               CoreViewSeverity::Error,
+                               QJsonObject{{QStringLiteral("transport"), QStringLiteral("gateway_tcp_blocked")}});
+        publishFatalDiagnostic(QStringLiteral("lab_gateway_disabled_by_profile"), message);
+        emit errorOccurred(message);
+        return;
+    }
     ensureTransportRuntime();
     m_transportConnected = false;
     m_transportMessage = QStringLiteral("opening gateway TCP: %1").arg(endpoint);
@@ -193,7 +212,8 @@ QJsonObject CaptureCoreProcessRuntime::statusJson() const {
                     {QStringLiteral("server_name"), m_ipc.serverName()},
                     {QStringLiteral("transport_started"), m_transportRuntimeStarted},
                     {QStringLiteral("transport_connected"), m_transportConnected},
-                    {QStringLiteral("transport_message"), m_transportMessage}};
+                    {QStringLiteral("transport_message"), m_transportMessage},
+                    {QStringLiteral("runtime_profile"), m_profile.toJson()}};
     out.insert(QStringLiteral("ipc"), m_ipc.statusJson());
     return out;
 }
@@ -204,7 +224,7 @@ void CaptureCoreProcessRuntime::ensureTransportRuntime() {
     m_drainQueue = QSharedPointer<CanMonitorTransport::DrainByteQueue>::create();
     m_captureQueue = QSharedPointer<CanMonitorTransport::TypedRecordHandoffQueue>::create();
 
-    auto* drain = new CanMonitorTransport::SerialDrainRuntime(m_drainQueue);
+    auto* drain = new CanMonitorTransport::SerialDrainRuntime(m_drainQueue, m_profile.transportPolicy());
     auto* pipeline = new CanMonitorTransport::TypedEvidencePipelineWorkerRuntime(m_drainQueue, m_captureQueue);
     m_drainRuntime = drain;
     m_pipelineRuntime = pipeline;
@@ -828,8 +848,11 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
     m_pipelineTransportSeverity = CoreViewSeverity::Ok;
     m_analysisSeverity = CoreViewSeverity::Ok;
     updateCoreHealth(QStringLiteral("ready"));
+    updateProfileStatus();
     updateTransportSummary(QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")},
                                        {QStringLiteral("serial_owner"), QStringLiteral("core")},
+                                       {QStringLiteral("runtime_profile"), m_profile.key()},
+                                       {QStringLiteral("transport_policy"), m_profile.transportPolicy().toJson()},
                                        {QStringLiteral("capture_active"), false}},
                            CoreViewSeverity::Ok,
                            QJsonObject{{QStringLiteral("transport"), QStringLiteral("idle")}});
@@ -856,11 +879,25 @@ void CaptureCoreProcessRuntime::seedInitialViews() {
                                          QJsonObject{{QStringLiteral("fatal_count"), QStringLiteral("0")}}));
 }
 
+void CaptureCoreProcessRuntime::updateProfileStatus(CoreViewSeverity severity) {
+    QJsonObject payload = m_profile.toJson();
+    payload.insert(QStringLiteral("source"), QStringLiteral("capture_core_runtime_profile"));
+    payload.insert(QStringLiteral("serial_owner"), QStringLiteral("core"));
+    payload.insert(QStringLiteral("production_safety_contract"), QStringLiteral("passive_product_default_no_host_tx_no_control_no_lab_gateway"));
+    payload.insert(QStringLiteral("acceptance_note"), QStringLiteral("vehicle passive acceptance still requires CSM capability and hardware safety evidence"));
+    publishChange(m_viewStore.updateView(CoreViewName::ProfileStatus,
+                                         payload,
+                                         severity,
+                                         QJsonObject{{QStringLiteral("runtime_profile"), m_profile.key()},
+                                                     {QStringLiteral("vehicle_impact_state"), vehicleImpactStateToString(m_profile.impactState())}}));
+}
+
 void CaptureCoreProcessRuntime::updateCoreHealth(const QString& state, CoreViewSeverity severity) {
     publishChange(m_viewStore.updateView(CoreViewName::CoreHealth,
                                          QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
                                                      {QStringLiteral("state"), state},
                                                      {QStringLiteral("build"), buildInfoJson()},
+                                                     {QStringLiteral("runtime_profile"), m_profile.toJson()},
                                                      {QStringLiteral("pid"), QString::number(QCoreApplication::applicationPid())}},
                                          severity,
                                          QJsonObject{{QStringLiteral("state"), state}}));
@@ -886,6 +923,9 @@ void CaptureCoreProcessRuntime::updateTransportSummary(const QJsonObject& payloa
         mergedPayload.insert(QStringLiteral("message"), m_transportMessage);
     }
     mergedPayload.insert(QStringLiteral("serial_owner"), QStringLiteral("core"));
+    mergedPayload.insert(QStringLiteral("runtime_profile"), m_profile.key());
+    mergedPayload.insert(QStringLiteral("vehicle_impact_state"), vehicleImpactStateToString(m_profile.impactState()));
+    mergedPayload.insert(QStringLiteral("transport_policy"), m_profile.transportPolicy().toJson());
 
     QJsonObject mergedCounts = m_pipelineTransportCheapCounts;
     for (auto it = m_analysisTransportCheapCounts.constBegin(); it != m_analysisTransportCheapCounts.constEnd(); ++it) {
@@ -1040,12 +1080,25 @@ void CaptureCoreProcessRuntime::handleHostFrameRequested(quint64 requestId, cons
         m_ipc.publishHostFrameWriteResult(requestId, false, summary, 0);
         return;
     }
+    if (!m_profile.transportPolicy().hostTxEnabled) {
+        const QString message = QStringLiteral("Host TX blocked by runtime profile: %1").arg(m_profile.key());
+        publishFatalDiagnostic(QStringLiteral("host_tx_disabled_by_profile"), message, QJsonObject{{QStringLiteral("summary"), summary}});
+        m_ipc.publishHostFrameWriteResult(requestId, false, QStringLiteral("%1 | %2").arg(summary, message), 0);
+        return;
+    }
     sendCoreHostFrame(requestId, frame, summary);
 }
 
 void CaptureCoreProcessRuntime::sendCoreHostFrame(quint64 requestId, const QByteArray& frame, const QString& summary) {
     if (frame.isEmpty()) {
         m_ipc.publishHostFrameWriteResult(requestId, false, summary, 0);
+        return;
+    }
+    if (!m_profile.transportPolicy().hostTxEnabled) {
+        m_ipc.publishHostFrameWriteResult(requestId,
+                                          false,
+                                          QStringLiteral("%1 | host tx disabled by profile %2").arg(summary, m_profile.key()),
+                                          0);
         return;
     }
     if (!m_drainRuntime || !m_transportRuntimeStarted || !m_transportConnected) {
@@ -1066,6 +1119,13 @@ void CaptureCoreProcessRuntime::publishHostFrameWriteResult(bool ok, const QStri
 }
 
 void CaptureCoreProcessRuntime::handleControlCycleRequested(quint64, const QString& action, const QJsonObject& payload) {
+    if (!m_profile.transportPolicy().controlCycleEnabled) {
+        stopControlCycle();
+        const QString message = QStringLiteral("Control cycle blocked by runtime profile: %1").arg(m_profile.key());
+        publishFatalDiagnostic(QStringLiteral("control_disabled_by_profile"), message, QJsonObject{{QStringLiteral("action"), action}});
+        emit errorOccurred(message);
+        return;
+    }
     if (action == QStringLiteral("start")) {
         startControlCycle(payload);
     } else if (action == QStringLiteral("update")) {

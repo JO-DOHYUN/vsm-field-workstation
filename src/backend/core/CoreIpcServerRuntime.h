@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/CoreMaterializedViewStore.h"
+#include "core/RuntimeProfile.h"
 
 #include <QHash>
 #include <QLocalServer>
@@ -17,7 +18,9 @@ namespace CanMonitorCore {
 class CoreIpcServerRuntime : public QObject {
     Q_OBJECT
 public:
-    explicit CoreIpcServerRuntime(CoreMaterializedViewStore* viewStore, QObject* parent = nullptr);
+    explicit CoreIpcServerRuntime(CoreMaterializedViewStore* viewStore,
+                                  RuntimeProfile profile = passiveProductProfile(),
+                                  QObject* parent = nullptr);
     ~CoreIpcServerRuntime() override;
 
     bool listen(const QString& serverName, QString* errorOut = nullptr);
@@ -62,6 +65,7 @@ private:
     QJsonObject errorResponse(const QJsonObject& request, const QString& code, const QString& detail) const;
 
     CoreMaterializedViewStore* m_viewStore = nullptr;
+    RuntimeProfile m_runtimeProfile;
     QLocalServer m_server;
     QVector<QPointer<QLocalSocket>> m_clients;
     QHash<QLocalSocket*, QByteArray> m_buffers;

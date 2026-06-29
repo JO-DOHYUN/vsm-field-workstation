@@ -3,6 +3,7 @@
 #include "transport/DrainByteQueue.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LivePathTelemetry.h"
+#include "core/RuntimeProfile.h"
 
 #include <QElapsedTimer>
 #include <QJsonObject>
@@ -16,7 +17,9 @@ namespace CanMonitorTransport {
 class SerialDrainRuntime : public QObject {
     Q_OBJECT
 public:
-    explicit SerialDrainRuntime(QSharedPointer<DrainByteQueue> queue, QObject* parent = nullptr);
+    explicit SerialDrainRuntime(QSharedPointer<DrainByteQueue> queue,
+                                CanMonitorCore::RuntimeTransportPolicy policy = CanMonitorCore::passiveProductProfile().transportPolicy(),
+                                QObject* parent = nullptr);
 
 public slots:
     void startSerial(const QString& portName);
@@ -59,6 +62,7 @@ private:
     void emitBytesAvailableCoalesced();
 
     QSharedPointer<DrainByteQueue> m_queue;
+    CanMonitorCore::RuntimeTransportPolicy m_policy;
     QSerialPort* m_serial = nullptr;
     QTcpSocket* m_tcp = nullptr;
     HostTxRuntime m_hostTx;

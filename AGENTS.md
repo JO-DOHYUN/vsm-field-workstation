@@ -38,9 +38,13 @@
 - 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary, telemetry, tests, exit condition을 같은 slice에 포함한다.
 - live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라 capture-core ownership 문제로 먼저 의심한다.
 - VSM long-run live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다.
+- VSM field/product 기본 실행은 Passive-Safe 2+1 기준이다: `vsm-ui.exe + vsm-capture-core.exe`가 기본 2프로세스이고, debug/tap은 기본 OFF인 별도 plane이다.
+- Passive Product profile에서는 VSM이 serial read-only로 열고 DTR/RTS를 건드리지 않으며 host TX, control cycle, COM-owning lab gateway를 실행하지 않는다.
+- Full/Instrumented profile은 bench/lab 전용이며 실차 PASS나 passive product acceptance로 주장하지 않는다.
 - `capture.stream/index`만 authoritative truth이며 UI/graph/raw tail/analysis rows는 bounded materialized view로 다룬다.
 - live/capture-core 리팩토링은 데이터 흐름도, owner/consumer/drop policy, 기존 owner 위반 검색을 먼저 끝낸 뒤 기능 이동과 구 경로 삭제를 진행한다.
 - 금지 경계: `TypedRecordList` UI/analysis/projection 공용 fanout, `AppController` transport raw state 조립, diagnostics payload 기반 runtime state 갱신, UI projection의 timing truth 사용, storage `frameBytes` live view 전달.
+- 금지 경계: RuntimeProfile을 우회한 `QIODevice::ReadWrite` serial open, DTR/RTS hard assert, passive profile에서 host_frame/control_cycle/gateway_tcp 실행.
 
 ## 4. 작업 라우팅
 - capture-core memory/hot path/slab/bounded queue/projection snapshot: `.agents/skills/capture-core-memory/SKILL.md`
@@ -57,6 +61,7 @@
 - typed stream/protocol: `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`, `shared/protocol/typed_stream_v1.md`
 - capture-core memory architecture: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
 - core data/view/tap architecture: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
+- passive-safe product architecture: `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
 - data ownership boundary rules: `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
 - control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
 - build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`

@@ -457,22 +457,24 @@ private slots:
         drainTrace.insert(QStringLiteral("latest_handoff_pending_keys"), QStringLiteral("14"));
         session.updateDrainEventTrace(drainTrace);
         const QVariantList rows = session.rows();
-        QCOMPARE(rows.size(), 15);
-        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_storage"));
-        QCOMPARE(rows.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("typed_parser"));
-        QCOMPARE(rows.at(1).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("ERR"));
-        QCOMPARE(rows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
-        QVERIFY(rows.at(2).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("ready_max_us 100")));
-        QCOMPARE(rows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
-        QCOMPARE(rows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
-        QVERIFY(rows.at(4).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("processed 100")));
-        QCOMPARE(rows.at(5).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_tx_queue"));
-        QCOMPARE(rows.at(5).toMap().value(QStringLiteral("blocking")).toBool(), true);
-        QCOMPARE(rows.at(6).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_health"));
-        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
-        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
-        QVERIFY(rows.at(7).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("large_pool 9/40")));
-        QVERIFY(rows.at(7).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("can_q_high 11")));
+        QCOMPARE(rows.size(), 16);
+        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_safety_profile"));
+        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
+        QCOMPARE(rows.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_storage"));
+        QCOMPARE(rows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("typed_parser"));
+        QCOMPARE(rows.at(2).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("ERR"));
+        QCOMPARE(rows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
+        QVERIFY(rows.at(3).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("ready_max_us 100")));
+        QCOMPARE(rows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
+        QCOMPARE(rows.at(5).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
+        QVERIFY(rows.at(5).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("processed 100")));
+        QCOMPARE(rows.at(6).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_tx_queue"));
+        QCOMPARE(rows.at(6).toMap().value(QStringLiteral("blocking")).toBool(), true);
+        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_health"));
+        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
+        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
+        QVERIFY(rows.at(8).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("large_pool 9/40")));
+        QVERIFY(rows.at(8).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("can_q_high 11")));
 
         uplink.serialBackpressureTotal = 0;
         uplink.serialEnqueueFailTotal = 24;
@@ -480,44 +482,44 @@ private slots:
         session.updateHostTxQueue(0, 0, 5, 2, 0);
         session.updateBoardHealth(0, 0, 100, uplink);
         QCOMPARE(session.level(), QStringLiteral("WARN"));
-        QCOMPARE(session.rows().at(7).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
-        QCOMPARE(session.rows().at(7).toMap().value(QStringLiteral("blocking")).toBool(), false);
+        QCOMPARE(session.rows().at(8).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
+        QCOMPARE(session.rows().at(8).toMap().value(QStringLiteral("blocking")).toBool(), false);
 
         uplink.canTruthPoolAllocFailTotal = 1;
         session.updateBoardHealth(0, 0, 100, uplink);
         QCOMPARE(session.level(), QStringLiteral("ERR"));
-        QCOMPARE(session.rows().at(7).toMap().value(QStringLiteral("blocking")).toBool(), true);
+        QCOMPARE(session.rows().at(8).toMap().value(QStringLiteral("blocking")).toBool(), true);
         uplink.canTruthPoolAllocFailTotal = 0;
 
         uplink.serialRingClearTotal = 1;
         session.updateBoardHealth(0, 0, 100, uplink);
         QCOMPARE(session.level(), QStringLiteral("ERR"));
-        QCOMPARE(session.rows().at(7).toMap().value(QStringLiteral("blocking")).toBool(), true);
+        QCOMPARE(session.rows().at(8).toMap().value(QStringLiteral("blocking")).toBool(), true);
 
-        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_events"));
-        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("OK"));
+        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_events"));
+        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("OK"));
         session.noteBoardEvent(9, 0x0618, 13, 123456);
         const QVariantList eventRows = session.rows();
-        QCOMPARE(eventRows.at(8).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
-        QVERIFY(eventRows.at(8).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("MCP2515 1")));
-        QVERIFY(eventRows.at(8).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("0X0618:1")));
-        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_latest"));
-        QVERIFY(rows.at(9).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("display_loss 0")));
-        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("decoded_can_tail"));
-        QVERIFY(rows.at(10).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("segment_bytes 4096")));
-        QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
-        QVERIFY(rows.at(11).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));
-        QCOMPARE(rows.at(12).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
-        QCOMPARE(rows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
-        QVERIFY(rows.at(13).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("parsed 100")));
-        QVERIFY(rows.at(13).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("seq 3/3")));
-        QVERIFY(rows.at(13).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("snap 5/5/5")));
-        QCOMPARE(rows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("readyRead/s 120")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("statusRx proj/latest/typed 4/5/6")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("analysis pend 7")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("raw pend 10/2048B")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("latest emit 12/1300")));
+        QCOMPARE(eventRows.at(9).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
+        QVERIFY(eventRows.at(9).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("MCP2515 1")));
+        QVERIFY(eventRows.at(9).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("0X0618:1")));
+        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_latest"));
+        QVERIFY(rows.at(10).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("display_loss 0")));
+        QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("decoded_can_tail"));
+        QVERIFY(rows.at(11).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("segment_bytes 4096")));
+        QCOMPARE(rows.at(12).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
+        QVERIFY(rows.at(12).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("budget_hits 3")));
+        QCOMPARE(rows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_delay"));
+        QCOMPARE(rows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("parsed 100")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("seq 3/3")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("snap 5/5/5")));
+        QCOMPARE(rows.at(15).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
+        QVERIFY(rows.at(15).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("readyRead/s 120")));
+        QVERIFY(rows.at(15).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("statusRx proj/latest/typed 4/5/6")));
+        QVERIFY(rows.at(15).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("analysis pend 7")));
+        QVERIFY(rows.at(15).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("raw pend 10/2048B")));
+        QVERIFY(rows.at(15).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("latest emit 12/1300")));
     }
 
     void transportSessionMapsCoreTransportSummary() {
@@ -553,12 +555,13 @@ private slots:
 
         session.updateCoreTransportSummary(payload);
         const QVariantList rows = session.rows();
-        QVERIFY(rows.at(1).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("frames 42")));
-        QVERIFY(rows.at(1).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("drop 3")));
-        QVERIFY(rows.at(2).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("bytes 12345 reads 7")));
-        QVERIFY(rows.at(2).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("ready_max_us 91")));
-        QVERIFY(rows.at(9).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("observed 12 emitted 10")));
-        QVERIFY(rows.at(11).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("projected 11")));
+        QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_safety_profile"));
+        QVERIFY(rows.at(2).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("frames 42")));
+        QVERIFY(rows.at(2).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("drop 3")));
+        QVERIFY(rows.at(3).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("bytes 12345 reads 7")));
+        QVERIFY(rows.at(3).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("ready_max_us 91")));
+        QVERIFY(rows.at(10).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("observed 12 emitted 10")));
+        QVERIFY(rows.at(12).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("projected 11")));
         QCOMPARE(session.parserFaultCount(), quint64(10));
     }
 

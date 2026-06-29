@@ -1,5 +1,20 @@
 # VSM Core Data/View/Tap Architecture
 
+## Passive-Safe Runtime Profile
+VSM product default is `passive_product`.
+
+- UI process: `vsm-ui.exe` / `can_monitor_qml_reboot.exe`
+- Core process: `vsm-capture-core.exe --profile passive_product`
+- Optional debug/tap: default OFF, separate plane
+- Serial open: read-only
+- DTR/RTS: no-touch
+- Host TX/control/lab gateway: disabled
+- `profile_status` is a Core materialized view and exposes this runtime contract.
+
+`full_instrumented` is bench/lab only. It may open serial read/write, touch DTR/RTS,
+send host TX/control, or run a COM-owning gateway, but it must not be used as a
+vehicle passive product acceptance result.
+
 ## 목적
 VSM live production 구조의 장기 기준은 단순한 3개 프로세스 분리가 아니라
 `Core-owned Data Plane + View Query Plane + Optional Debug Tap Plane`이다.

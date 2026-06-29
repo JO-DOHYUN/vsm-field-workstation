@@ -35,6 +35,8 @@ qt_add_executable(can_monitor_qml_reboot
     src/backend/TypedRecords.cpp
     src/backend/core/CoreViewTypes.h
     src/backend/core/CoreViewTypes.cpp
+    src/backend/core/RuntimeProfile.h
+    src/backend/core/RuntimeProfile.cpp
     src/backend/core/CoreViewClientRuntime.h
     src/backend/core/CoreViewClientRuntime.cpp
     src/backend/core/CoreIpcClientRuntime.h
@@ -160,6 +162,8 @@ qt_add_executable(vsm_capture_core
     src/backend/StorageRuntime.cpp
     src/backend/core/CoreViewTypes.h
     src/backend/core/CoreViewTypes.cpp
+    src/backend/core/RuntimeProfile.h
+    src/backend/core/RuntimeProfile.cpp
     src/backend/core/CoreMaterializedViewStore.h
     src/backend/core/CoreMaterializedViewStore.cpp
     src/backend/core/CaptureCoreProcessRuntime.h
@@ -234,6 +238,8 @@ qt_add_resources(vsm_capture_core "vsm_capture_core_data"
         data/vms_rules_MERGED_R13.json
         data/vms_model_drive_turn77_canzip_final_rev3.json
         data/vms_model_turn77_system_drive_merged_realcan_refresh2_final.json
+        profiles/passive_product.profile.json
+        profiles/full_instrumented.profile.json
 )
 target_include_directories(vsm_capture_core PRIVATE src src/backend)
 target_compile_definitions(vsm_capture_core
@@ -260,6 +266,8 @@ qt_add_resources(can_monitor_qml_reboot "can_monitor_data"
         data/vms_rules_MERGED_R13.json
         data/vms_model_drive_turn77_canzip_final_rev3.json
         data/vms_model_turn77_system_drive_merged_realcan_refresh2_final.json
+        profiles/passive_product.profile.json
+        profiles/full_instrumented.profile.json
 )
 
 target_include_directories(can_monitor_qml_reboot PRIVATE src src/backend)

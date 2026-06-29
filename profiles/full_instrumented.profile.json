@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "runtime_profile": "full_instrumented",
+  "display_name": "Full Instrumented",
+  "vehicle_impact_state_default": "active_possible",
+  "passive_acceptance_allowed": false,
+  "bench_or_lab_only": true,
+  "serial": {
+    "open_mode": "read_write",
+    "dtr_policy": "assert_true",
+    "rts_policy": "assert_true"
+  },
+  "host_tx": {
+    "enabled": true,
+    "ipc_hard_reject": false,
+    "requires_audit": true
+  },
+  "control": {
+    "enabled": true,
+    "ipc_hard_reject": false,
+    "requires_unlock": true,
+    "requires_lease_timeout": true,
+    "requires_audit": true
+  },
+  "debug": {
+    "lab_gateway_enabled": true,
+    "sidecar_attach_allowed": true,
+    "com_owner_allowed": true
+  }
+}

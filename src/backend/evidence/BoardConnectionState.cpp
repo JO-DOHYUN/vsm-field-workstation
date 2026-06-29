@@ -94,6 +94,33 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
     out.profileMinor = m_capabilitySeen ? m_capability.profileMinor : 0;
     out.safetyState = m_healthSeen ? m_health.safetyState : 0;
     out.faultFlags = m_healthSeen ? m_health.faultFlags : 0;
+    bool busActiveCapable = false;
+    if (m_capabilitySeen) {
+        for (const TypedCapabilityBusDescriptor& bus : m_capability.buses) {
+            if (bus.txSupported || bus.controlTxAllowed) {
+                busActiveCapable = true;
+                break;
+            }
+        }
+    }
+    out.csmActiveCapable = m_capabilitySeen &&
+        (m_capability.supportsCanTxRaw ||
+         m_capability.supportedDownlinkRecords != 0 ||
+         m_capability.hostTxQueueSize != 0 ||
+         busActiveCapable);
+    out.csmPassiveCapabilityCandidate = m_capabilitySeen &&
+        !out.csmActiveCapable &&
+        m_capability.supportsCanRxRaw &&
+        m_capability.supportsBoardHealth;
+    if (!m_capabilitySeen) {
+        out.profileMatchResult = QStringLiteral("blocked_unknown");
+    } else if (out.csmActiveCapable) {
+        out.profileMatchResult = QStringLiteral("blocked_active_csm");
+    } else if (out.csmPassiveCapabilityCandidate) {
+        out.profileMatchResult = QStringLiteral("csm_passive_candidate_hardware_unverified");
+    } else {
+        out.profileMatchResult = QStringLiteral("blocked_incomplete_csm_capability");
+    }
 
     out.boardAlive = out.serialOpen
         && out.capabilitySeen

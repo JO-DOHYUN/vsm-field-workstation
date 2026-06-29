@@ -113,6 +113,14 @@ RULES = (
         path_hints=("src/backend/transport", "src/backend/SerialWorker", "src/backend/core"),
         allow_hints=("CoreView", "ViewChanged"),
     ),
+    Rule(
+        "passive_serial_policy_bypass",
+        "Production serial open must not hard-code read/write mode or DTR/RTS assertion outside RuntimeProfile policy.",
+        re.compile(r"open\s*\(\s*QIODevice::ReadWrite\s*\)|setDataTerminalReady\s*\(\s*true\s*\)|setRequestToSend\s*\(\s*true\s*\)"),
+        True,
+        path_hints=("src/backend",),
+        allow_hints=("RuntimeProfile.cpp",),
+    ),
 )
 
 

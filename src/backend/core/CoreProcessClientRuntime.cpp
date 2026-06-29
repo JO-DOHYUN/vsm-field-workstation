@@ -61,6 +61,10 @@ bool CoreProcessClientRuntime::startSerial(const QString& executablePath, const 
 }
 
 bool CoreProcessClientRuntime::startGatewayTcp(const QString& executablePath, const QString& endpoint, QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+        if (errorOut) *errorOut = QStringLiteral("gateway tcp disabled by runtime profile: %1").arg(m_runtimeProfile.key());
+        return false;
+    }
     const QString normalized = endpoint.trimmed();
     if (!normalized.startsWith(QStringLiteral("tcp://"))) {
         if (errorOut) *errorOut = QStringLiteral("invalid core process gateway endpoint: %1").arg(endpoint);
@@ -138,6 +142,7 @@ QJsonObject CoreProcessClientRuntime::statusJson() const {
                        {QStringLiteral("core_process_transport_open_timeouts"), QString::number(m_transportOpenTimeouts)},
                        {QStringLiteral("core_process_transport_open_pending"), m_transportOpenPending},
                        {QStringLiteral("core_process_ipc_retry_scheduled"), m_connectRetryScheduled},
+                       {QStringLiteral("runtime_profile"), m_runtimeProfile.toJson()},
                        {QStringLiteral("core_process_message"), m_lastMessage}};
 }
 
@@ -147,6 +152,10 @@ bool CoreProcessClientRuntime::requestView(const CoreViewClientRuntime::ViewRequ
 }
 
 bool CoreProcessClientRuntime::sendHostFrame(const QByteArray& frame, const QString& summary, QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().hostTxEnabled) {
+        if (errorOut) *errorOut = QStringLiteral("host tx disabled by runtime profile: %1").arg(m_runtimeProfile.key());
+        return false;
+    }
     if (frame.isEmpty()) {
         if (errorOut) *errorOut = QStringLiteral("empty core process host frame");
         return false;
@@ -169,6 +178,10 @@ bool CoreProcessClientRuntime::startControlCycle(int signedCommand,
                                                  int periodMs,
                                                  int frameGapMs,
                                                  QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().controlCycleEnabled) {
+        if (errorOut) *errorOut = QStringLiteral("control cycle disabled by runtime profile: %1").arg(m_runtimeProfile.key());
+        return false;
+    }
     if (!m_client.isConnected()) {
         if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
         return false;
@@ -185,6 +198,10 @@ bool CoreProcessClientRuntime::updateControlCycle(int signedCommand,
                                                   quint8 drivingMode,
                                                   quint8 bus,
                                                   QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().controlCycleEnabled) {
+        if (errorOut) *errorOut = QStringLiteral("control cycle disabled by runtime profile: %1").arg(m_runtimeProfile.key());
+        return false;
+    }
     if (!m_client.isConnected()) {
         if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
         return false;
@@ -195,6 +212,10 @@ bool CoreProcessClientRuntime::updateControlCycle(int signedCommand,
 }
 
 bool CoreProcessClientRuntime::stopControlCycle(QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().controlCycleEnabled) {
+        if (errorOut) errorOut->clear();
+        return true;
+    }
     if (!m_client.isConnected()) {
         if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
         return false;
@@ -213,6 +234,10 @@ bool CoreProcessClientRuntime::sendControlCycleBurstOnce(int signedCommand,
                                                          const QString& reason,
                                                          bool resetSlew,
                                                          QString* errorOut) {
+    if (!m_runtimeProfile.transportPolicy().controlCycleEnabled) {
+        if (errorOut) *errorOut = QStringLiteral("control cycle disabled by runtime profile: %1").arg(m_runtimeProfile.key());
+        return false;
+    }
     if (!m_client.isConnected()) {
         if (errorOut) *errorOut = QStringLiteral("core IPC is not connected");
         return false;
@@ -275,7 +300,7 @@ bool CoreProcessClientRuntime::startProcess(const QString& executablePath, const
     m_pendingTransportEndpoint.clear();
     setLifecycleState(LifecycleState::ProcessStarting, QStringLiteral("starting core process"));
 
-    QStringList args{QStringLiteral("--server"), m_serverName};
+    QStringList args{QStringLiteral("--server"), m_serverName, QStringLiteral("--profile"), m_runtimeProfile.key()};
     args += extraArgs;
     m_process.setProgram(exe.absoluteFilePath());
     m_process.setArguments(args);

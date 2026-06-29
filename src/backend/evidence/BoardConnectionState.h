@@ -17,6 +17,8 @@ public:
         bool healthFresh = false;
         bool boardAlive = false;
         bool controlCapable = false;
+        bool csmActiveCapable = false;
+        bool csmPassiveCapabilityCandidate = false;
         quint8 profileMajor = 0;
         quint8 profileMinor = 0;
         quint8 safetyState = 0;
@@ -25,6 +27,7 @@ public:
         quint64 lastHealthMonoUs = 0;
         quint64 lastHealthWallMs = 0;
         quint64 healthAgeMs = 0;
+        QString profileMatchResult = QStringLiteral("blocked_unknown");
         QString reason;
     };
 

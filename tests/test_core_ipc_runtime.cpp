@@ -62,6 +62,32 @@ private slots:
         server.close();
     }
 
+    void passiveServerRejectsHostFrameBeforeRuntime() {
+        CanMonitorCore::CoreMaterializedViewStore store;
+        const QString serverName = QStringLiteral("vsm-core-ipc-passive-host-test-%1-%2")
+                                       .arg(QCoreApplication::applicationPid())
+                                       .arg(reinterpret_cast<quintptr>(this));
+        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        QString error;
+        QVERIFY2(server.listen(serverName, &error), qPrintable(error));
+
+        CanMonitorCore::CoreIpcClientRuntime client;
+        QSignalSpy requestSpy(&server, &CanMonitorCore::CoreIpcServerRuntime::hostFrameRequested);
+        QSignalSpy errorSpy(&client, &CanMonitorCore::CoreIpcClientRuntime::errorReceived);
+
+        client.connectToServer(serverName);
+        QTRY_VERIFY(client.isConnected());
+
+        const quint64 requestId = client.sendHostFrame(QByteArray::fromHex("a55a010b000100000000"),
+                                                       QStringLiteral("passive should reject"));
+        QTRY_COMPARE(errorSpy.size(), 1);
+        QCOMPARE(errorSpy.takeFirst().at(0).toULongLong(), requestId);
+        QCOMPARE(requestSpy.size(), 0);
+
+        client.disconnectFromServer();
+        server.close();
+    }
+
     void viewChangedNotificationsAreCadencedPerView() {
         CanMonitorCore::CoreMaterializedViewStore store;
         const QString serverName = QStringLiteral("vsm-core-ipc-cadence-test-%1-%2")
@@ -106,7 +132,7 @@ private slots:
         const QString serverName = QStringLiteral("vsm-core-ipc-host-frame-test-%1-%2")
                                        .arg(QCoreApplication::applicationPid())
                                        .arg(reinterpret_cast<quintptr>(this));
-        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        CanMonitorCore::CoreIpcServerRuntime server(&store, CanMonitorCore::fullInstrumentedProfile());
         QString error;
         QVERIFY2(server.listen(serverName, &error), qPrintable(error));
 
@@ -142,7 +168,7 @@ private slots:
         const QString serverName = QStringLiteral("vsm-core-ipc-transport-test-%1-%2")
                                        .arg(QCoreApplication::applicationPid())
                                        .arg(reinterpret_cast<quintptr>(this));
-        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        CanMonitorCore::CoreIpcServerRuntime server(&store, CanMonitorCore::fullInstrumentedProfile());
         QString error;
         QVERIFY2(server.listen(serverName, &error), qPrintable(error));
 
@@ -210,7 +236,7 @@ private slots:
         const QString serverName = QStringLiteral("vsm-core-ipc-control-test-%1-%2")
                                        .arg(QCoreApplication::applicationPid())
                                        .arg(reinterpret_cast<quintptr>(this));
-        CanMonitorCore::CoreIpcServerRuntime server(&store);
+        CanMonitorCore::CoreIpcServerRuntime server(&store, CanMonitorCore::fullInstrumentedProfile());
         QString error;
         QVERIFY2(server.listen(serverName, &error), qPrintable(error));
 

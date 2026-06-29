@@ -90,6 +90,20 @@ target_link_libraries(test_core_materialized_view_store PRIVATE
 )
 add_test(NAME core_materialized_view_store COMMAND test_core_materialized_view_store)
 
+add_executable(test_runtime_profile
+    test_runtime_profile.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/RuntimeProfile.cpp
+)
+target_include_directories(test_runtime_profile PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/backend
+)
+target_link_libraries(test_runtime_profile PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+add_test(NAME runtime_profile COMMAND test_runtime_profile)
+
 add_executable(test_core_view_client_runtime
     test_core_view_client_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
@@ -108,6 +122,7 @@ add_test(NAME core_view_client_runtime COMMAND test_core_view_client_runtime)
 add_executable(test_core_ipc_runtime
     test_core_ipc_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/RuntimeProfile.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcServerRuntime.cpp
@@ -131,6 +146,7 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/FilePersistence.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/StorageRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/RuntimeProfile.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcServerRuntime.cpp
@@ -187,6 +203,7 @@ add_test(NAME capture_core_process_runtime COMMAND test_capture_core_process_run
 add_executable(test_core_process_client_runtime
     test_core_process_client_runtime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/core/RuntimeProfile.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewClientRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/core/CoreProcessClientRuntime.cpp
@@ -1049,6 +1066,7 @@ foreach(_can_monitor_transport_target IN ITEMS
             ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedRecordHandoffQueue.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewTypes.cpp
+            ${CMAKE_SOURCE_DIR}/src/backend/core/RuntimeProfile.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/core/CoreMaterializedViewStore.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/core/CoreViewClientRuntime.cpp
             ${CMAKE_SOURCE_DIR}/src/backend/core/CoreIpcClientRuntime.cpp
@@ -1087,6 +1105,7 @@ if (WIN32)
     set_tests_properties(performance_probe_runtime PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
     set_tests_properties(live_runtime_trace PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
     set_tests_properties(core_materialized_view_store PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
+    set_tests_properties(runtime_profile PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
     set_tests_properties(core_view_client_runtime PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
     set_tests_properties(core_ipc_runtime PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")
     set_tests_properties(capture_core_process_runtime PROPERTIES ENVIRONMENT_MODIFICATION "${_can_monitor_test_env_mod}")

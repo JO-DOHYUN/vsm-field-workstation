@@ -19,6 +19,7 @@ constexpr NamePair kViewNames[] = {
     {CoreViewName::GraphBucket, "graph_bucket"},
     {CoreViewName::ControlAudit, "control_audit"},
     {CoreViewName::FatalDiagnostics, "fatal_diagnostics"},
+    {CoreViewName::ProfileStatus, "profile_status"},
 };
 
 } // namespace

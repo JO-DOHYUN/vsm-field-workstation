@@ -62,6 +62,8 @@ QJsonObject controllerStatus(const AppController& controller) {
     out.insert(QStringLiteral("log_records"), QString::number(controller.logRecordedFrameCount()));
     out.insert(QStringLiteral("transport_level"), controller.transportDiagnosticsLevel());
     out.insert(QStringLiteral("transport_summary"), controller.transportDiagnosticsSummary());
+    out.insert(QStringLiteral("runtime_profile_summary"), controller.runtimeProfileSummary());
+    out.insert(QStringLiteral("vehicle_impact_summary"), controller.vehicleImpactSummary());
     out.insert(QStringLiteral("analysis_runtime_level"), controller.analysisRuntimeLevel());
     out.insert(QStringLiteral("analysis_runtime_summary"), controller.analysisRuntimeSummary());
     out.insert(QStringLiteral("live_stats_summary"), controller.liveStatsSummary());

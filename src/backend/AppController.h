@@ -18,6 +18,7 @@
 #include "control/ControlRuntime.h"
 #include "core/CoreViewClientRuntime.h"
 #include "core/CoreProcessClientRuntime.h"
+#include "core/RuntimeProfile.h"
 #include "evidence/EvidenceRuntime.h"
 #include "evidence/BusRoleResolver.h"
 #include "transport/LivePathTelemetry.h"
@@ -73,6 +74,9 @@ class AppController : public QObject {
     Q_PROPERTY(QString transportDiagnosticsLevel READ transportDiagnosticsLevel NOTIFY transportDiagnosticsChanged)
     Q_PROPERTY(QString transportDiagnosticsSummary READ transportDiagnosticsSummary NOTIFY transportDiagnosticsChanged)
     Q_PROPERTY(QVariantList transportDiagnostics READ transportDiagnostics NOTIFY transportDiagnosticsChanged)
+    Q_PROPERTY(QString runtimeProfileSummary READ runtimeProfileSummary NOTIFY runtimeProfileChanged)
+    Q_PROPERTY(QString vehicleImpactSummary READ vehicleImpactSummary NOTIFY runtimeProfileChanged)
+    Q_PROPERTY(QVariantList runtimeProfileDiagnostics READ runtimeProfileDiagnostics NOTIFY runtimeProfileChanged)
     Q_PROPERTY(bool debugGatewayActive READ debugGatewayActive NOTIFY debugGatewayChanged)
     Q_PROPERTY(QString debugGatewayStatus READ debugGatewayStatus NOTIFY debugGatewayChanged)
     Q_PROPERTY(QString debugGatewayEndpoint READ debugGatewayEndpoint NOTIFY debugGatewayChanged)
@@ -326,14 +330,20 @@ public:
     QString transportDiagnosticsLevel() const { return m_transportSession.level(); }
     QString transportDiagnosticsSummary() const { return m_transportSession.summary(); }
     QVariantList transportDiagnostics() const { return m_transportSession.rows(); }
+    QString runtimeProfileSummary() const { return QStringLiteral("%1 - %2").arg(m_runtimeProfile.displayName(), m_runtimeProfile.summary()); }
+    QString vehicleImpactSummary() const { return CanMonitorCore::vehicleImpactStateToString(m_runtimeProfile.impactState()); }
+    QVariantList runtimeProfileDiagnostics() const;
     bool debugGatewayActive() const { return m_debugGatewayProcess && m_debugGatewayProcess->state() != QProcess::NotRunning; }
     QString debugGatewayStatus() const { return m_debugGatewayStatus; }
     QString debugGatewayEndpoint() const { return m_debugGatewayEndpoint; }
     QString debugGatewayArtifactPath() const { return m_debugGatewayArtifactPath; }
     QString debugGatewayModeSummary() const {
+        if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+            return QStringLiteral("Passive Product - COM-owning lab gateway blocked; use sidecar/tap only");
+        }
         return debugGatewayActive()
-            ? QStringLiteral("Optional debug tap ON - production path isolated")
-            : QStringLiteral("Optional debug tap OFF - normal production path");
+            ? QStringLiteral("Full/Lab gateway ON - not passive production")
+            : QStringLiteral("Full/Lab gateway OFF - optional lab transport path");
     }
     QVariantList debugGatewayDiagnostics() const { return m_debugGatewayDiagnostics; }
     bool debugProfilerEnabled() const { return m_debugProfilerEnabled; }
@@ -676,6 +686,7 @@ signals:
     void transportModeChanged();
     void typedEvidenceChanged();
     void transportDiagnosticsChanged();
+    void runtimeProfileChanged();
     void debugGatewayChanged();
     void performanceDiagnosticsChanged();
     void verificationRunnerChanged();
@@ -1391,6 +1402,7 @@ private:
     QTimer m_liveRuntimeOwnerTimer;
     QString m_liveRuntimeTraceDir;
     CanMonitorPerf::UiResponsivenessRuntime m_uiResponsiveness;
+    CanMonitorCore::RuntimeProfile m_runtimeProfile = CanMonitorCore::runtimeProfileFromEnvironmentOrDefault();
     CanMonitorCore::CoreProcessClientRuntime m_coreProcessClient;
     bool m_coreProcessMode = false;
     quint32 m_coreLastBoardEventCounter = 0;

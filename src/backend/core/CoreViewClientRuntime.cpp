@@ -18,6 +18,7 @@ CoreViewClientRuntime::CoreViewClientRuntime() {
     setPolicy(CoreViewName::CaptureProgress, 1, true);
     setPolicy(CoreViewName::AnalysisSnapshot, 1600, true);
     setPolicy(CoreViewName::FatalDiagnostics, 16, true);
+    setPolicy(CoreViewName::ProfileStatus, 1, true);
 }
 
 void CoreViewClientRuntime::reset() {

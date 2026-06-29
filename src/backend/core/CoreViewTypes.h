@@ -15,9 +15,10 @@ enum class CoreViewName {
     GraphBucket,
     ControlAudit,
     FatalDiagnostics,
+    ProfileStatus,
 };
 
-constexpr int kCoreViewCount = 9;
+constexpr int kCoreViewCount = 10;
 
 enum class CoreViewSeverity {
     Ok = 0,

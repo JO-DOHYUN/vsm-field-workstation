@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "runtime_profile": "passive_product",
+  "display_name": "Passive Product",
+  "vehicle_impact_state_default": "blocked_unknown",
+  "passive_acceptance_allowed_without_csm_and_hardware_evidence": false,
+  "serial": {
+    "open_mode": "read_only",
+    "dtr_policy": "no_touch",
+    "rts_policy": "no_touch"
+  },
+  "host_tx": {
+    "enabled": false,
+    "ipc_hard_reject": true
+  },
+  "control": {
+    "enabled": false,
+    "ipc_hard_reject": true
+  },
+  "debug": {
+    "lab_gateway_enabled": false,
+    "sidecar_attach_allowed": true,
+    "com_owner_allowed": false
+  },
+  "required_external_evidence": [
+    "csm_passive_capability_manifest",
+    "hardware_safety_case",
+    "bench_usb_connect_disconnect_no_vehicle_error",
+    "vehicle_passive_gate"
+  ]
+}

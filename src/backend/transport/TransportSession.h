@@ -198,6 +198,14 @@ private:
     quint64 m_analysisPumpMaxMs = 0;
     quint64 m_analysisSnapshotMaxMs = 0;
     quint64 m_analysisTruthLoss = 0;
+    QString m_runtimeProfileKey = QStringLiteral("passive_product");
+    QString m_vehicleImpactState = QStringLiteral("blocked_unknown");
+    QString m_serialOpenMode = QStringLiteral("read_only");
+    QString m_dtrPolicy = QStringLiteral("no_touch");
+    QString m_rtsPolicy = QStringLiteral("no_touch");
+    bool m_hostTxEnabled = false;
+    bool m_controlEnabled = false;
+    bool m_labGatewayEnabled = false;
     quint64 m_boardEventTotal = 0;
     quint64 m_mcp2515EventTotal = 0;
     quint64 m_boardEventFatalTotal = 0;

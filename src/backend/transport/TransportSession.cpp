@@ -156,6 +156,14 @@ void TransportSession::reset() {
     m_analysisPumpMaxMs = 0;
     m_analysisSnapshotMaxMs = 0;
     m_analysisTruthLoss = 0;
+    m_runtimeProfileKey = QStringLiteral("passive_product");
+    m_vehicleImpactState = QStringLiteral("blocked_unknown");
+    m_serialOpenMode = QStringLiteral("read_only");
+    m_dtrPolicy = QStringLiteral("no_touch");
+    m_rtsPolicy = QStringLiteral("no_touch");
+    m_hostTxEnabled = false;
+    m_controlEnabled = false;
+    m_labGatewayEnabled = false;
     m_boardEventTotal = 0;
     m_mcp2515EventTotal = 0;
     m_boardEventFatalTotal = 0;
@@ -321,6 +329,22 @@ void TransportSession::updateDrainPipeline(quint64 bytesTotal,
 }
 
 void TransportSession::updateCoreTransportSummary(const QJsonObject& payload) {
+    if (payload.contains(QStringLiteral("runtime_profile"))) {
+        m_runtimeProfileKey = payload.value(QStringLiteral("runtime_profile")).toString(m_runtimeProfileKey);
+    }
+    if (payload.contains(QStringLiteral("vehicle_impact_state"))) {
+        m_vehicleImpactState = payload.value(QStringLiteral("vehicle_impact_state")).toString(m_vehicleImpactState);
+    }
+    const QJsonObject policy = payload.value(QStringLiteral("transport_policy")).toObject();
+    if (!policy.isEmpty()) {
+        m_serialOpenMode = policy.value(QStringLiteral("serial_open_mode")).toString(m_serialOpenMode);
+        m_dtrPolicy = policy.value(QStringLiteral("dtr_policy")).toString(m_dtrPolicy);
+        m_rtsPolicy = policy.value(QStringLiteral("rts_policy")).toString(m_rtsPolicy);
+        m_hostTxEnabled = policy.value(QStringLiteral("host_tx_enabled")).toBool(m_hostTxEnabled);
+        m_controlEnabled = policy.value(QStringLiteral("control_enabled")).toBool(m_controlEnabled);
+        m_labGatewayEnabled = policy.value(QStringLiteral("lab_gateway_enabled")).toBool(m_labGatewayEnabled);
+    }
+
     if (payload.contains(QStringLiteral("typed_frames")) ||
         payload.contains(QStringLiteral("typed_crc_failures")) ||
         payload.contains(QStringLiteral("typed_length_failures"))) {
@@ -466,11 +490,18 @@ QString TransportSession::boardEventLevel() const {
 }
 
 QString TransportSession::level() const {
+    const bool passiveUnsafePolicy = m_serialOpenMode != QStringLiteral("read_only") ||
+                                     m_dtrPolicy != QStringLiteral("no_touch") ||
+                                     m_rtsPolicy != QStringLiteral("no_touch") ||
+                                     m_hostTxEnabled ||
+                                     m_controlEnabled ||
+                                     m_labGatewayEnabled;
     if (parserFaultCount() > 0 ||
         m_hostDroppedFrames > 0 ||
         m_rawQueueOverrunBytes > 0 ||
         m_captureWriterOverrunBytes > 0 ||
-        m_analysisOverrunFrames > 0) {
+        m_analysisOverrunFrames > 0 ||
+        passiveUnsafePolicy) {
         return QStringLiteral("ERR");
     }
     if (boardUplinkLevel() == QStringLiteral("ERR")) return QStringLiteral("ERR");
@@ -492,6 +523,7 @@ QString TransportSession::liveStateText() const {
 QString TransportSession::summary() const {
     QStringList parts;
     parts << QStringLiteral("transport %1").arg(level());
+    parts << QStringLiteral("profile %1/%2").arg(m_runtimeProfileKey, m_vehicleImpactState);
     parts << QStringLiteral("typed frames %1 faults %2").arg(m_typedFrames).arg(parserFaultCount());
     if (m_drainBytesTotal > 0 || m_rawQueueMaxUsedBytes > 0) {
         parts << QStringLiteral("drain bytes %1 raw_q %2/%3 max %4")
@@ -600,8 +632,28 @@ QVariantList TransportSession::rows() const {
     const QString drainTraceRowLevel = drainTraceLevel(m_drainEventTrace);
     const QString analysisQueueLevel = m_analysisOverrunFrames > 0 || m_analysisTruthLoss > 0 ? QStringLiteral("ERR")
         : (m_analysisCapacityFrames > 0 && m_analysisMaxQueuedFrames > (m_analysisCapacityFrames * 3 / 4) ? QStringLiteral("WARN") : QStringLiteral("OK"));
+    const bool passiveUnsafePolicy = m_serialOpenMode != QStringLiteral("read_only") ||
+                                     m_dtrPolicy != QStringLiteral("no_touch") ||
+                                     m_rtsPolicy != QStringLiteral("no_touch") ||
+                                     m_hostTxEnabled ||
+                                     m_controlEnabled ||
+                                     m_labGatewayEnabled;
+    const QString profileLevel = passiveUnsafePolicy ? QStringLiteral("ERR")
+        : (m_vehicleImpactState == QStringLiteral("verified_passive") ? QStringLiteral("OK") : QStringLiteral("WARN"));
 
     return QVariantList{
+        row(QStringLiteral("passive_safety_profile"),
+            QStringLiteral("Passive safety profile"),
+            profileLevel,
+            QStringLiteral("%1 / %2").arg(m_runtimeProfileKey, m_vehicleImpactState),
+            QStringLiteral("serial %1 dtr %2 rts %3 host_tx %4 control %5 lab_gateway %6")
+                .arg(m_serialOpenMode,
+                     m_dtrPolicy,
+                     m_rtsPolicy,
+                     m_hostTxEnabled ? QStringLiteral("on") : QStringLiteral("off"),
+                     m_controlEnabled ? QStringLiteral("on") : QStringLiteral("off"),
+                     m_labGatewayEnabled ? QStringLiteral("on") : QStringLiteral("off")),
+            passiveUnsafePolicy),
         row(QStringLiteral("capture_storage"),
             QStringLiteral("Capture storage"),
             captureLevel,

@@ -513,7 +513,7 @@ private slots:
         QVariant checklistCount;
         QVERIFY(QMetaObject::invokeMethod(controlPage, "testControlChecklistCount",
                                           Q_RETURN_ARG(QVariant, checklistCount)));
-        QCOMPARE(checklistCount.toInt(), 8);
+        QCOMPARE(checklistCount.toInt(), 9);
 
         QVariant policySummary;
         QVERIFY(QMetaObject::invokeMethod(controlPage, "testControlPolicySummary",
@@ -523,7 +523,7 @@ private slots:
         QVariant policyCount;
         QVERIFY(QMetaObject::invokeMethod(controlPage, "testControlPolicyChecklistCount",
                                           Q_RETURN_ARG(QVariant, policyCount)));
-        QCOMPARE(policyCount.toInt(), 1);
+        QCOMPARE(policyCount.toInt(), 2);
 
         QVariant modeKey;
         QVERIFY(QMetaObject::invokeMethod(controlPage, "testControlChecklistField",
@@ -542,7 +542,7 @@ private slots:
         QVariant txDetail;
         QVERIFY(QMetaObject::invokeMethod(controlPage, "testControlChecklistField",
                                           Q_RETURN_ARG(QVariant, txDetail),
-                                          Q_ARG(QVariant, QVariant(6)),
+                                          Q_ARG(QVariant, QVariant(7)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("detail")))));
         QVERIFY(txDetail.toString().contains(QStringLiteral("ACK/write")));
 
@@ -697,7 +697,7 @@ private slots:
         QVariant transportCount;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticCount",
                                           Q_RETURN_ARG(QVariant, transportCount)));
-        QCOMPARE(transportCount.toInt(), 15);
+        QCOMPARE(transportCount.toInt(), 16);
 
         QVariant transportSummary;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticSummary",
@@ -707,56 +707,56 @@ private slots:
         QVariant parserKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, parserKey),
-                                          Q_ARG(QVariant, QVariant(1)),
+                                          Q_ARG(QVariant, QVariant(2)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(parserKey.toString(), QStringLiteral("typed_parser"));
 
         QVariant csmUplinkKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, csmUplinkKey),
-                                          Q_ARG(QVariant, QVariant(7)),
+                                          Q_ARG(QVariant, QVariant(8)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(csmUplinkKey.toString(), QStringLiteral("csm_uplink"));
 
         QVariant truthKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, truthKey),
-                                          Q_ARG(QVariant, QVariant(9)),
+                                          Q_ARG(QVariant, QVariant(10)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(truthKey.toString(), QStringLiteral("live_latest"));
 
         QVariant decodedTailKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, decodedTailKey),
-                                          Q_ARG(QVariant, QVariant(10)),
+                                          Q_ARG(QVariant, QVariant(11)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(decodedTailKey.toString(), QStringLiteral("decoded_can_tail"));
 
         QVariant captureKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, captureKey),
-                                          Q_ARG(QVariant, QVariant(0)),
+                                          Q_ARG(QVariant, QVariant(1)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(captureKey.toString(), QStringLiteral("capture_storage"));
 
         QVariant projectionKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, projectionKey),
-                                          Q_ARG(QVariant, QVariant(11)),
+                                          Q_ARG(QVariant, QVariant(12)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(projectionKey.toString(), QStringLiteral("live_projection"));
 
         QVariant liveTraceKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, liveTraceKey),
-                                          Q_ARG(QVariant, QVariant(13)),
+                                          Q_ARG(QVariant, QVariant(14)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(liveTraceKey.toString(), QStringLiteral("live_path_trace"));
 
         QVariant drainTraceKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, drainTraceKey),
-                                          Q_ARG(QVariant, QVariant(14)),
+                                          Q_ARG(QVariant, QVariant(15)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(drainTraceKey.toString(), QStringLiteral("drain_event_trace"));
         QVERIFY2(g_qmlErrors.isEmpty(), qPrintable(g_qmlErrors.join(QStringLiteral("\n"))));

@@ -2334,6 +2334,16 @@ void AppController::handleCoreViewSnapshotReady(quint64 requestId,
             requestGraphRefresh(true);
         }
     }
+    if (result.accepted && result.changed && result.viewName == QStringLiteral("profile_status")) {
+        const QJsonObject payload = result.snapshot.value(QStringLiteral("payload")).toObject();
+        const QString coreProfile = payload.value(QStringLiteral("runtime_profile")).toString();
+        if (!coreProfile.isEmpty() && coreProfile != m_runtimeProfile.key()) {
+            setStatus(QStringLiteral("Core/UI runtime profile mismatch: ui=%1 core=%2")
+                          .arg(m_runtimeProfile.key(), coreProfile));
+        }
+        emit runtimeProfileChanged();
+        requestTransportDiagnosticsRefresh(true);
+    }
     if (result.accepted && result.changed && result.viewName == QStringLiteral("live_latest")) {
         const QJsonArray rows = result.snapshot.value(QStringLiteral("payload")).toObject().value(QStringLiteral("frames")).toArray();
         ++m_livePathTelemetry.appSnapshotReceive;
@@ -2998,6 +3008,7 @@ QJsonObject AppController::runtimeTraceAppSnapshot(const QString& reason) const 
     root.insert(QStringLiteral("wall_ms"), QString::number(quint64(QDateTime::currentMSecsSinceEpoch())));
     root.insert(QStringLiteral("connected"), m_connected);
     root.insert(QStringLiteral("transport_mode"), m_transportModeKey);
+    root.insert(QStringLiteral("runtime_profile"), m_runtimeProfile.toJson());
     root.insert(QStringLiteral("log_recording_active"), m_logRecordingActive);
     root.insert(QStringLiteral("log_stopping"), m_logStopping);
     root.insert(QStringLiteral("log_typed_session"), m_logTypedSession);
@@ -4599,6 +4610,61 @@ QString AppController::typedEvidenceSummary() const {
     return parts.join(QStringLiteral(" · "));
 }
 
+QVariantList AppController::runtimeProfileDiagnostics() const {
+    auto row = [](const QString& key, const QString& title, const QString& value, const QString& level, const QString& detail) {
+        QVariantMap item;
+        item.insert(QStringLiteral("key"), key);
+        item.insert(QStringLiteral("title"), title);
+        item.insert(QStringLiteral("value"), value);
+        item.insert(QStringLiteral("level"), level);
+        item.insert(QStringLiteral("detail"), detail);
+        return item;
+    };
+    const auto& policy = m_runtimeProfile.transportPolicy();
+    const auto board = m_evidenceRuntime.snapshot();
+    QVariantList rows;
+    rows << row(QStringLiteral("runtime_profile"),
+                QStringLiteral("Runtime profile"),
+                m_runtimeProfile.key(),
+                m_runtimeProfile.isPassiveProduct() ? QStringLiteral("warn") : QStringLiteral("error"),
+                m_runtimeProfile.summary());
+    rows << row(QStringLiteral("vehicle_impact_state"),
+                QStringLiteral("Vehicle impact state"),
+                CanMonitorCore::vehicleImpactStateToString(m_runtimeProfile.impactState()),
+                m_runtimeProfile.impactState() == CanMonitorCore::VehicleImpactState::VerifiedPassive ? QStringLiteral("ok") : QStringLiteral("warn"),
+                QStringLiteral("Passive acceptance requires CSM capability plus hardware safety evidence."));
+    rows << row(QStringLiteral("serial_policy"),
+                QStringLiteral("Serial policy"),
+                policy.serialOpenModeText(),
+                policy.serialWriteAllowed() ? QStringLiteral("error") : QStringLiteral("ok"),
+                policy.serialWriteAllowed() ? QStringLiteral("Serial write-capable profile; lab/bench only.") : QStringLiteral("Read-only serial open; no host TX path."));
+    rows << row(QStringLiteral("line_state_policy"),
+                QStringLiteral("DTR/RTS policy"),
+                QStringLiteral("DTR %1 / RTS %2")
+                    .arg(policy.touchDtr ? QStringLiteral("touch") : QStringLiteral("no-touch"),
+                         policy.touchRts ? QStringLiteral("touch") : QStringLiteral("no-touch")),
+                (policy.touchDtr || policy.touchRts) ? QStringLiteral("error") : QStringLiteral("ok"),
+                QStringLiteral("Passive product must not toggle USB serial modem-control lines."));
+    rows << row(QStringLiteral("host_control_policy"),
+                QStringLiteral("Host/control policy"),
+                QStringLiteral("host_tx %1 / control %2 / lab_gateway %3")
+                    .arg(policy.hostTxEnabled ? QStringLiteral("on") : QStringLiteral("off"),
+                         policy.controlCycleEnabled ? QStringLiteral("on") : QStringLiteral("off"),
+                         policy.labGatewayEnabled ? QStringLiteral("on") : QStringLiteral("off")),
+                (policy.hostTxEnabled || policy.controlCycleEnabled || policy.labGatewayEnabled) ? QStringLiteral("error") : QStringLiteral("ok"),
+                QStringLiteral("Passive default blocks CAN TX, control cycle, and COM-owning debug gateway."));
+    rows << row(QStringLiteral("csm_profile_match"),
+                QStringLiteral("CSM profile match"),
+                board.profileMatchResult,
+                board.csmActiveCapable ? QStringLiteral("error") : (board.csmPassiveCapabilityCandidate ? QStringLiteral("warn") : QStringLiteral("warn")),
+                board.capabilitySeen
+                    ? QStringLiteral("active_capable %1 passive_candidate %2; hardware safety evidence still required")
+                          .arg(board.csmActiveCapable ? QStringLiteral("yes") : QStringLiteral("no"),
+                               board.csmPassiveCapabilityCandidate ? QStringLiteral("yes") : QStringLiteral("no"))
+                    : QStringLiteral("waiting for CSM CAPABILITY; passive acceptance forbidden"));
+    return rows;
+}
+
 QString AppController::boardConnectionSummary() const {
     const auto state = m_evidenceRuntime.snapshot();
     QStringList parts;
@@ -4607,6 +4673,7 @@ QString AppController::boardConnectionSummary() const {
     parts << (state.healthSeen ? QStringLiteral("BOARD_HEALTH seen") : QStringLiteral("waiting BOARD_HEALTH"));
     if (state.capabilitySeen) {
         parts << QStringLiteral("profile %1.%2").arg(state.profileMajor).arg(state.profileMinor);
+        parts << QStringLiteral("match %1").arg(state.profileMatchResult);
     }
     if (state.healthSeen) {
         parts << QStringLiteral("safety %1").arg(state.safetyState);
@@ -4629,7 +4696,10 @@ QString AppController::controlStatusSummary() const {
 }
 
 bool AppController::controlReady() const {
-    return m_connected && m_transportModeKey == QStringLiteral("typed") && controlEvidenceReady();
+    return m_runtimeProfile.transportPolicy().controlCycleEnabled &&
+           m_connected &&
+           m_transportModeKey == QStringLiteral("typed") &&
+           controlEvidenceReady();
 }
 
 QString AppController::controlPolicyTargetRole() const {
@@ -4763,6 +4833,17 @@ QVariantList AppController::controlPolicyChecklist() const {
     const auto resolution = m_busRoleResolver.resolve(quint8(controlTargetBus()));
     const QString roleText = resolution.resolved ? resolution.role : QStringLiteral("unresolved");
     QVariantList rows;
+    const bool profileAllowsControl = m_runtimeProfile.transportPolicy().controlCycleEnabled &&
+                                      m_runtimeProfile.transportPolicy().hostTxEnabled;
+    rows << row(QStringLiteral("runtime_profile"),
+                QStringLiteral("Runtime profile"),
+                profileAllowsControl ? QStringLiteral("ok") : QStringLiteral("error"),
+                profileAllowsControl ? QStringLiteral("ALLOW") : QStringLiteral("BLOCK"),
+                profileAllowsControl
+                    ? QStringLiteral("%1 permits host TX/control").arg(m_runtimeProfile.key())
+                    : QStringLiteral("%1 blocks host TX/control for passive safety").arg(m_runtimeProfile.key()),
+                profileAllowsControl,
+                !profileAllowsControl);
     rows << row(QStringLiteral("policy"),
                 QStringLiteral("Model policy"),
                 allowed ? QStringLiteral("ok") : QStringLiteral("error"),
@@ -4796,10 +4877,16 @@ void AppController::appendControlEvidenceEvent(const QString& stage,
 }
 
 bool AppController::controlEvidenceReady() const {
-    return m_evidenceRuntime.controlCapable() && controlTargetBusAllowed();
+    return m_runtimeProfile.transportPolicy().controlCycleEnabled &&
+           m_runtimeProfile.transportPolicy().hostTxEnabled &&
+           m_evidenceRuntime.controlCapable() &&
+           controlTargetBusAllowed();
 }
 
 QString AppController::controlEvidenceBlockReason() const {
+    if (!m_runtimeProfile.transportPolicy().controlCycleEnabled || !m_runtimeProfile.transportPolicy().hostTxEnabled) {
+        return QStringLiteral("runtime profile %1 blocks host TX/control").arg(m_runtimeProfile.key());
+    }
     if (!m_evidenceRuntime.controlCapable()) return m_evidenceRuntime.reason();
     if (!controlTargetBusAllowed()) {
         return QStringLiteral("target bus %1 is not resolved/allowed for control TX (%2)")
@@ -4943,6 +5030,17 @@ void AppController::queueControlHostFrame(const QByteArray& frame,
                                           quint32 canId,
                                           quint8 bus) {
     if (frame.isEmpty()) return;
+    if (!m_runtimeProfile.transportPolicy().hostTxEnabled) {
+        appendControlEvidenceEvent(stage.isEmpty() ? QStringLiteral("HOST_WRITE") : stage,
+                                   QStringLiteral("error"),
+                                   QStringLiteral("Host TX blocked by runtime profile"),
+                                   QStringLiteral("%1 | profile %2").arg(summary, m_runtimeProfile.key()),
+                                   commandId,
+                                   canId,
+                                   bus);
+        refreshControlStatus(QStringLiteral("Host TX blocked by runtime profile: %1").arg(m_runtimeProfile.key()));
+        return;
+    }
     m_controlAudit.noteHostFrameQueued();
     if (!stage.isEmpty()) {
         appendControlEvidenceEvent(stage,
@@ -4996,6 +5094,7 @@ void AppController::handleHostFrameWriteResult(bool ok, const QString& summary, 
 
 void AppController::sendControlHeartbeat(const QString& reason) {
     if (!m_connected || m_transportModeKey != QStringLiteral("typed")) return;
+    if (!m_runtimeProfile.transportPolicy().hostTxEnabled) return;
     const quint32 commandId = m_controlRuntime.nextCommandId();
     const quint32 hostMonoMs = quint32(QDateTime::currentMSecsSinceEpoch() & 0xFFFFFFFFLL);
     const QByteArray frame = CanMonitorControl::ControlCommandEncoder::buildHostHeartbeat(commandId, hostMonoMs);
@@ -5009,6 +5108,7 @@ void AppController::sendControlHeartbeat(const QString& reason) {
 
 void AppController::sendControlSession(quint8 action, const QString& reason) {
     if (!m_connected || m_transportModeKey != QStringLiteral("typed")) return;
+    if (!m_runtimeProfile.transportPolicy().hostTxEnabled) return;
     const quint32 commandId = m_controlRuntime.nextCommandId();
     const QByteArray frame = CanMonitorControl::ControlCommandEncoder::buildHostControlSession(
         commandId,
@@ -8542,11 +8642,18 @@ void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
     };
 
     const bool active = debugGatewayActive();
+    if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+        addRow(QStringLiteral("runtime_profile"),
+               QStringLiteral("Runtime profile"),
+               m_runtimeProfile.key(),
+               QStringLiteral("COM-owning lab gateway is blocked in passive product mode; use a non-owning sidecar/tap for production diagnostics."),
+               QStringLiteral("OK"));
+    }
     addRow(QStringLiteral("plane"),
            QStringLiteral("Debug tap plane"),
            active ? QStringLiteral("ON") : QStringLiteral("OFF"),
-           active ? QStringLiteral("Optional tap process is running; production Core remains the truth owner")
-                  : QStringLiteral("Normal mode: debug tap process is not running"),
+           active ? QStringLiteral("Lab gateway process is running; this is not passive production")
+                  : QStringLiteral("Normal mode: debug process is not running"),
            active ? QStringLiteral("WARN") : QStringLiteral("OK"));
     addRow(QStringLiteral("production_substitute"),
            QStringLiteral("Production substitute"),
@@ -8611,6 +8718,12 @@ void AppController::toggleDebugGateway(const QString& portName) {
 }
 
 void AppController::startDebugGateway(const QString& portName) {
+    if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+        m_debugGatewayStatus = QStringLiteral("Passive profile blocks COM-owning debug gateway");
+        refreshDebugGatewayDiagnostics(QStringLiteral("blocked by runtime profile"));
+        setStatus(QStringLiteral("Passive product mode blocks GW; use sidecar/tap diagnostics"));
+        return;
+    }
     const QString trimmed = portName.trimmed();
     if (trimmed.isEmpty()) {
         setStatus(QStringLiteral("디버그 게이트웨이용 COM 포트를 선택하세요"));
@@ -8636,6 +8749,12 @@ void AppController::startDebugGateway(const QString& portName) {
 }
 
 void AppController::startDebugGatewayNow(const QString& portName) {
+    if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+        m_debugGatewayStatus = QStringLiteral("Passive profile blocks COM-owning debug gateway");
+        refreshDebugGatewayDiagnostics(QStringLiteral("blocked by runtime profile"));
+        setStatus(QStringLiteral("Passive product mode blocks GW; use sidecar/tap diagnostics"));
+        return;
+    }
     if (debugGatewayActive()) return;
 
     const QString projectRoot = RuntimePaths::projectRoot();
@@ -8853,8 +8972,10 @@ QVariantList AppController::verificationScenarioCatalog() const {
             QStringLiteral("제어 명령/ACK/CAN_TX_RAW 분리 경로 smoke"),
             true),
         row(QStringLiteral("debug_gateway"),
-            QStringLiteral("Debug gateway"),
-            QStringLiteral("앱 외부 raw serial 보존 gateway 실행"),
+            QStringLiteral("Lab debug gateway"),
+            m_runtimeProfile.transportPolicy().labGatewayEnabled
+                ? QStringLiteral("Full/lab profile only: COM-owning raw serial gateway execution")
+                : QStringLiteral("Passive profile blocks COM-owning gateway; use non-owning sidecar/tap diagnostics"),
             true),
         row(QStringLiteral("latest_capture_report"),
             QStringLiteral("Latest capture report"),
@@ -10006,6 +10127,8 @@ void AppController::exportAnalysisSnapshot(const QString& filePath) {
     root.insert(QStringLiteral("session_file_path"), sessionFilePath());
     root.insert(QStringLiteral("default_log_directory"), defaultLogDirectory());
     root.insert(QStringLiteral("default_snapshot_directory"), defaultSnapshotDirectory());
+    root.insert(QStringLiteral("runtime_profile"), m_runtimeProfile.toJson());
+    root.insert(QStringLiteral("runtime_profile_diagnostics"), QJsonArray::fromVariantList(runtimeProfileDiagnostics()));
     root.insert(QStringLiteral("transport_diagnostics_summary"), transportDiagnosticsSummary());
     root.insert(QStringLiteral("transport_diagnostics"), QJsonArray::fromVariantList(transportDiagnostics()));
     root.insert(QStringLiteral("live_path_trace"), livePathTraceObject());

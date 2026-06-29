@@ -22,6 +22,8 @@ boundary, UI projection, analysis, graph, raw ledger, or diagnostics work.
 
 ## Production Data Flow
 ```text
+Passive Product profile
+  -> serial read-only, DTR/RTS no-touch, host TX/control/gateway off
 CSM typed bytes
   -> Core-owned Data Plane
        SerialDrainRuntime
@@ -55,6 +57,7 @@ The only authoritative production truth is `capture.stream` plus
 | Raw ledger tail | Raw ledger/runtime view store | UI query client, replay tools | Tail is bounded; committed storage remains truth. |
 | Transport diagnostics | Runtime owner producing the counter | UI display only | Diagnostics may display state but must not become the state owner. |
 | Debug trace/tap | Optional debug tap process/runtime | Debug tools only | Drop allowed only with debug drop counter; production path must not block. |
+| Runtime profile | `RuntimeProfile` | SerialDrainRuntime, Core runtime, IPC, Core client, UI display | Passive default is read-only/no-touch/no-TX. Full/lab cannot be field passive acceptance. |
 
 ## Hard Forbidden Rules
 - Do not pass `TypedRecordList` as a shared live object between UI, analysis,
@@ -68,6 +71,9 @@ The only authoritative production truth is `capture.stream` plus
 - Do not push full materialized snapshots to UI at high rate. Use
   `ViewChanged` plus bounded `GetView(...)`.
 - Do not run debug/gateway/profiler writers in normal production mode.
+- Do not open production serial as `QIODevice::ReadWrite` outside `RuntimeProfile`.
+- Do not hard-assert DTR/RTS in Passive Product.
+- Do not pass `host_frame`, `control_cycle`, or `gateway_tcp` through Passive Product IPC/Core gates.
 
 ## Allowed Transitional Exceptions
 The current repository is still migrating toward the final 2+1 architecture.

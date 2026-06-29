@@ -146,6 +146,8 @@ private slots:
         QVERIFY(state.reason().contains(QStringLiteral("CAPABILITY")));
 
         state.ingestCapability(capability());
+        QVERIFY(state.snapshot().csmActiveCapable);
+        QCOMPARE(state.snapshot().profileMatchResult, QStringLiteral("blocked_active_csm"));
         QVERIFY(!state.boardAlive());
         QVERIFY(state.reason().contains(QStringLiteral("BOARD_HEALTH")));
 
@@ -157,6 +159,23 @@ private slots:
         QVERIFY(!state.boardAlive());
         QVERIFY(!state.controlCapable());
         QVERIFY(state.reason().contains(QStringLiteral("stale")));
+    }
+
+    void passiveCandidateStillRequiresHardwareEvidence() {
+        TypedCapabilityRecord passive = capability();
+        passive.supportsCanTxRaw = false;
+        passive.supportedDownlinkRecords = 0;
+        passive.hostTxQueueSize = 0;
+        passive.buses.clear();
+
+        CanMonitorEvidence::BoardConnectionState state;
+        state.setSerialOpen(true);
+        state.ingestCapability(passive);
+
+        const auto snapshot = state.snapshot();
+        QVERIFY(!snapshot.csmActiveCapable);
+        QVERIFY(snapshot.csmPassiveCapabilityCandidate);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
     }
 
     void boardAliveExpiresOnWallClockWhenStreamStops() {

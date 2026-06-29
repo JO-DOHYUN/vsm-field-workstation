@@ -29,6 +29,7 @@ qint64 viewPublishIntervalMs(CoreViewName viewName, CoreViewSeverity severity) {
     case CoreViewName::CoreHealth:
     case CoreViewName::FatalDiagnostics:
     case CoreViewName::ControlAudit:
+    case CoreViewName::ProfileStatus:
         return 100;
     case CoreViewName::TransportSummary:
     case CoreViewName::CaptureProgress:
@@ -90,9 +91,12 @@ bool validateControlPayload(const QString& action, const QJsonObject& payload, Q
 }
 }
 
-CoreIpcServerRuntime::CoreIpcServerRuntime(CoreMaterializedViewStore* viewStore, QObject* parent)
+CoreIpcServerRuntime::CoreIpcServerRuntime(CoreMaterializedViewStore* viewStore,
+                                           RuntimeProfile profile,
+                                           QObject* parent)
     : QObject(parent)
-    , m_viewStore(viewStore) {
+    , m_viewStore(viewStore)
+    , m_runtimeProfile(std::move(profile)) {
     connect(&m_server, &QLocalServer::newConnection, this, &CoreIpcServerRuntime::acceptConnection);
 }
 
@@ -151,6 +155,7 @@ QJsonObject CoreIpcServerRuntime::statusJson() const {
                        {QStringLiteral("ipc_slow_client_disconnects"), QString::number(m_disconnectedSlowClients)},
                        {QStringLiteral("ipc_max_queued_bytes"), QString::number(m_maxQueuedBytes)},
                        {QStringLiteral("ipc_pending_views"), m_pendingViewChanges.size()},
+                       {QStringLiteral("runtime_profile"), m_runtimeProfile.toJson()},
                        {QStringLiteral("ipc_clients"), m_clients.size()}};
 }
 
@@ -322,6 +327,13 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
             sendObject(socket, errorResponse(message, QStringLiteral("invalid_transport_mode"), mode));
             return;
         }
+        if (mode == QStringLiteral("gateway_tcp") && !m_runtimeProfile.transportPolicy().labGatewayEnabled) {
+            sendObject(socket,
+                       errorResponse(message,
+                                     QStringLiteral("lab_gateway_disabled_by_profile"),
+                                     m_runtimeProfile.key()));
+            return;
+        }
         emit transportStartRequested(requestId, mode, endpoint);
         return;
     }
@@ -334,6 +346,13 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
         const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
         const QByteArray frame = QByteArray::fromBase64(message.value(QStringLiteral("frame_base64")).toString().toLatin1());
         const QString summary = message.value(QStringLiteral("summary")).toString();
+        if (!m_runtimeProfile.transportPolicy().hostTxEnabled) {
+            sendObject(socket,
+                       errorResponse(message,
+                                     QStringLiteral("host_tx_disabled_by_profile"),
+                                     m_runtimeProfile.key()));
+            return;
+        }
         if (frame.isEmpty()) {
             sendObject(socket, errorResponse(message, QStringLiteral("empty_host_frame"), summary));
             return;
@@ -348,6 +367,13 @@ void CoreIpcServerRuntime::handleMessage(QLocalSocket* socket, const QJsonObject
     if (type == QStringLiteral("control_cycle")) {
         const quint64 requestId = message.value(QStringLiteral("request_id")).toVariant().toULongLong();
         const QString action = message.value(QStringLiteral("action")).toString();
+        if (!m_runtimeProfile.transportPolicy().controlCycleEnabled) {
+            sendObject(socket,
+                       errorResponse(message,
+                                     QStringLiteral("control_disabled_by_profile"),
+                                     m_runtimeProfile.key()));
+            return;
+        }
         if (action != QStringLiteral("start") &&
             action != QStringLiteral("update") &&
             action != QStringLiteral("stop") &&

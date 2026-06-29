@@ -1,6 +1,7 @@
 #include "backend/BuildMetadata.h"
 #include "backend/core/CaptureCoreProcessRuntime.h"
 #include "backend/core/CoreMaterializedViewStore.h"
+#include "backend/core/RuntimeProfile.h"
 #include "backend/transport/CoreDataBatches.h"
 
 #include <QCoreApplication>
@@ -22,7 +23,7 @@ QJsonObject buildInfoJson() {
     return QJsonObject::fromVariantMap(BuildMetadata::toVariantMap(BuildMetadata::current()));
 }
 
-int runSelfTest() {
+int runSelfTest(const CanMonitorCore::RuntimeProfile& profile) {
     CanMonitorCore::CoreMaterializedViewStore store;
     QJsonArray frames;
     frames.append(QJsonObject{{QStringLiteral("bus"), 0},
@@ -42,6 +43,7 @@ int runSelfTest() {
                               {QStringLiteral("mode"), QStringLiteral("self_test")},
                               {QStringLiteral("ok"), ok},
                               {QStringLiteral("build"), buildInfoJson()},
+                              {QStringLiteral("runtime_profile"), profile.toJson()},
                               {QStringLiteral("view_seq"), QString::number(result.snapshot.viewSeq)}});
     return ok ? 0 : 2;
 }
@@ -73,27 +75,45 @@ int main(int argc, char* argv[]) {
                                         QStringLiteral("Open the serial port from the capture core process."),
                                         QStringLiteral("port"));
     const QCommandLineOption gatewayOption(QStringLiteral("gateway"),
-                                           QStringLiteral("Open a debug gateway TCP endpoint from the capture core process."),
+                                           QStringLiteral("Open a lab-only gateway TCP endpoint from the capture core process. Disabled by passive_product profile."),
                                            QStringLiteral("endpoint"));
+    const QCommandLineOption profileOption(QStringLiteral("profile"),
+                                           QStringLiteral("Runtime profile: passive_product (default) or full_instrumented."),
+                                           QStringLiteral("profile"));
     parser.addOption(selfTestOption);
     parser.addOption(readyOption);
     parser.addOption(serverOption);
     parser.addOption(portOption);
     parser.addOption(gatewayOption);
+    parser.addOption(profileOption);
     parser.process(app);
 
+    bool profileOk = false;
+    const CanMonitorCore::RuntimeProfile profile = parser.isSet(profileOption)
+        ? CanMonitorCore::runtimeProfileFromString(parser.value(profileOption), &profileOk)
+        : CanMonitorCore::runtimeProfileFromEnvironmentOrDefault();
+    if (parser.isSet(profileOption) && !profileOk) {
+        writeJsonLine(QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
+                                  {QStringLiteral("mode"), QStringLiteral("startup")},
+                                  {QStringLiteral("ok"), false},
+                                  {QStringLiteral("error"), QStringLiteral("invalid_runtime_profile")},
+                                  {QStringLiteral("profile"), parser.value(profileOption)}});
+        return 4;
+    }
+
     if (parser.isSet(selfTestOption)) {
-        return runSelfTest();
+        return runSelfTest(profile);
     }
     if (parser.isSet(readyOption)) {
         writeJsonLine(QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
                                   {QStringLiteral("mode"), QStringLiteral("ready")},
                                   {QStringLiteral("ok"), true},
+                                  {QStringLiteral("runtime_profile"), profile.toJson()},
                                   {QStringLiteral("build"), buildInfoJson()}});
         return 0;
     }
     if (parser.isSet(serverOption)) {
-        CanMonitorCore::CaptureCoreProcessRuntime runtime;
+        CanMonitorCore::CaptureCoreProcessRuntime runtime(profile);
         QString error;
         const QString serverName = parser.value(serverOption);
         if (!runtime.startIpc(serverName, &error)) {
@@ -107,6 +127,7 @@ int main(int argc, char* argv[]) {
                                   {QStringLiteral("mode"), QStringLiteral("server")},
                                   {QStringLiteral("ok"), true},
                                   {QStringLiteral("server_name"), serverName},
+                                  {QStringLiteral("runtime_profile"), profile.toJson()},
                                   {QStringLiteral("build"), buildInfoJson()}});
         if (parser.isSet(portOption)) {
             runtime.startSerial(parser.value(portOption));
@@ -119,7 +140,8 @@ int main(int argc, char* argv[]) {
     writeJsonLine(QJsonObject{{QStringLiteral("process"), QStringLiteral("vsm-capture-core")},
                               {QStringLiteral("mode"), QStringLiteral("idle")},
                               {QStringLiteral("ok"), true},
-                              {QStringLiteral("note"), QStringLiteral("Use --server <name> with optional --port or --gateway to run the core data-plane owner.")},
+                              {QStringLiteral("runtime_profile"), profile.toJson()},
+                              {QStringLiteral("note"), QStringLiteral("Use --server <name> with optional --port. --gateway requires full_instrumented lab profile.")},
                               {QStringLiteral("build"), buildInfoJson()}});
     return 0;
 }

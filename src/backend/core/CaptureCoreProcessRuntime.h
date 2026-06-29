@@ -2,6 +2,7 @@
 
 #include "core/CoreIpcServerRuntime.h"
 #include "core/CoreMaterializedViewStore.h"
+#include "core/RuntimeProfile.h"
 #include "analysis/AnalysisWorkerRuntime.h"
 #include "control/ControlCycleRuntime.h"
 #include "transport/CoreDataBatches.h"
@@ -28,7 +29,7 @@ namespace CanMonitorCore {
 class CaptureCoreProcessRuntime : public QObject {
     Q_OBJECT
 public:
-    explicit CaptureCoreProcessRuntime(QObject* parent = nullptr);
+    explicit CaptureCoreProcessRuntime(RuntimeProfile profile = passiveProductProfile(), QObject* parent = nullptr);
     ~CaptureCoreProcessRuntime() override;
 
     bool startIpc(const QString& serverName, QString* errorOut = nullptr);
@@ -53,6 +54,7 @@ private:
     void ensureTransportRuntime();
     void teardownTransportRuntime();
     void seedInitialViews();
+    void updateProfileStatus(CoreViewSeverity severity = CoreViewSeverity::Warn);
     void updateCoreHealth(const QString& state, CoreViewSeverity severity = CoreViewSeverity::Ok);
     void updateTransportSummary(const QJsonObject& payload,
                                 CoreViewSeverity severity = CoreViewSeverity::Ok,
@@ -131,6 +133,7 @@ private:
     void updateCaptureProgressView(const CanMonitorTransport::TypedCaptureWriterRuntime::Status& status,
                                    const CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate* update = nullptr);
 
+    RuntimeProfile m_profile;
     CoreMaterializedViewStore m_viewStore;
     CoreIpcServerRuntime m_ipc;
     QSharedPointer<CanMonitorTransport::DrainByteQueue> m_drainQueue;

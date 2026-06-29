@@ -16,8 +16,10 @@ constexpr int kDrainStatusIntervalMs = 250;
 
 namespace CanMonitorTransport {
 
-SerialDrainRuntime::SerialDrainRuntime(QSharedPointer<DrainByteQueue> queue, QObject* parent)
-    : QObject(parent), m_queue(std::move(queue)) {}
+SerialDrainRuntime::SerialDrainRuntime(QSharedPointer<DrainByteQueue> queue,
+                                       CanMonitorCore::RuntimeTransportPolicy policy,
+                                       QObject* parent)
+    : QObject(parent), m_queue(std::move(queue)), m_policy(policy) {}
 
 void SerialDrainRuntime::startSerial(const QString& portName) {
     stop();
@@ -40,7 +42,7 @@ void SerialDrainRuntime::startSerial(const QString& portName) {
     m_serial->setStopBits(QSerialPort::OneStop);
     m_serial->setFlowControl(QSerialPort::NoFlowControl);
     m_serial->setReadBufferSize(kSerialReadBufferBytes);
-    if (!m_serial->open(QIODevice::ReadWrite)) {
+    if (!m_serial->open(m_policy.serialOpenMode)) {
         const QString message = m_serial->errorString();
         qCWarning(logSerialDrain).noquote() << "Serial open failed" << endpoint << message;
         emit errorOccurred(QStringLiteral("Serial open failed: %1").arg(message));
@@ -49,8 +51,12 @@ void SerialDrainRuntime::startSerial(const QString& portName) {
         emit stateChanged(false, QStringLiteral("Serial open failed"));
         return;
     }
-    m_serial->setDataTerminalReady(true);
-    m_serial->setRequestToSend(true);
+    if (m_policy.touchDtr) {
+        m_serial->setDataTerminalReady(m_policy.dtrAsserted);
+    }
+    if (m_policy.touchRts) {
+        m_serial->setRequestToSend(m_policy.rtsAsserted);
+    }
     connect(m_serial, &QSerialPort::readyRead, this, &SerialDrainRuntime::onReadyRead);
     connect(m_serial, &QSerialPort::bytesWritten, this, &SerialDrainRuntime::onBytesWritten);
     connect(m_serial, &QSerialPort::errorOccurred, this, [this](QSerialPort::SerialPortError error) {
@@ -64,7 +70,9 @@ void SerialDrainRuntime::startSerial(const QString& portName) {
             emit stateChanged(false, QStringLiteral("Serial port closed after error"));
         }
     });
-    emit stateChanged(true, QStringLiteral("Serial connected: %1").arg(endpoint));
+    emit stateChanged(true,
+                      QStringLiteral("Serial connected: %1 (%2)")
+                          .arg(endpoint, m_policy.serialOpenModeText()));
     emitDrainStatus(true);
 }
 
@@ -122,9 +130,15 @@ void SerialDrainRuntime::stop() {
     m_eventTelemetry.drainPumpScheduledFlag = false;
     if (m_serial) {
         if (m_serial->isOpen()) {
-            m_serial->clear(QSerialPort::AllDirections);
-            m_serial->setRequestToSend(false);
-            m_serial->setDataTerminalReady(false);
+            if (m_policy.serialOpenMode.testFlag(QIODevice::WriteOnly)) {
+                m_serial->clear(QSerialPort::AllDirections);
+            }
+            if (m_policy.touchRts) {
+                m_serial->setRequestToSend(false);
+            }
+            if (m_policy.touchDtr) {
+                m_serial->setDataTerminalReady(false);
+            }
             m_serial->close();
         }
         m_serial->deleteLater();
@@ -139,6 +153,13 @@ void SerialDrainRuntime::stop() {
 }
 
 void SerialDrainRuntime::sendHostFrame(const QByteArray& frame, const QString& summary) {
+    if (!m_policy.hostTxEnabled) {
+        const QString message = QStringLiteral("Host TX disabled by runtime profile: %1").arg(summary);
+        emit errorOccurred(message);
+        emitHostTxQueueStatus(m_hostTx.status());
+        emit hostFrameWriteResult(false, summary, 0);
+        return;
+    }
     const auto result = m_hostTx.enqueue(frame, summary);
     if (!result.ok) {
         emit errorOccurred(result.error);
@@ -201,6 +222,10 @@ void SerialDrainRuntime::onBytesWritten(qint64 bytes) {
 }
 
 void SerialDrainRuntime::drainHostTxQueue() {
+    if (!m_policy.hostTxEnabled) {
+        emitHostTxQueueStatus(m_hostTx.status());
+        return;
+    }
     if (!activeDeviceIsWritable()) {
         emitHostTxQueueStatus(m_hostTx.status());
         return;

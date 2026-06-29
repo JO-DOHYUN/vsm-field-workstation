@@ -14,6 +14,9 @@ private slots:
         QVERIFY(coreViewNameFromString(QStringLiteral("live_latest"), &parsed));
         QCOMPARE(parsed, CoreViewName::LiveLatest);
         QCOMPARE(coreViewNameToString(parsed), QStringLiteral("live_latest"));
+        QVERIFY(coreViewNameFromString(QStringLiteral("profile_status"), &parsed));
+        QCOMPARE(parsed, CoreViewName::ProfileStatus);
+        QCOMPARE(coreViewNameToString(parsed), QStringLiteral("profile_status"));
 
         CoreViewSeverity severity = CoreViewSeverity::Ok;
         QVERIFY(coreViewSeverityFromString(QStringLiteral("fatal"), &severity));
