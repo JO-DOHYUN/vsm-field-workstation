@@ -63,9 +63,9 @@ public:
                            int maxProjectionBacklog,
                            quint64 flushBudgetHits,
                            int lastFlushMs);
-    void updateLiveTruth(quint64 observedCanRxFrames,
-                         quint64 emittedTruthFrames,
-                         quint64 coalescedTruthUpdates,
+    void updateLiveLatest(quint64 observedCanRxFrames,
+                         quint64 emittedLatestFrames,
+                         quint64 coalescedLatestUpdates,
                          quint64 observedBus0CanRxFrames,
                          quint64 observedBus1CanRxFrames,
                          quint64 flushCount,
@@ -74,7 +74,7 @@ public:
                          int lastInputRecords,
                          int lastOutputFrames,
                          int lastFlushMs,
-                         quint64 truthLoss);
+                         quint64 displayLoss);
     void updateRawLedger(quint64 totalRows,
                          quint64 visibleRows,
                          quint64 segmentBytes,
@@ -156,18 +156,18 @@ private:
     int m_maxProjectionBacklog = 0;
     quint64 m_flushBudgetHits = 0;
     int m_lastFlushMs = 0;
-    quint64 m_truthObservedCanRxFrames = 0;
-    quint64 m_truthEmittedFrames = 0;
-    quint64 m_truthCoalescedUpdates = 0;
-    quint64 m_truthObservedBus0CanRxFrames = 0;
-    quint64 m_truthObservedBus1CanRxFrames = 0;
-    quint64 m_truthFlushCount = 0;
-    int m_truthPendingKeys = 0;
-    int m_truthMaxPendingKeys = 0;
-    int m_truthLastInputRecords = 0;
-    int m_truthLastOutputFrames = 0;
-    int m_truthLastFlushMs = 0;
-    quint64 m_truthLoss = 0;
+    quint64 m_liveLatestObservedCanRxFrames = 0;
+    quint64 m_liveLatestEmittedFrames = 0;
+    quint64 m_liveLatestCoalescedUpdates = 0;
+    quint64 m_liveLatestObservedBus0CanRxFrames = 0;
+    quint64 m_liveLatestObservedBus1CanRxFrames = 0;
+    quint64 m_liveLatestFlushCount = 0;
+    int m_liveLatestPendingKeys = 0;
+    int m_liveLatestMaxPendingKeys = 0;
+    int m_liveLatestLastInputRecords = 0;
+    int m_liveLatestLastOutputFrames = 0;
+    int m_liveLatestLastFlushMs = 0;
+    quint64 m_displayLoss = 0;
     quint64 m_rawLedgerTotalRows = 0;
     quint64 m_rawLedgerVisibleRows = 0;
     quint64 m_rawLedgerSegmentBytes = 0;

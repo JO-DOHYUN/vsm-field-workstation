@@ -1,25 +1,25 @@
-#include "transport/LiveTruthRuntime.h"
+#include "transport/LiveLatestRuntime.h"
 
 #include <algorithm>
 #include <cstring>
 
 namespace {
-constexpr int kTruthFlushIntervalMs = 250;
-constexpr int kTruthStatusIntervalMs = 500;
+constexpr int kLatestFlushIntervalMs = 250;
+constexpr int kLatestStatusIntervalMs = 500;
 }
 
 namespace CanMonitorTransport {
 
-void LiveTruthRuntime::reset() {
+void LiveLatestRuntime::reset() {
     m_pendingFramesByKey.clear();
     m_lastMonoUsByKey.clear();
     m_flushClock.invalidate();
     m_statusClock.invalidate();
     m_status = {};
-    m_lastStatusTruthLoss = 0;
+    m_lastStatusDisplayLoss = 0;
 }
 
-LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord& record) {
+LiveLatestRuntime::IngestResult LiveLatestRuntime::ingestRecord(const TypedRecord& record) {
     IngestResult result;
     m_status.lastInputRecords = 1;
     m_status.lastOutputFrames = 0;
@@ -29,7 +29,7 @@ LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord&
         if (can) {
             ingestFrame(toFrameRecord(record, *can));
         } else {
-            ++m_status.truthLoss;
+            ++m_status.displayLoss;
         }
     } else if (record.isType(TypedRecordType::CanRxSegment)) {
         const auto header = decodeTypedCanRxSegmentHeader(record);
@@ -37,13 +37,13 @@ LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord&
             for (qsizetype index = 0; index < header->frameCount; ++index) {
                 const auto entry = decodeTypedCanRxSegmentEntry(record, index);
                 if (!entry) {
-                    ++m_status.truthLoss;
+                    ++m_status.displayLoss;
                     continue;
                 }
                 ingestFrame(toFrameRecord(record, *entry));
             }
         } else {
-            ++m_status.truthLoss;
+            ++m_status.displayLoss;
         }
     }
 
@@ -53,15 +53,15 @@ LiveTruthRuntime::IngestResult LiveTruthRuntime::ingestRecord(const TypedRecord&
     result.statusDue = statusDue() || !result.frames.isEmpty();
     if (result.statusDue) {
         m_statusClock.restart();
-        m_lastStatusTruthLoss = m_status.truthLoss;
+        m_lastStatusDisplayLoss = m_status.displayLoss;
     }
     result.status = status();
     return result;
 }
 
-FrameRecordList LiveTruthRuntime::flush(bool force) {
+FrameRecordList LiveLatestRuntime::flush(bool force) {
     if (m_pendingFramesByKey.isEmpty()) return {};
-    if (!force && m_flushClock.isValid() && m_flushClock.elapsed() < kTruthFlushIntervalMs) return {};
+    if (!force && m_flushClock.isValid() && m_flushClock.elapsed() < kLatestFlushIntervalMs) return {};
 
     QElapsedTimer budget;
     budget.start();
@@ -83,14 +83,14 @@ FrameRecordList LiveTruthRuntime::flush(bool force) {
 
     m_status.pendingKeys = 0;
     m_status.lastOutputFrames = frames.size();
-    m_status.emittedTruthFrames += quint64(frames.size());
+    m_status.emittedLatestFrames += quint64(frames.size());
     ++m_status.flushCount;
     m_status.lastFlushMs = int(budget.elapsed());
     m_flushClock.restart();
     return frames;
 }
 
-void LiveTruthRuntime::ingestFrame(const FrameRecord& inputFrame) {
+void LiveLatestRuntime::ingestFrame(const FrameRecord& inputFrame) {
     FrameRecord frame = inputFrame;
     const quint64 key = keyForFrame(frame);
     const auto lastMonoIt = m_lastMonoUsByKey.constFind(key);
@@ -112,7 +112,7 @@ void LiveTruthRuntime::ingestFrame(const FrameRecord& inputFrame) {
             frame.observedGapUs = pendingIt.value().observedGapUs;
         }
         pendingIt.value() = frame;
-        ++m_status.coalescedTruthUpdates;
+        ++m_status.coalescedLatestUpdates;
     } else {
         m_pendingFramesByKey.insert(key, frame);
     }
@@ -120,22 +120,22 @@ void LiveTruthRuntime::ingestFrame(const FrameRecord& inputFrame) {
     m_status.maxPendingKeys = std::max(m_status.maxPendingKeys, m_status.pendingKeys);
 }
 
-bool LiveTruthRuntime::flushDue() const {
+bool LiveLatestRuntime::flushDue() const {
     if (m_pendingFramesByKey.isEmpty()) return false;
-    return !m_flushClock.isValid() || m_flushClock.elapsed() >= kTruthFlushIntervalMs;
+    return !m_flushClock.isValid() || m_flushClock.elapsed() >= kLatestFlushIntervalMs;
 }
 
-int LiveTruthRuntime::flushIntervalMs() const {
-    return kTruthFlushIntervalMs;
+int LiveLatestRuntime::flushIntervalMs() const {
+    return kLatestFlushIntervalMs;
 }
 
-LiveTruthRuntime::Status LiveTruthRuntime::status() const {
+LiveLatestRuntime::Status LiveLatestRuntime::status() const {
     Status out = m_status;
     out.pendingKeys = m_pendingFramesByKey.size();
     return out;
 }
 
-quint64 LiveTruthRuntime::keyForFrame(const FrameRecord& frame) {
+quint64 LiveLatestRuntime::keyForFrame(const FrameRecord& frame) {
     quint64 key = (quint64(frame.bus) << 56);
     if (frame.ext) key |= (quint64(1) << 55);
     if (frame.rtr) key |= (quint64(1) << 54);
@@ -143,7 +143,7 @@ quint64 LiveTruthRuntime::keyForFrame(const FrameRecord& frame) {
     return key;
 }
 
-FrameRecord LiveTruthRuntime::toFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
+FrameRecord LiveLatestRuntime::toFrameRecord(const TypedRecord& record, const TypedCanRawRecord& can) {
     FrameRecord frame;
     frame.tExtUs = can.monoUs;
     frame.canId = can.canId;
@@ -156,7 +156,7 @@ FrameRecord LiveTruthRuntime::toFrameRecord(const TypedRecord& record, const Typ
     return frame;
 }
 
-FrameRecord LiveTruthRuntime::toFrameRecord(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
+FrameRecord LiveLatestRuntime::toFrameRecord(const TypedRecord& record, const TypedCanRxSegmentEntry& entry) {
     FrameRecord frame;
     frame.tExtUs = entry.monoUs;
     frame.canId = entry.canId;
@@ -171,10 +171,10 @@ FrameRecord LiveTruthRuntime::toFrameRecord(const TypedRecord& record, const Typ
     return frame;
 }
 
-bool LiveTruthRuntime::statusDue() const {
-    if (m_status.truthLoss != m_lastStatusTruthLoss) return true;
+bool LiveLatestRuntime::statusDue() const {
+    if (m_status.displayLoss != m_lastStatusDisplayLoss) return true;
     if (!m_statusClock.isValid()) return true;
-    return m_statusClock.elapsed() >= kTruthStatusIntervalMs;
+    return m_statusClock.elapsed() >= kLatestStatusIntervalMs;
 }
 
 } // namespace CanMonitorTransport

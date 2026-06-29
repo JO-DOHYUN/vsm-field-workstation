@@ -2039,7 +2039,7 @@ QJsonObject AppController::livePathTraceObject() {
 QJsonObject AppController::drainEventTraceObject() {
     QJsonObject out = m_workerDrainEventTrace;
     CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedProjectionStatus_receive"), m_drainEventTelemetry.typedProjectionStatusReceive);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTruthStatus_receive"), m_drainEventTelemetry.typedTruthStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedLiveLatestStatus_receive"), m_drainEventTelemetry.typedLiveLatestStatusReceive);
     CanMonitorTransport::insertCounter(out, QStringLiteral("app_typedTransportStatus_receive"), m_drainEventTelemetry.typedTransportStatusReceive);
     const QJsonObject coreView = m_coreViewClient.statusJson();
     for (auto it = coreView.constBegin(); it != coreView.constEnd(); ++it) {
@@ -2100,7 +2100,7 @@ void AppController::applyCoreTransportSummaryView(const QJsonObject& payload) {
         }
 
         const quint64 streamRxCount = std::max(m_liveProjectionObservedFrames,
-                                               jsonU64Value(payload, QStringLiteral("truth_observed_can_rx")));
+                                               jsonU64Value(payload, QStringLiteral("latest_observed_can_rx")));
         if (!m_typedRxHealthParityAnchored) {
             m_typedRxHealthParityAnchored = true;
             m_typedRxHealthAnchorBoardTotal = health->canRxTotal;
@@ -2909,6 +2909,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
     restoreSessionState();
     updateReplayCursor(0, m_replay.frameCount(), 0, m_replay.durationUs(), 0.0);
     refreshDerivedSummaryCache();
+    refreshDebugGatewayDiagnostics(QStringLiteral("init"));
     emit derivedSummaryChanged();
 }
 
@@ -8517,6 +8518,90 @@ void AppController::disconnectPort() {
     }
 }
 
+void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
+    QVariantList rows;
+    auto addRow = [&rows](const QString& key,
+                          const QString& title,
+                          const QString& value,
+                          const QString& detail,
+                          const QString& level = QStringLiteral("INFO")) {
+        QVariantMap row;
+        row.insert(QStringLiteral("key"), key);
+        row.insert(QStringLiteral("title"), title);
+        row.insert(QStringLiteral("value"), value);
+        row.insert(QStringLiteral("detail"), detail);
+        row.insert(QStringLiteral("level"), level);
+        rows.push_back(row);
+    };
+    auto readJsonObject = [](const QString& path) -> QJsonObject {
+        if (path.isEmpty()) return {};
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) return {};
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        return doc.isObject() ? doc.object() : QJsonObject{};
+    };
+
+    const bool active = debugGatewayActive();
+    addRow(QStringLiteral("plane"),
+           QStringLiteral("Debug tap plane"),
+           active ? QStringLiteral("ON") : QStringLiteral("OFF"),
+           active ? QStringLiteral("Optional tap process is running; production Core remains the truth owner")
+                  : QStringLiteral("Normal mode: debug tap process is not running"),
+           active ? QStringLiteral("WARN") : QStringLiteral("OK"));
+    addRow(QStringLiteral("production_substitute"),
+           QStringLiteral("Production substitute"),
+           QStringLiteral("NO"),
+           QStringLiteral("Debug artifacts never replace capture.stream/index acceptance"),
+           QStringLiteral("OK"));
+    addRow(QStringLiteral("endpoint"),
+           QStringLiteral("Tap endpoint"),
+           m_debugGatewayEndpoint.isEmpty() ? QStringLiteral("-") : m_debugGatewayEndpoint,
+           reason.isEmpty() ? m_debugGatewayStatus : reason,
+           active ? QStringLiteral("WARN") : QStringLiteral("INFO"));
+    addRow(QStringLiteral("artifact"),
+           QStringLiteral("Tap artifact"),
+           m_debugGatewayArtifactPath.isEmpty() ? QStringLiteral("-") : m_debugGatewayArtifactPath,
+           QStringLiteral("gateway.ready/result.json/summary.md live under this folder"));
+
+    const QJsonObject ready = readJsonObject(m_debugGatewayReadyPath);
+    if (!ready.isEmpty()) {
+        addRow(QStringLiteral("ready"),
+               QStringLiteral("Ready file"),
+               QStringLiteral("present"),
+               QStringLiteral("port %1 serial %2 policy %3")
+                   .arg(QString::number(ready.value(QStringLiteral("port")).toInt()),
+                        ready.value(QStringLiteral("serial_port")).toString(QStringLiteral("-")),
+                        ready.value(QStringLiteral("backpressure_policy")).toString(QStringLiteral("-"))),
+               QStringLiteral("OK"));
+    }
+    const QJsonObject result = readJsonObject(m_debugGatewayResultPath);
+    if (!result.isEmpty()) {
+        const QJsonObject stats = result.value(QStringLiteral("stats")).toObject();
+        const quint64 droppedBytes = quint64(stats.value(QStringLiteral("tcp_queue_dropped_bytes")).toDouble());
+        const quint64 droppedChunks = quint64(stats.value(QStringLiteral("tcp_queue_dropped_chunks")).toDouble());
+        addRow(QStringLiteral("drop_counter"),
+               QStringLiteral("Tap drop counter"),
+               QStringLiteral("%1B / %2 chunks").arg(droppedBytes).arg(droppedChunks),
+               QStringLiteral("serial_rx %1 tcp_tx %2 tcp_rx %3 serial_tx %4")
+                   .arg(quint64(stats.value(QStringLiteral("serial_rx_bytes")).toDouble()))
+                   .arg(quint64(stats.value(QStringLiteral("tcp_tx_bytes")).toDouble()))
+                   .arg(quint64(stats.value(QStringLiteral("tcp_rx_bytes")).toDouble()))
+                   .arg(quint64(stats.value(QStringLiteral("serial_tx_bytes")).toDouble())),
+               droppedBytes > 0 || droppedChunks > 0 ? QStringLiteral("WARN") : QStringLiteral("OK"));
+        const QJsonObject capture = result.value(QStringLiteral("capture")).toObject();
+        addRow(QStringLiteral("capture"),
+               QStringLiteral("Tap capture"),
+               result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("finalized") : QStringLiteral("not finalized"),
+               QStringLiteral("stream %1 parser %2")
+                   .arg(capture.value(QStringLiteral("stream")).toString(QStringLiteral("-")),
+                        capture.value(QStringLiteral("parser")).toString(QStringLiteral("-"))),
+               result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("OK") : QStringLiteral("WARN"));
+    }
+
+    m_debugGatewayDiagnostics = rows;
+    emit debugGatewayChanged();
+}
+
 void AppController::toggleDebugGateway(const QString& portName) {
     if (debugGatewayActive()) {
         stopDebugGateway();
@@ -8560,7 +8645,7 @@ void AppController::startDebugGatewayNow(const QString& portName) {
     }
     if (!QFileInfo::exists(scriptPath)) {
         m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 스크립트 없음");
-        emit debugGatewayChanged();
+        refreshDebugGatewayDiagnostics(QStringLiteral("script missing"));
         setStatus(QStringLiteral("디버그 게이트웨이 스크립트를 찾지 못했습니다"));
         return;
     }
@@ -8569,7 +8654,7 @@ void AppController::startDebugGatewayNow(const QString& portName) {
     const QString outDir = QDir(projectRoot).filePath(QStringLiteral("artifacts/vsm_debug_gateway/app_%1").arg(stamp));
     if (!QDir().mkpath(outDir)) {
         m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 출력 폴더 생성 실패");
-        emit debugGatewayChanged();
+        refreshDebugGatewayDiagnostics(QStringLiteral("output directory failed"));
         setStatus(m_debugGatewayStatus);
         return;
     }
@@ -8584,7 +8669,7 @@ void AppController::startDebugGatewayNow(const QString& portName) {
         const QString output = QString::fromLocal8Bit(process->readAllStandardOutput());
         if (output.contains(QStringLiteral("READY"))) {
             m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 준비 · %1").arg(endpoint);
-            emit debugGatewayChanged();
+            refreshDebugGatewayDiagnostics(QStringLiteral("ready"));
             if (!m_connected) connectPort(endpoint);
         }
     });
@@ -8592,12 +8677,12 @@ void AppController::startDebugGatewayNow(const QString& portName) {
         const QString error = QString::fromLocal8Bit(process->readAllStandardError()).trimmed();
         if (error.isEmpty()) return;
         m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 오류: %1").arg(error.left(180));
-        emit debugGatewayChanged();
+        refreshDebugGatewayDiagnostics(QStringLiteral("stderr"));
         setStatus(m_debugGatewayStatus);
     });
     connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError error) {
         m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 실행 오류: %1").arg(int(error));
-        emit debugGatewayChanged();
+        refreshDebugGatewayDiagnostics(QStringLiteral("process error"));
         setStatus(m_debugGatewayStatus);
     });
     connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
@@ -8616,9 +8701,12 @@ void AppController::startDebugGatewayNow(const QString& portName) {
 
     m_debugGatewayProcess = process;
     m_debugGatewayEndpoint = endpoint;
+    m_debugGatewayArtifactPath = outDir;
+    m_debugGatewayReadyPath = QDir(outDir).filePath(QStringLiteral("gateway.ready"));
+    m_debugGatewayResultPath = QDir(outDir).filePath(QStringLiteral("result.json"));
     m_debugGatewayStopFile = stopFile;
     m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 시작 중 · %1 -> %2").arg(portName, endpoint);
-    emit debugGatewayChanged();
+    refreshDebugGatewayDiagnostics(QStringLiteral("starting"));
     setStatus(m_debugGatewayStatus);
 
     process->start(QStringLiteral("py"), args);
@@ -8628,7 +8716,10 @@ void AppController::startDebugGatewayNow(const QString& portName) {
         setStatus(m_debugGatewayStatus);
         m_debugGatewayProcess = nullptr;
         m_debugGatewayEndpoint.clear();
+        m_debugGatewayReadyPath.clear();
+        m_debugGatewayResultPath.clear();
         m_debugGatewayStopFile.clear();
+        refreshDebugGatewayDiagnostics(QStringLiteral("start failed"));
         process->deleteLater();
     }
 }
@@ -8638,9 +8729,11 @@ void AppController::stopDebugGateway() {
     if (!process || process->state() == QProcess::NotRunning) {
         m_debugGatewayProcess = nullptr;
         m_debugGatewayEndpoint.clear();
+        m_debugGatewayReadyPath.clear();
+        m_debugGatewayResultPath.clear();
         m_debugGatewayStopFile.clear();
-        m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 꺼짐");
-        emit debugGatewayChanged();
+        m_debugGatewayStatus = QStringLiteral("Debug gateway off");
+        refreshDebugGatewayDiagnostics(QStringLiteral("off"));
         return;
     }
 
@@ -8656,8 +8749,8 @@ void AppController::stopDebugGateway() {
         }
     }
 
-    m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 종료 요청 중");
-    emit debugGatewayChanged();
+    m_debugGatewayStatus = QStringLiteral("Debug gateway stop requested");
+    refreshDebugGatewayDiagnostics(QStringLiteral("stop requested"));
     setStatus(m_debugGatewayStatus);
 
     QTimer::singleShot(2500, this, [this, process]() {
@@ -8682,7 +8775,7 @@ void AppController::finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus
     m_debugGatewayStatus = normal
         ? QStringLiteral("디버그 게이트웨이 종료됨")
         : QStringLiteral("디버그 게이트웨이 비정상 종료: exit=%1").arg(exitCode);
-    emit debugGatewayChanged();
+    refreshDebugGatewayDiagnostics(normal ? QStringLiteral("finished") : QStringLiteral("abnormal finish"));
     setStatus(m_debugGatewayStatus);
     process->deleteLater();
 }

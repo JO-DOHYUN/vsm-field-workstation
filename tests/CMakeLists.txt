@@ -153,7 +153,7 @@ add_executable(test_capture_core_process_runtime
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerWriterRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/SerialDrainRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TypedCaptureWriterRuntime.cpp
@@ -371,7 +371,7 @@ add_executable(test_transport_runtime_foundation
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
@@ -483,7 +483,7 @@ add_executable(test_serial_worker_typed_ingest
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
@@ -522,7 +522,7 @@ add_executable(test_recorder_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedRecords.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/TypedTransportParser.cpp
@@ -677,7 +677,7 @@ add_executable(test_app_controller_replay_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
@@ -750,7 +750,7 @@ add_executable(test_app_controller_log_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
@@ -822,7 +822,7 @@ add_executable(test_app_controller_analysis_source_flow
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
@@ -894,7 +894,7 @@ add_executable(test_app_controller_export_snapshot
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp
@@ -966,7 +966,7 @@ add_executable(test_qml_shell_smoke
     ${CMAKE_SOURCE_DIR}/src/backend/transport/HostTxRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LegacyIngressRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveProjectionRuntime.cpp
-    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveTruthRuntime.cpp
+    ${CMAKE_SOURCE_DIR}/src/backend/transport/LiveLatestRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/RawLedgerRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportRuntime.cpp
     ${CMAKE_SOURCE_DIR}/src/backend/transport/TransportSession.cpp

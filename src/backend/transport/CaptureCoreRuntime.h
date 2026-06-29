@@ -3,7 +3,7 @@
 #include "core/CoreMaterializedViewStore.h"
 #include "transport/CoreDataBatches.h"
 #include "transport/LiveProjectionRuntime.h"
-#include "transport/LiveTruthRuntime.h"
+#include "transport/LiveLatestRuntime.h"
 #include "transport/TypedEvidencePipelineRuntime.h"
 #include "transport/TypedRecordHandoffQueue.h"
 
@@ -36,8 +36,8 @@ public:
         bool projectionStatusDue = false;
         LiveProjectionRuntime::Status projectionStatus;
 
-        bool truthStatusDue = false;
-        LiveTruthRuntime::Status truthStatus;
+        bool latestStatusDue = false;
+        LiveLatestRuntime::Status latestStatus;
 
         bool captureDrainNeeded = false;
         bool captureHandoffOverrun = false;
@@ -65,7 +65,7 @@ public:
     CanMonitorCore::ViewQueryResult queryView(const CanMonitorCore::ViewQuery& query) const;
     QVector<CanMonitorCore::ViewChanged> viewChanges() const;
 
-    LiveTruthRuntime::Status truthStatus() const { return m_liveTruth.status(); }
+    LiveLatestRuntime::Status latestStatus() const { return m_liveLatest.status(); }
 
 private:
     void appendCanRxFrames(const TypedRecord& record, QVector<CanRxLite>& out) const;
@@ -78,7 +78,7 @@ private:
 
     TypedEvidencePipelineRuntime m_pipeline;
     LiveProjectionRuntime m_liveProjection;
-    LiveTruthRuntime m_liveTruth;
+    LiveLatestRuntime m_liveLatest;
     CanMonitorCore::CoreMaterializedViewStore m_viewStore;
     QHash<quint64, CanRxLite> m_liveLatestByKey;
     QJsonObject m_coreEvidenceTransportPayload;

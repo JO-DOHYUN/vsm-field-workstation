@@ -17,10 +17,10 @@ private slots:
         registry.reset();
         registry.setEnabled(true);
 
-        registry.noteEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 96);
+        registry.noteEmit(CanMonitorPerf::LiveTraceSignal::typedLiveLatestStatusChanged, 1, 96);
         auto snapshots = registry.signalSnapshots();
         const auto truthIt = std::find_if(snapshots.cbegin(), snapshots.cend(), [](const auto& s) {
-            return s.name == QStringLiteral("typedTruthStatusChanged");
+            return s.name == QStringLiteral("typedLiveLatestStatusChanged");
         });
         QVERIFY(truthIt != snapshots.cend());
         QCOMPARE(truthIt->emitSeq, quint64(1));
@@ -28,10 +28,10 @@ private slots:
         QCOMPARE(truthIt->inflight, quint64(1));
 
         QTest::qWait(2);
-        registry.noteSlot(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 96);
+        registry.noteSlot(CanMonitorPerf::LiveTraceSignal::typedLiveLatestStatusChanged, 1, 96);
         snapshots = registry.signalSnapshots();
         const auto truthAfter = std::find_if(snapshots.cbegin(), snapshots.cend(), [](const auto& s) {
-            return s.name == QStringLiteral("typedTruthStatusChanged");
+            return s.name == QStringLiteral("typedLiveLatestStatusChanged");
         });
         QVERIFY(truthAfter != snapshots.cend());
         QCOMPARE(truthAfter->emitSeq, quint64(1));

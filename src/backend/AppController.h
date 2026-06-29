@@ -75,6 +75,10 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantList transportDiagnostics READ transportDiagnostics NOTIFY transportDiagnosticsChanged)
     Q_PROPERTY(bool debugGatewayActive READ debugGatewayActive NOTIFY debugGatewayChanged)
     Q_PROPERTY(QString debugGatewayStatus READ debugGatewayStatus NOTIFY debugGatewayChanged)
+    Q_PROPERTY(QString debugGatewayEndpoint READ debugGatewayEndpoint NOTIFY debugGatewayChanged)
+    Q_PROPERTY(QString debugGatewayArtifactPath READ debugGatewayArtifactPath NOTIFY debugGatewayChanged)
+    Q_PROPERTY(QString debugGatewayModeSummary READ debugGatewayModeSummary NOTIFY debugGatewayChanged)
+    Q_PROPERTY(QVariantList debugGatewayDiagnostics READ debugGatewayDiagnostics NOTIFY debugGatewayChanged)
     Q_PROPERTY(bool debugProfilerEnabled READ debugProfilerEnabled NOTIFY performanceDiagnosticsChanged)
     Q_PROPERTY(QString performanceSummary READ performanceSummary NOTIFY performanceDiagnosticsChanged)
     Q_PROPERTY(QVariantList performanceDiagnostics READ performanceDiagnostics NOTIFY performanceDiagnosticsChanged)
@@ -324,6 +328,14 @@ public:
     QVariantList transportDiagnostics() const { return m_transportSession.rows(); }
     bool debugGatewayActive() const { return m_debugGatewayProcess && m_debugGatewayProcess->state() != QProcess::NotRunning; }
     QString debugGatewayStatus() const { return m_debugGatewayStatus; }
+    QString debugGatewayEndpoint() const { return m_debugGatewayEndpoint; }
+    QString debugGatewayArtifactPath() const { return m_debugGatewayArtifactPath; }
+    QString debugGatewayModeSummary() const {
+        return debugGatewayActive()
+            ? QStringLiteral("Optional debug tap ON - production path isolated")
+            : QStringLiteral("Optional debug tap OFF - normal production path");
+    }
+    QVariantList debugGatewayDiagnostics() const { return m_debugGatewayDiagnostics; }
     bool debugProfilerEnabled() const { return m_debugProfilerEnabled; }
     QString performanceSummary() const { return m_performanceSummary; }
     QVariantList performanceDiagnostics() const { return m_performanceDiagnostics; }
@@ -809,6 +821,7 @@ private:
     void setStatus(const QString& text);
     void startDebugGatewayNow(const QString& portName);
     void finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
+    void refreshDebugGatewayDiagnostics(const QString& reason = QString());
     void finishVerificationRunnerProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
     void runAttachedVerificationScenario(const QString& scenarioKey, const QString& durationKey = QStringLiteral("30s"));
     void startAttachedVerificationProcess(QProcess* process, const QStringList& args);
@@ -1362,9 +1375,13 @@ private:
     CanMonitorTransport::TransportSession m_transportSession;
     QString m_transportModeKey = QStringLiteral("typed");
     QProcess* m_debugGatewayProcess = nullptr;
-    QString m_debugGatewayStatus = QStringLiteral("디버그 게이트웨이 꺼짐");
+    QString m_debugGatewayStatus = QStringLiteral("Debug gateway off");
     QString m_debugGatewayEndpoint;
+    QString m_debugGatewayArtifactPath;
+    QString m_debugGatewayReadyPath;
+    QString m_debugGatewayResultPath;
     QString m_debugGatewayStopFile;
+    QVariantList m_debugGatewayDiagnostics;
     int m_debugGatewayPort = 18477;
     bool m_debugProfilerEnabled = false;
     QString m_performanceSummary = QStringLiteral("성능 계측 꺼짐");

@@ -204,8 +204,8 @@ qt_add_executable(vsm_capture_core
     src/backend/transport/LivePathTelemetry.h
     src/backend/transport/LiveProjectionRuntime.h
     src/backend/transport/LiveProjectionRuntime.cpp
-    src/backend/transport/LiveTruthRuntime.h
-    src/backend/transport/LiveTruthRuntime.cpp
+    src/backend/transport/LiveLatestRuntime.h
+    src/backend/transport/LiveLatestRuntime.cpp
     src/backend/transport/SerialDrainRuntime.h
     src/backend/transport/SerialDrainRuntime.cpp
     src/backend/transport/TypedIngressRuntime.h

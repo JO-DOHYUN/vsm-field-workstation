@@ -27,13 +27,13 @@ void TypedEvidencePipelineWorkerRuntime::reset() {
     m_pumpScheduled = false;
     m_statusSignalScheduled = false;
     m_hasPendingProjectionStatus = false;
-    m_hasPendingTruthStatus = false;
+    m_hasPendingLiveLatestStatus = false;
     m_hasPendingTypedStatus = false;
     m_handshakeElapsedMs = -1;
     m_statusClock.invalidate();
     m_statusSignalClock.invalidate();
     m_pendingProjectionStatus = {};
-    m_pendingTruthStatus = {};
+    m_pendingLiveLatestStatus = {};
     m_pendingTypedStatus = {};
     m_livePathTelemetry = LivePathTelemetry{};
     m_eventTelemetry = DrainEventTelemetry{};
@@ -131,7 +131,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         emit rawLedgerFramesReady(result.rawLedgerFrames);
     }
     if (result.projectionStatusDue) queueProjectionStatusSnapshot(result.projectionStatus);
-    if (result.truthStatusDue) queueTruthStatusSnapshot(result.truthStatus);
+    if (result.latestStatusDue) queueLiveLatestStatusSnapshot(result.latestStatus);
     if (result.captureHandoffOverrun) {
         ++m_eventTelemetry.outputSignalCount;
         emit captureHandoffOverrun(result.captureHandoffOverrunRecords,
@@ -150,7 +150,7 @@ void TypedEvidencePipelineWorkerRuntime::pump() {
         ++m_eventTelemetry.pumpRescheduleCount;
         schedulePump(m_handshakeElapsedMs);
     } else {
-        queueTruthStatusSnapshot(m_core.truthStatus());
+        queueLiveLatestStatusSnapshot(m_core.latestStatus());
     }
     emit pumpCycleFinished();
 }
@@ -205,9 +205,9 @@ void TypedEvidencePipelineWorkerRuntime::queueProjectionStatusSnapshot(const Can
     scheduleStatusSnapshotFlush();
 }
 
-void TypedEvidencePipelineWorkerRuntime::queueTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
-    m_pendingTruthStatus = status;
-    m_hasPendingTruthStatus = true;
+void TypedEvidencePipelineWorkerRuntime::queueLiveLatestStatusSnapshot(const CanMonitorTransport::LiveLatestRuntime::Status& status) {
+    m_pendingLiveLatestStatus = status;
+    m_hasPendingLiveLatestStatus = true;
     scheduleStatusSnapshotFlush();
 }
 
@@ -233,23 +233,23 @@ void TypedEvidencePipelineWorkerRuntime::scheduleStatusSnapshotFlush() {
 void TypedEvidencePipelineWorkerRuntime::emitPendingStatusSnapshots() {
     m_statusSignalScheduled = false;
     const bool hasProjection = m_hasPendingProjectionStatus;
-    const bool hasTruth = m_hasPendingTruthStatus;
+    const bool hasLatest = m_hasPendingLiveLatestStatus;
     const bool hasTyped = m_hasPendingTypedStatus;
-    if (!hasProjection && !hasTruth && !hasTyped) return;
+    if (!hasProjection && !hasLatest && !hasTyped) return;
 
     const auto projectionStatus = m_pendingProjectionStatus;
-    const auto truthStatus = m_pendingTruthStatus;
+    const auto latestStatus = m_pendingLiveLatestStatus;
     const auto typedStatus = m_pendingTypedStatus;
     m_hasPendingProjectionStatus = false;
-    m_hasPendingTruthStatus = false;
+    m_hasPendingLiveLatestStatus = false;
     m_hasPendingTypedStatus = false;
 
     if (hasProjection) emitProjectionStatusSnapshot(projectionStatus);
-    if (hasTruth) emitTruthStatusSnapshot(truthStatus);
+    if (hasLatest) emitLiveLatestStatusSnapshot(latestStatus);
     if (hasTyped) emitTypedStatusSnapshot(typedStatus);
     m_statusSignalClock.restart();
 
-    if (m_hasPendingProjectionStatus || m_hasPendingTruthStatus || m_hasPendingTypedStatus) {
+    if (m_hasPendingProjectionStatus || m_hasPendingLiveLatestStatus || m_hasPendingTypedStatus) {
         scheduleStatusSnapshotFlush();
     }
 }
@@ -269,22 +269,22 @@ void TypedEvidencePipelineWorkerRuntime::emitProjectionStatusSnapshot(const CanM
                                status.sampledControlEvidenceRecords);
 }
 
-void TypedEvidencePipelineWorkerRuntime::emitTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
+void TypedEvidencePipelineWorkerRuntime::emitLiveLatestStatusSnapshot(const CanMonitorTransport::LiveLatestRuntime::Status& status) {
     ++m_eventTelemetry.outputSignalCount;
     ++m_eventTelemetry.statusSignalCount;
-    ++m_eventTelemetry.truthStatusReadySignalCount;
-    emit truthStatusReady(status.observedCanRxFrames,
-                          status.emittedTruthFrames,
-                          status.coalescedTruthUpdates,
-                          status.observedBus0CanRxFrames,
-                          status.observedBus1CanRxFrames,
-                          status.flushCount,
-                          status.pendingKeys,
-                          status.maxPendingKeys,
-                          status.lastInputRecords,
-                          status.lastOutputFrames,
-                          status.lastFlushMs,
-                          status.truthLoss);
+    ++m_eventTelemetry.liveLatestStatusReadySignalCount;
+    emit liveLatestStatusReady(status.observedCanRxFrames,
+                               status.emittedLatestFrames,
+                               status.coalescedLatestUpdates,
+                               status.observedBus0CanRxFrames,
+                               status.observedBus1CanRxFrames,
+                               status.flushCount,
+                               status.pendingKeys,
+                               status.maxPendingKeys,
+                               status.lastInputRecords,
+                               status.lastOutputFrames,
+                               status.lastFlushMs,
+                               status.displayLoss);
 }
 
 void TypedEvidencePipelineWorkerRuntime::emitTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status) {

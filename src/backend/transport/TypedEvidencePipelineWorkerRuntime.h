@@ -45,18 +45,18 @@ signals:
                                quint64 observedControlEvidenceRecords,
                                quint64 projectedControlEvidenceRecords,
                                quint64 sampledControlEvidenceRecords);
-    void truthStatusReady(quint64 observedCanRxFrames,
-                          quint64 emittedTruthFrames,
-                          quint64 coalescedTruthUpdates,
-                          quint64 observedBus0CanRxFrames,
-                          quint64 observedBus1CanRxFrames,
-                          quint64 flushCount,
-                          int pendingKeys,
-                          int maxPendingKeys,
-                          int lastInputRecords,
-                          int lastOutputFrames,
-                          int lastFlushMs,
-                          quint64 truthLoss);
+    void liveLatestStatusReady(quint64 observedCanRxFrames,
+                               quint64 emittedLatestFrames,
+                               quint64 coalescedLatestUpdates,
+                               quint64 observedBus0CanRxFrames,
+                               quint64 observedBus1CanRxFrames,
+                               quint64 flushCount,
+                               int pendingKeys,
+                               int maxPendingKeys,
+                               int lastInputRecords,
+                               int lastOutputFrames,
+                               int lastFlushMs,
+                               quint64 displayLoss);
     void typedStatusReady(quint64 frames,
                           quint64 bytesDropped,
                           quint64 crcFailures,
@@ -78,11 +78,11 @@ private:
     void emitPipelineStatus(const CaptureCoreRuntime::Result* result = nullptr, bool force = false);
     void emitCoreViewChanges(const QVector<CanMonitorCore::ViewChanged>& changes);
     void queueProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
-    void queueTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status);
+    void queueLiveLatestStatusSnapshot(const CanMonitorTransport::LiveLatestRuntime::Status& status);
     void queueTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
     void scheduleStatusSnapshotFlush();
     void emitProjectionStatusSnapshot(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
-    void emitTruthStatusSnapshot(const CanMonitorTransport::LiveTruthRuntime::Status& status);
+    void emitLiveLatestStatusSnapshot(const CanMonitorTransport::LiveLatestRuntime::Status& status);
     void emitTypedStatusSnapshot(const CanMonitorTransport::TypedIngressRuntime::StatusSnapshot& status);
     static quint64 projectionKeyForFrame(const FrameRecord& frame);
 
@@ -93,12 +93,12 @@ private:
     QElapsedTimer m_statusClock;
     QElapsedTimer m_statusSignalClock;
     LiveProjectionRuntime::Status m_pendingProjectionStatus;
-    LiveTruthRuntime::Status m_pendingTruthStatus;
+    LiveLatestRuntime::Status m_pendingLiveLatestStatus;
     TypedIngressRuntime::StatusSnapshot m_pendingTypedStatus;
     bool m_pumpScheduled = false;
     bool m_statusSignalScheduled = false;
     bool m_hasPendingProjectionStatus = false;
-    bool m_hasPendingTruthStatus = false;
+    bool m_hasPendingLiveLatestStatus = false;
     bool m_hasPendingTypedStatus = false;
     qint64 m_handshakeElapsedMs = -1;
 };

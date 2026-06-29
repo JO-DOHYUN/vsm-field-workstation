@@ -37,7 +37,7 @@ Display-only path:
 
 ```text
 TypedIngressRuntime
-  -> LiveTruthRuntime
+  -> LiveLatestRuntime
        - coalesces latest CAN_RX by bus+id+ext+rtr for lightweight display/graph state only
        - never feeds timing/value/alarm truth calculations
        - reports observed/emitted/coalesced/pending/truth_loss counters
@@ -93,7 +93,7 @@ for final capture validation.
   cleared bytes, enqueue failure, and segment enqueue failure are truth-loss
   evidence. Backpressure and MCP drain-budget hits are transport-risk evidence.
 - `truth_analysis`: accepted truth consumption, state cap, snapshot, `truth_loss`, and `analysis_overrun`.
-- `live_truth`: display-side latest-state coalescing counters; not timing/value/alarm truth.
+- `live_latest`: display-side latest-state coalescing counters; not timing/value/alarm truth.
 - `live_projection`: display sampling/drop/backlog counters.
 - `live_delay`: UI/live frame freshness.
 
@@ -123,7 +123,7 @@ Automatic gates:
 - Full `ctest` current count.
 - Release exe startup smoke.
 - `analysis_runtime_foundation` verifies all-frame analysis consumption, bus-aware keys, DLC preservation, overrun diagnostics, and snapshot diff.
-- `transport_runtime_foundation` verifies `LiveTruthRuntime` bus-aware coalesced snapshots.
+- `transport_runtime_foundation` verifies `LiveLatestRuntime` bus-aware coalesced snapshots.
 - `app_controller_log_flow` verifies live same-CAN-ID bus0/bus1 separation.
 - `qml_shell_smoke` verifies truth-analysis and projection diagnostics load without QML errors.
 - `performance_probe_runtime` verifies debug profiler no-op/record/snapshot behavior.
@@ -142,7 +142,7 @@ PASS is allowed only from the actual VSM route, not a direct COM reader.
 ## Remaining Risks
 
 - `AnalysisRuntime` is now the truth calculation owner for live snapshots. If future decode/rule/alarm work becomes heavier, it must remain bounded and measured.
-- `LiveTruthRuntime` remains display/latest-state coalescing only. It must not become the source for timing/value/alarm truth.
+- `LiveLatestRuntime` remains display/latest-state coalescing only. It must not become the source for timing/value/alarm truth.
 - Snapshot delivery may be delayed under load; that is acceptable only when truth consumption counters remain clean.
 - Replay/live analysis must keep using the same factual keys and semantics to avoid field/replay mismatch.
 - Debug gateway can preserve raw serial evidence during a VSM crash, but it cannot survive PC power loss or physical USB disconnect.

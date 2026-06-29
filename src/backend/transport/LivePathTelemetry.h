@@ -178,13 +178,13 @@ struct DrainEventTelemetry {
     quint64 diagnosticsSignalCount = 0;
     quint64 captureQueueReadySignalCount = 0;
     quint64 typedStatusReadySignalCount = 0;
-    quint64 truthStatusReadySignalCount = 0;
+    quint64 liveLatestStatusReadySignalCount = 0;
     quint64 projectionStatusReadySignalCount = 0;
 
     quint64 typedProjectionStatusEmit = 0;
     quint64 typedProjectionStatusReceive = 0;
-    quint64 typedTruthStatusEmit = 0;
-    quint64 typedTruthStatusReceive = 0;
+    quint64 typedLiveLatestStatusEmit = 0;
+    quint64 typedLiveLatestStatusReceive = 0;
     quint64 typedTransportStatusEmit = 0;
     quint64 typedTransportStatusReceive = 0;
 
@@ -207,10 +207,10 @@ struct DrainEventTelemetry {
     quint64 rawLedgerHandoffOverrunBytes = 0;
     bool rawLedgerHandoffInflight = false;
 
-    quint64 truthHandoffEmitCount = 0;
-    quint64 truthHandoffEmitFrames = 0;
-    quint64 truthHandoffPendingKeys = 0;
-    quint64 truthHandoffFlushCount = 0;
+    quint64 latestHandoffEmitCount = 0;
+    quint64 latestHandoffEmitFrames = 0;
+    quint64 latestHandoffPendingKeys = 0;
+    quint64 latestHandoffFlushCount = 0;
 
     TelemetryRateWindow rates;
 
@@ -250,12 +250,11 @@ struct DrainEventTelemetry {
         insertCounter(out, QStringLiteral("diagnostics_signal_count"), diagnosticsSignalCount);
         insertCounter(out, QStringLiteral("captureQueueReady_signal_count"), captureQueueReadySignalCount);
         insertCounter(out, QStringLiteral("typedStatusReady_signal_count"), typedStatusReadySignalCount);
-        insertCounter(out, QStringLiteral("truthStatusReady_signal_count"), truthStatusReadySignalCount);
-        insertCounter(out, QStringLiteral("projectionStatusReady_signal_count"), projectionStatusReadySignalCount);
+        insertCounter(out, QStringLiteral("liveLatestStatusReady_signal_count"), liveLatestStatusReadySignalCount);        insertCounter(out, QStringLiteral("projectionStatusReady_signal_count"), projectionStatusReadySignalCount);
         insertCounter(out, QStringLiteral("typedProjectionStatus_emit"), typedProjectionStatusEmit);
         insertCounter(out, QStringLiteral("typedProjectionStatus_receive"), typedProjectionStatusReceive);
-        insertCounter(out, QStringLiteral("typedTruthStatus_emit"), typedTruthStatusEmit);
-        insertCounter(out, QStringLiteral("typedTruthStatus_receive"), typedTruthStatusReceive);
+        insertCounter(out, QStringLiteral("typedLiveLatestStatus_emit"), typedLiveLatestStatusEmit);
+        insertCounter(out, QStringLiteral("typedLiveLatestStatus_receive"), typedLiveLatestStatusReceive);
         insertCounter(out, QStringLiteral("typedTransportStatus_emit"), typedTransportStatusEmit);
         insertCounter(out, QStringLiteral("typedTransportStatus_receive"), typedTransportStatusReceive);
 
@@ -278,11 +277,10 @@ struct DrainEventTelemetry {
         insertCounter(out, QStringLiteral("raw_ledger_handoff_overrun_bytes"), rawLedgerHandoffOverrunBytes);
         out.insert(QStringLiteral("raw_ledger_handoff_inflight"), rawLedgerHandoffInflight);
 
-        insertCounter(out, QStringLiteral("truth_handoff_emit_count"), truthHandoffEmitCount);
-        insertCounter(out, QStringLiteral("truth_handoff_emit_frames"), truthHandoffEmitFrames);
-        insertCounter(out, QStringLiteral("truth_handoff_pending_keys"), truthHandoffPendingKeys);
-        insertCounter(out, QStringLiteral("truth_handoff_flush_count"), truthHandoffFlushCount);
-        return out;
+        insertCounter(out, QStringLiteral("latest_handoff_emit_count"), latestHandoffEmitCount);
+        insertCounter(out, QStringLiteral("latest_handoff_emit_frames"), latestHandoffEmitFrames);
+        insertCounter(out, QStringLiteral("latest_handoff_pending_keys"), latestHandoffPendingKeys);
+        insertCounter(out, QStringLiteral("latest_handoff_flush_count"), latestHandoffFlushCount);        return out;
     }
 };
 

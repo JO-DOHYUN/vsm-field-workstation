@@ -9,7 +9,7 @@
 #include "transport/LegacyIngressRuntime.h"
 #include "transport/LivePathTelemetry.h"
 #include "transport/LiveProjectionRuntime.h"
-#include "transport/LiveTruthRuntime.h"
+#include "transport/LiveLatestRuntime.h"
 #include "transport/RawLedgerWriterRuntime.h"
 #include "transport/SerialDrainRuntime.h"
 #include "transport/TypedCaptureWriterRuntime.h"
@@ -88,18 +88,18 @@ signals:
                                       quint64 observedControlEvidenceRecords,
                                       quint64 projectedControlEvidenceRecords,
                                       quint64 sampledControlEvidenceRecords);
-    void typedTruthStatusChanged(quint64 observedCanRxFrames,
-                                 quint64 emittedTruthFrames,
-                                 quint64 coalescedTruthUpdates,
-                                 quint64 observedBus0CanRxFrames,
-                                 quint64 observedBus1CanRxFrames,
-                                 quint64 flushCount,
-                                 int pendingKeys,
-                                 int maxPendingKeys,
-                                 int lastInputRecords,
-                                 int lastOutputFrames,
-                                 int lastFlushMs,
-                                 quint64 truthLoss);
+    void typedLiveLatestStatusChanged(quint64 observedCanRxFrames,
+                                      quint64 emittedLatestFrames,
+                                      quint64 coalescedLatestUpdates,
+                                      quint64 observedBus0CanRxFrames,
+                                      quint64 observedBus1CanRxFrames,
+                                      quint64 flushCount,
+                                      int pendingKeys,
+                                      int maxPendingKeys,
+                                      int lastInputRecords,
+                                      int lastOutputFrames,
+                                      int lastFlushMs,
+                                      quint64 displayLoss);
     void typedTransportStatusChanged(quint64 frames, quint64 bytesDropped, quint64 crcFailures, quint64 lengthFailures, quint64 versionWarnings, quint64 seqGaps);
     void analysisRuntimeSnapshotChanged(const QString& source,
                                         const QString& level,
@@ -166,7 +166,7 @@ private:
     void flushRawLedgerHandoffSync();
     void flushCaptureWriterHandoffSync();
     void emitProjectionStatus(const CanMonitorTransport::LiveProjectionRuntime::Status& status);
-    void emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status);
+    void emitLiveLatestStatus(const CanMonitorTransport::LiveLatestRuntime::Status& status);
     void resetProjectionQueue();
     static quint64 projectionKeyForFrame(const FrameRecord& frame);
     bool startGatewayTcp(const QString& endpoint);

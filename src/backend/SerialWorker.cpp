@@ -110,8 +110,8 @@ QJsonObject serialDrainTraceJson(CanMonitorTransport::DrainEventTelemetry& telem
     out.insert(QStringLiteral("drain_pump_scheduled_flag"), telemetry.drainPumpScheduledFlag);
     CanMonitorTransport::insertCounter(out, QStringLiteral("typedProjectionStatus_emit"), telemetry.typedProjectionStatusEmit);
     CanMonitorTransport::insertCounter(out, QStringLiteral("typedProjectionStatus_receive"), telemetry.typedProjectionStatusReceive);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTruthStatus_emit"), telemetry.typedTruthStatusEmit);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("typedTruthStatus_receive"), telemetry.typedTruthStatusReceive);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedLiveLatestStatus_emit"), telemetry.typedLiveLatestStatusEmit);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("typedLiveLatestStatus_receive"), telemetry.typedLiveLatestStatusReceive);
     CanMonitorTransport::insertCounter(out, QStringLiteral("typedTransportStatus_emit"), telemetry.typedTransportStatusEmit);
     CanMonitorTransport::insertCounter(out, QStringLiteral("typedTransportStatus_receive"), telemetry.typedTransportStatusReceive);
     CanMonitorTransport::insertCounter(out, QStringLiteral("analysis_handoff_pending_frames"), telemetry.analysisHandoffPendingFrames);
@@ -131,10 +131,10 @@ QJsonObject serialDrainTraceJson(CanMonitorTransport::DrainEventTelemetry& telem
     CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_complete_frames"), telemetry.rawLedgerHandoffCompleteFrames);
     CanMonitorTransport::insertCounter(out, QStringLiteral("raw_ledger_handoff_overrun_bytes"), telemetry.rawLedgerHandoffOverrunBytes);
     out.insert(QStringLiteral("raw_ledger_handoff_inflight"), telemetry.rawLedgerHandoffInflight);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_emit_count"), telemetry.truthHandoffEmitCount);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_emit_frames"), telemetry.truthHandoffEmitFrames);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_pending_keys"), telemetry.truthHandoffPendingKeys);
-    CanMonitorTransport::insertCounter(out, QStringLiteral("truth_handoff_flush_count"), telemetry.truthHandoffFlushCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("latest_handoff_emit_count"), telemetry.latestHandoffEmitCount);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("latest_handoff_emit_frames"), telemetry.latestHandoffEmitFrames);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("latest_handoff_pending_keys"), telemetry.latestHandoffPendingKeys);
+    CanMonitorTransport::insertCounter(out, QStringLiteral("latest_handoff_flush_count"), telemetry.latestHandoffFlushCount);
     return out;
 }
 
@@ -747,21 +747,21 @@ void SerialWorker::emitProjectionStatus(const CanMonitorTransport::LiveProjectio
                                       status.sampledControlEvidenceRecords);
 }
 
-void SerialWorker::emitTruthStatus(const CanMonitorTransport::LiveTruthRuntime::Status& status) {
-    ++m_drainEventTelemetry.typedTruthStatusEmit;
-    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
-    emit typedTruthStatusChanged(status.observedCanRxFrames,
-                                 status.emittedTruthFrames,
-                                 status.coalescedTruthUpdates,
-                                 status.observedBus0CanRxFrames,
-                                 status.observedBus1CanRxFrames,
-                                 status.flushCount,
-                                 status.pendingKeys,
-                                 status.maxPendingKeys,
-                                 status.lastInputRecords,
-                                 status.lastOutputFrames,
-                                 status.lastFlushMs,
-                                 status.truthLoss);
+void SerialWorker::emitLiveLatestStatus(const CanMonitorTransport::LiveLatestRuntime::Status& status) {
+    ++m_drainEventTelemetry.typedLiveLatestStatusEmit;
+    noteTraceEmit(CanMonitorPerf::LiveTraceSignal::typedLiveLatestStatusChanged, 1, 128);
+    emit typedLiveLatestStatusChanged(status.observedCanRxFrames,
+                                      status.emittedLatestFrames,
+                                      status.coalescedLatestUpdates,
+                                      status.observedBus0CanRxFrames,
+                                      status.observedBus1CanRxFrames,
+                                      status.flushCount,
+                                      status.pendingKeys,
+                                      status.maxPendingKeys,
+                                      status.lastInputRecords,
+                                      status.lastOutputFrames,
+                                      status.lastFlushMs,
+                                      status.displayLoss);
 }
 
 void SerialWorker::resetProjectionQueue() {
@@ -1035,11 +1035,11 @@ void SerialWorker::ensureTypedPipelineRuntime() {
             },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,
-            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::truthStatusReady,
+            &CanMonitorTransport::TypedEvidencePipelineWorkerRuntime::liveLatestStatusReady,
             this,
             [this](quint64 observedCanRxFrames,
-                   quint64 emittedTruthFrames,
-                   quint64 coalescedTruthUpdates,
+                   quint64 emittedLatestFrames,
+                   quint64 coalescedLatestUpdates,
                    quint64 observedBus0CanRxFrames,
                    quint64 observedBus1CanRxFrames,
                    quint64 flushCount,
@@ -1048,22 +1048,22 @@ void SerialWorker::ensureTypedPipelineRuntime() {
                    int lastInputRecords,
                    int lastOutputFrames,
                    int lastFlushMs,
-                   quint64 truthLoss) {
-                ++m_drainEventTelemetry.typedTruthStatusReceive;
-                ++m_drainEventTelemetry.typedTruthStatusEmit;
-                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::TypedTruthStatusChanged, 1, 128);
-                emit typedTruthStatusChanged(observedCanRxFrames,
-                                             emittedTruthFrames,
-                                             coalescedTruthUpdates,
-                                             observedBus0CanRxFrames,
-                                             observedBus1CanRxFrames,
-                                             flushCount,
-                                             pendingKeys,
-                                             maxPendingKeys,
-                                             lastInputRecords,
-                                             lastOutputFrames,
-                                             lastFlushMs,
-                                             truthLoss);
+                   quint64 displayLoss) {
+                ++m_drainEventTelemetry.typedLiveLatestStatusReceive;
+                ++m_drainEventTelemetry.typedLiveLatestStatusEmit;
+                noteTraceEmit(CanMonitorPerf::LiveTraceSignal::typedLiveLatestStatusChanged, 1, 128);
+                emit typedLiveLatestStatusChanged(observedCanRxFrames,
+                                                  emittedLatestFrames,
+                                                  coalescedLatestUpdates,
+                                                  observedBus0CanRxFrames,
+                                                  observedBus1CanRxFrames,
+                                                  flushCount,
+                                                  pendingKeys,
+                                                  maxPendingKeys,
+                                                  lastInputRecords,
+                                                  lastOutputFrames,
+                                                  lastFlushMs,
+                                                  displayLoss);
             },
             Qt::QueuedConnection);
     connect(m_typedPipelineWorker,

@@ -723,7 +723,7 @@ private slots:
                                           Q_RETURN_ARG(QVariant, truthKey),
                                           Q_ARG(QVariant, QVariant(9)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
-        QCOMPARE(truthKey.toString(), QStringLiteral("live_truth"));
+        QCOMPARE(truthKey.toString(), QStringLiteral("live_latest"));
 
         QVariant decodedTailKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",

@@ -347,6 +347,33 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         radius: 7
+                        color: appController.debugGatewayActive ? "#fff7ed" : "#f8fafc"
+                        border.color: appController.debugGatewayActive ? "#fdba74" : "#dbe5f0"
+                        implicitHeight: debugGatewayDetails.implicitHeight + Math.round(14 * root.uiScale)
+                        ColumnLayout {
+                            id: debugGatewayDetails
+                            anchors.fill: parent
+                            anchors.margins: Math.round(7 * root.uiScale)
+                            spacing: Math.round(4 * root.uiScale)
+                            Components.SafeText { Layout.fillWidth: true; text: "Debug Tap: " + appController.debugGatewayModeSummary; color: appController.debugGatewayActive ? "#9a3412" : "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.4 * root.uiScale) }
+                            Components.SafeText { Layout.fillWidth: true; text: appController.debugGatewayStatus + (appController.debugGatewayArtifactPath !== "" ? (" | " + appController.debugGatewayArtifactPath) : ""); color: "#52606d"; uiScale: root.uiScale; basePixelSize: Math.round(10.2 * root.uiScale) }
+                            Repeater {
+                                model: appController.debugGatewayDiagnostics
+                                delegate: Components.SafeText {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    text: (modelData.title || modelData.key || "-") + ": " + (modelData.value || "-") + " | " + (modelData.detail || "")
+                                    color: (modelData.level === "WARN" || modelData.level === "ERR") ? "#9a3412" : "#52606d"
+                                    uiScale: root.uiScale
+                                    basePixelSize: Math.round(10.0 * root.uiScale)
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        radius: 7
                         color: "#f8fafc"
                         border.color: "#dbe5f0"
                         implicitHeight: verifyScenarioDetails.implicitHeight + Math.round(14 * root.uiScale)

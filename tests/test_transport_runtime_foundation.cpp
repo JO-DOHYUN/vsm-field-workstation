@@ -3,7 +3,7 @@
 #include "transport/HostTxQueue.h"
 #include "transport/HostTxRuntime.h"
 #include "transport/LiveProjectionRuntime.h"
-#include "transport/LiveTruthRuntime.h"
+#include "transport/LiveLatestRuntime.h"
 #include "transport/TransportSession.h"
 #include "transport/TransportRuntime.h"
 #include "transport/TypedEvidencePipelineWorkerRuntime.h"
@@ -241,14 +241,14 @@ private slots:
     }
 
     void liveTruthRuntimeConsumesAllCanRxAndSnapshotsLatestPerBusKey() {
-        CanMonitorTransport::LiveTruthRuntime runtime;
+        CanMonitorTransport::LiveLatestRuntime runtime;
 
         runtime.ingestRecord(makeCanRxRecord(1, 0x120, 1000, 0));
         runtime.ingestRecord(makeCanRxRecord(2, 0x120, 1200, 0));
         runtime.ingestRecord(makeCanRxRecord(3, 0x120, 1100, 1));
         runtime.ingestRecord(makeCanRxRecord(4, 0x120, 2000, 0));
 
-        CanMonitorTransport::LiveTruthRuntime::IngestResult result;
+        CanMonitorTransport::LiveLatestRuntime::IngestResult result;
         result.frames = runtime.flush(true);
         result.status = runtime.status();
 
@@ -256,9 +256,9 @@ private slots:
         QCOMPARE(result.status.observedCanRxFrames, quint64(4));
         QCOMPARE(result.status.observedBus0CanRxFrames, quint64(3));
         QCOMPARE(result.status.observedBus1CanRxFrames, quint64(1));
-        QCOMPARE(result.status.emittedTruthFrames, quint64(3));
-        QCOMPARE(result.status.coalescedTruthUpdates, quint64(1));
-        QCOMPARE(result.status.truthLoss, quint64(0));
+        QCOMPARE(result.status.emittedLatestFrames, quint64(3));
+        QCOMPARE(result.status.coalescedLatestUpdates, quint64(1));
+        QCOMPARE(result.status.displayLoss, quint64(0));
 
         const auto bus0It = std::find_if(result.frames.cbegin(), result.frames.cend(), [](const FrameRecord& frame) {
             return frame.bus == 0 && frame.canId == 0x120;
@@ -404,7 +404,7 @@ private slots:
         uplink.diagnosticSuppressedTotal = 15;
         session.updateBoardHealth(0, 0, 100, uplink);
         session.updateLiveRuntime(8000, 7990, 7900, 17, 5, 100, 12, 0, 80, 25, 55, 256, 3, 4);
-        session.updateLiveTruth(100, 80, 20, 50, 50, 3, 2, 4, 30, 2, 1, 0);
+        session.updateLiveLatest(100, 80, 20, 50, 50, 3, 2, 4, 30, 2, 1, 0);
         session.updateRawLedger(100, 80, 4096, 0, 99);
         session.updateDrainPipeline(8192, 4, 100, 4096, 0, 2048, 16 * 1024 * 1024, 0, 0, 0, 1, 0, 1024, 0, 2);
         session.updateAnalysisQueue(0, 12, 131072, 100, 100, 0, 3, 1, 2, 0);
@@ -440,10 +440,10 @@ private slots:
         drainTrace.insert(QStringLiteral("pump_calls"), QStringLiteral("30"));
         drainTrace.insert(QStringLiteral("drain_queue_overrun_bytes"), QStringLiteral("0"));
         drainTrace.insert(QStringLiteral("typedProjectionStatus_receive"), QStringLiteral("4"));
-        drainTrace.insert(QStringLiteral("typedTruthStatus_receive"), QStringLiteral("5"));
+        drainTrace.insert(QStringLiteral("typedLiveLatestStatus_receive"), QStringLiteral("5"));
         drainTrace.insert(QStringLiteral("typedTransportStatus_receive"), QStringLiteral("6"));
         drainTrace.insert(QStringLiteral("app_typedProjectionStatus_receive"), QStringLiteral("4"));
-        drainTrace.insert(QStringLiteral("app_typedTruthStatus_receive"), QStringLiteral("5"));
+        drainTrace.insert(QStringLiteral("app_typedLiveLatestStatus_receive"), QStringLiteral("5"));
         drainTrace.insert(QStringLiteral("app_typedTransportStatus_receive"), QStringLiteral("6"));
         drainTrace.insert(QStringLiteral("analysis_handoff_pending_frames"), QStringLiteral("7"));
         drainTrace.insert(QStringLiteral("analysis_handoff_complete_count"), QStringLiteral("8"));
@@ -452,9 +452,9 @@ private slots:
         drainTrace.insert(QStringLiteral("raw_ledger_handoff_pending_bytes"), QStringLiteral("2048"));
         drainTrace.insert(QStringLiteral("raw_ledger_handoff_complete_count"), QStringLiteral("11"));
         drainTrace.insert(QStringLiteral("raw_ledger_handoff_complete_frames"), QStringLiteral("1200"));
-        drainTrace.insert(QStringLiteral("truth_handoff_emit_count"), QStringLiteral("12"));
-        drainTrace.insert(QStringLiteral("truth_handoff_emit_frames"), QStringLiteral("1300"));
-        drainTrace.insert(QStringLiteral("truth_handoff_pending_keys"), QStringLiteral("14"));
+        drainTrace.insert(QStringLiteral("latest_handoff_emit_count"), QStringLiteral("12"));
+        drainTrace.insert(QStringLiteral("latest_handoff_emit_frames"), QStringLiteral("1300"));
+        drainTrace.insert(QStringLiteral("latest_handoff_pending_keys"), QStringLiteral("14"));
         session.updateDrainEventTrace(drainTrace);
         const QVariantList rows = session.rows();
         QCOMPARE(rows.size(), 15);
@@ -501,8 +501,8 @@ private slots:
         QCOMPARE(eventRows.at(8).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
         QVERIFY(eventRows.at(8).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("MCP2515 1")));
         QVERIFY(eventRows.at(8).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("0X0618:1")));
-        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_truth"));
-        QVERIFY(rows.at(9).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth_loss 0")));
+        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_latest"));
+        QVERIFY(rows.at(9).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("display_loss 0")));
         QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("decoded_can_tail"));
         QVERIFY(rows.at(10).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("segment_bytes 4096")));
         QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_projection"));
@@ -514,10 +514,10 @@ private slots:
         QVERIFY(rows.at(13).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("snap 5/5/5")));
         QCOMPARE(rows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
         QVERIFY(rows.at(14).toMap().value(QStringLiteral("value")).toString().contains(QStringLiteral("readyRead/s 120")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("statusRx proj/truth/typed 4/5/6")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("statusRx proj/latest/typed 4/5/6")));
         QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("analysis pend 7")));
         QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("raw pend 10/2048B")));
-        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("truth emit 12/1300")));
+        QVERIFY(rows.at(14).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("latest emit 12/1300")));
     }
 
     void transportSessionMapsCoreTransportSummary() {
@@ -545,10 +545,10 @@ private slots:
         payload.insert(QStringLiteral("projection_projected_can_rx"), QStringLiteral("11"));
         payload.insert(QStringLiteral("projection_sampled_can_rx"), QStringLiteral("5"));
         payload.insert(QStringLiteral("projection_dropped_can_rx"), QStringLiteral("1"));
-        payload.insert(QStringLiteral("truth_observed_can_rx"), QStringLiteral("12"));
-        payload.insert(QStringLiteral("truth_emitted_frames"), QStringLiteral("10"));
-        payload.insert(QStringLiteral("truth_pending_keys"), 2);
-        payload.insert(QStringLiteral("truth_loss"), QStringLiteral("0"));
+        payload.insert(QStringLiteral("latest_observed_can_rx"), QStringLiteral("12"));
+        payload.insert(QStringLiteral("latest_emitted_frames"), QStringLiteral("10"));
+        payload.insert(QStringLiteral("latest_pending_keys"), 2);
+        payload.insert(QStringLiteral("latest_display_loss"), QStringLiteral("0"));
         payload.insert(QStringLiteral("drain_event_trace"), drainTrace);
 
         session.updateCoreTransportSummary(payload);

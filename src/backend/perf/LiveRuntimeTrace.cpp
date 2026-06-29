@@ -117,7 +117,7 @@ LiveRuntimeTraceRegistry& LiveRuntimeTraceRegistry::instance() {
 const char* LiveRuntimeTraceRegistry::signalName(LiveTraceSignal signal) {
     switch (signal) {
     case LiveTraceSignal::FramesReceived: return "framesReceived";
-    case LiveTraceSignal::TypedTruthStatusChanged: return "typedTruthStatusChanged";
+    case LiveTraceSignal::typedLiveLatestStatusChanged: return "typedLiveLatestStatusChanged";
     case LiveTraceSignal::TypedProjectionStatusChanged: return "typedProjectionStatusChanged";
     case LiveTraceSignal::TypedTransportStatusChanged: return "typedTransportStatusChanged";
     case LiveTraceSignal::TransportDiagnosticsChanged: return "transportDiagnosticsChanged";

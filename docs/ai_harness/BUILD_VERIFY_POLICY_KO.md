@@ -96,7 +96,7 @@ Never claim final 2+1 architecture closure until `py -3 scripts/check_vsm_bounda
 - 표시 지연, recent raw row 생략, graph bucket 축약은 UI에 명시해야 하며, 이 상태를 parser/storage/CAN success로 혼동해 보고하지 않는다.
 - QML/UI는 raw stream consumer가 아니라 snapshot/diff renderer다. QML binding이 timing/value/alarm 계산이나 raw frame fanout을 유발하면 실패로 본다.
 - UI는 Core-owned Data Plane의 query consumer다. `ViewChanged`는 cheap notification이어야 하며, heavy materialized view는 bounded `GetView(view_name, since_seq, limit)` 응답으로만 이동해야 한다.
-- Live 고부하 경로에서 `LiveProjectionRuntime`/`LiveTruthRuntime` coalesced display rows를 timing/value/alarm truth 입력으로 다시 쓰면 실패다. truth 입력은 `AnalysisRuntime` 또는 그 후속 runtime이 전량 소비해야 한다.
+- Live 고부하 경로에서 `LiveProjectionRuntime`/`LiveLatestRuntime` coalesced display rows를 timing/value/alarm truth 입력으로 다시 쓰면 실패다. truth 입력은 `AnalysisRuntime` 또는 그 후속 runtime이 전량 소비해야 한다.
 - Successful commands are summarized by command and result only. Do not paste include traces, deploy copy logs, or full passing test output.
 - On failure, report the failing command, the first actionable compiler/test error, and the next smallest recovery step. Filter MSVC include noise before reporting.
 

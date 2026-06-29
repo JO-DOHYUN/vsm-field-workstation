@@ -114,18 +114,18 @@ void TransportSession::reset() {
     m_maxProjectionBacklog = 0;
     m_flushBudgetHits = 0;
     m_lastFlushMs = 0;
-    m_truthObservedCanRxFrames = 0;
-    m_truthEmittedFrames = 0;
-    m_truthCoalescedUpdates = 0;
-    m_truthObservedBus0CanRxFrames = 0;
-    m_truthObservedBus1CanRxFrames = 0;
-    m_truthFlushCount = 0;
-    m_truthPendingKeys = 0;
-    m_truthMaxPendingKeys = 0;
-    m_truthLastInputRecords = 0;
-    m_truthLastOutputFrames = 0;
-    m_truthLastFlushMs = 0;
-    m_truthLoss = 0;
+    m_liveLatestObservedCanRxFrames = 0;
+    m_liveLatestEmittedFrames = 0;
+    m_liveLatestCoalescedUpdates = 0;
+    m_liveLatestObservedBus0CanRxFrames = 0;
+    m_liveLatestObservedBus1CanRxFrames = 0;
+    m_liveLatestFlushCount = 0;
+    m_liveLatestPendingKeys = 0;
+    m_liveLatestMaxPendingKeys = 0;
+    m_liveLatestLastInputRecords = 0;
+    m_liveLatestLastOutputFrames = 0;
+    m_liveLatestLastFlushMs = 0;
+    m_displayLoss = 0;
     m_rawLedgerTotalRows = 0;
     m_rawLedgerVisibleRows = 0;
     m_rawLedgerSegmentBytes = 0;
@@ -250,9 +250,9 @@ void TransportSession::updateLiveRuntime(qint64 nowWallMs,
     m_lastFlushMs = lastFlushMs;
 }
 
-void TransportSession::updateLiveTruth(quint64 observedCanRxFrames,
-                                       quint64 emittedTruthFrames,
-                                       quint64 coalescedTruthUpdates,
+void TransportSession::updateLiveLatest(quint64 observedCanRxFrames,
+                                       quint64 emittedLatestFrames,
+                                       quint64 coalescedLatestUpdates,
                                        quint64 observedBus0CanRxFrames,
                                        quint64 observedBus1CanRxFrames,
                                        quint64 flushCount,
@@ -261,19 +261,19 @@ void TransportSession::updateLiveTruth(quint64 observedCanRxFrames,
                                        int lastInputRecords,
                                        int lastOutputFrames,
                                        int lastFlushMs,
-                                       quint64 truthLoss) {
-    m_truthObservedCanRxFrames = observedCanRxFrames;
-    m_truthEmittedFrames = emittedTruthFrames;
-    m_truthCoalescedUpdates = coalescedTruthUpdates;
-    m_truthObservedBus0CanRxFrames = observedBus0CanRxFrames;
-    m_truthObservedBus1CanRxFrames = observedBus1CanRxFrames;
-    m_truthFlushCount = flushCount;
-    m_truthPendingKeys = pendingKeys;
-    m_truthMaxPendingKeys = maxPendingKeys;
-    m_truthLastInputRecords = lastInputRecords;
-    m_truthLastOutputFrames = lastOutputFrames;
-    m_truthLastFlushMs = lastFlushMs;
-    m_truthLoss = truthLoss;
+                                       quint64 displayLoss) {
+    m_liveLatestObservedCanRxFrames = observedCanRxFrames;
+    m_liveLatestEmittedFrames = emittedLatestFrames;
+    m_liveLatestCoalescedUpdates = coalescedLatestUpdates;
+    m_liveLatestObservedBus0CanRxFrames = observedBus0CanRxFrames;
+    m_liveLatestObservedBus1CanRxFrames = observedBus1CanRxFrames;
+    m_liveLatestFlushCount = flushCount;
+    m_liveLatestPendingKeys = pendingKeys;
+    m_liveLatestMaxPendingKeys = maxPendingKeys;
+    m_liveLatestLastInputRecords = lastInputRecords;
+    m_liveLatestLastOutputFrames = lastOutputFrames;
+    m_liveLatestLastFlushMs = lastFlushMs;
+    m_displayLoss = displayLoss;
 }
 
 void TransportSession::updateRawLedger(quint64 totalRows,
@@ -343,21 +343,21 @@ void TransportSession::updateCoreTransportSummary(const QJsonObject& payload) {
         m_sampledControlEvidenceRecords = traceCounter(payload, QStringLiteral("projection_sampled_control"));
     }
 
-    if (payload.contains(QStringLiteral("truth_observed_can_rx")) ||
-        payload.contains(QStringLiteral("truth_emitted_frames")) ||
-        payload.contains(QStringLiteral("truth_loss"))) {
-        updateLiveTruth(traceCounter(payload, QStringLiteral("truth_observed_can_rx")),
-                        traceCounter(payload, QStringLiteral("truth_emitted_frames")),
-                        traceCounter(payload, QStringLiteral("truth_coalesced_updates")),
-                        traceCounter(payload, QStringLiteral("truth_observed_bus0_can_rx")),
-                        traceCounter(payload, QStringLiteral("truth_observed_bus1_can_rx")),
-                        traceCounter(payload, QStringLiteral("truth_flush_count")),
-                        int(traceCounter(payload, QStringLiteral("truth_pending_keys"))),
-                        int(traceCounter(payload, QStringLiteral("truth_max_pending_keys"))),
-                        int(traceCounter(payload, QStringLiteral("truth_last_input_records"))),
-                        int(traceCounter(payload, QStringLiteral("truth_last_output_frames"))),
-                        int(traceCounter(payload, QStringLiteral("truth_last_flush_ms"))),
-                        traceCounter(payload, QStringLiteral("truth_loss")));
+    if (payload.contains(QStringLiteral("latest_observed_can_rx")) ||
+        payload.contains(QStringLiteral("latest_emitted_frames")) ||
+        payload.contains(QStringLiteral("latest_display_loss"))) {
+        updateLiveLatest(traceCounter(payload, QStringLiteral("latest_observed_can_rx")),
+                         traceCounter(payload, QStringLiteral("latest_emitted_frames")),
+                         traceCounter(payload, QStringLiteral("latest_coalesced_updates")),
+                         traceCounter(payload, QStringLiteral("latest_observed_bus0_can_rx")),
+                         traceCounter(payload, QStringLiteral("latest_observed_bus1_can_rx")),
+                         traceCounter(payload, QStringLiteral("latest_flush_count")),
+                         int(traceCounter(payload, QStringLiteral("latest_pending_keys"))),
+                         int(traceCounter(payload, QStringLiteral("latest_max_pending_keys"))),
+                         int(traceCounter(payload, QStringLiteral("latest_last_input_records"))),
+                         int(traceCounter(payload, QStringLiteral("latest_last_output_frames"))),
+                         int(traceCounter(payload, QStringLiteral("latest_last_flush_ms"))),
+                         traceCounter(payload, QStringLiteral("latest_display_loss")));
     }
 
     const QJsonObject drain = payload.value(QStringLiteral("drain_event_trace")).toObject();
@@ -427,7 +427,7 @@ void TransportSession::noteBoardEvent(quint16 code, quint16 detail, quint32 coun
 }
 
 quint64 TransportSession::parserFaultCount() const {
-    return m_bytesDropped + m_crcFailures + m_lengthFailures + m_versionWarnings + m_seqGaps + m_truthLoss + m_analysisTruthLoss;
+    return m_bytesDropped + m_crcFailures + m_lengthFailures + m_versionWarnings + m_seqGaps + m_displayLoss + m_analysisTruthLoss;
 }
 
 QString TransportSession::liveLevel() const {
@@ -591,8 +591,8 @@ QVariantList TransportSession::rows() const {
         : (m_boardHealthAgeMs >= 0 && m_boardHealthAgeMs <= 2000 ? QStringLiteral("OK") : QStringLiteral("WARN"));
     const QString projectionLevel = m_droppedProjectionFrames > 0 ? QStringLiteral("WARN")
         : (m_sampledProjectionFrames > 0 || m_sampledViewDrops > 0 || m_pendingLiveFrames > 4096 ? QStringLiteral("WARN") : QStringLiteral("OK"));
-    const QString truthLevel = m_truthLoss > 0 ? QStringLiteral("ERR")
-        : (m_truthPendingKeys > 4096 ? QStringLiteral("WARN") : QStringLiteral("OK"));
+    const QString latestLevel = m_displayLoss > 0 ? QStringLiteral("ERR")
+        : (m_liveLatestPendingKeys > 4096 ? QStringLiteral("WARN") : QStringLiteral("OK"));
     const QString rawLedgerLevel = m_rawLedgerDroppedDisplayRows > 0 ? QStringLiteral("WARN") : QStringLiteral("OK");
     const QString uplinkLevel = boardUplinkLevel();
     const QString eventLevel = boardEventLevel();
@@ -718,24 +718,24 @@ QVariantList TransportSession::rows() const {
                 : QStringLiteral("events %1").arg(m_boardEventTotal),
             boardEventDetailText(),
             m_boardEventFatalTotal > 0),
-        row(QStringLiteral("live_truth"),
+        row(QStringLiteral("live_latest"),
             QStringLiteral("Live latest view"),
-            truthLevel,
+            latestLevel,
             QStringLiteral("observed %1 emitted %2 pending %3")
-                .arg(m_truthObservedCanRxFrames)
-                .arg(m_truthEmittedFrames)
-                .arg(m_truthPendingKeys),
-            QStringLiteral("bus0 %1 bus1 %2 coalesced_snapshot_updates %3 flushes %4 max_pending %5 last_in %6 last_out %7 flush_ms %8 truth_loss %9")
-                .arg(m_truthObservedBus0CanRxFrames)
-                .arg(m_truthObservedBus1CanRxFrames)
-                .arg(m_truthCoalescedUpdates)
-                .arg(m_truthFlushCount)
-                .arg(m_truthMaxPendingKeys)
-                .arg(m_truthLastInputRecords)
-                .arg(m_truthLastOutputFrames)
-                .arg(m_truthLastFlushMs)
-                .arg(m_truthLoss),
-            m_truthLoss > 0),
+                .arg(m_liveLatestObservedCanRxFrames)
+                .arg(m_liveLatestEmittedFrames)
+                .arg(m_liveLatestPendingKeys),
+            QStringLiteral("bus0 %1 bus1 %2 coalesced_snapshot_updates %3 flushes %4 max_pending %5 last_in %6 last_out %7 flush_ms %8 display_loss %9")
+                .arg(m_liveLatestObservedBus0CanRxFrames)
+                .arg(m_liveLatestObservedBus1CanRxFrames)
+                .arg(m_liveLatestCoalescedUpdates)
+                .arg(m_liveLatestFlushCount)
+                .arg(m_liveLatestMaxPendingKeys)
+                .arg(m_liveLatestLastInputRecords)
+                .arg(m_liveLatestLastOutputFrames)
+                .arg(m_liveLatestLastFlushMs)
+                .arg(m_displayLoss),
+            m_displayLoss > 0),
         row(QStringLiteral("decoded_can_tail"),
             QStringLiteral("Decoded CAN tail"),
             rawLedgerLevel,
@@ -817,7 +817,7 @@ QVariantList TransportSession::rows() const {
                 .arg(traceText(m_drainEventTrace, QStringLiteral("scheduleDrainPump_per_sec")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("pump_per_sec")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("output_signal_per_sec"))),
-            QStringLiteral("ready %1 emit %2 schedule %3 invoke %4 suppressed %5 pump %6 ignored %7 blocks %8 bytes %9 status %10 diag %11 rawQ %12/%13 max %14 overrun %15 statusRx proj/truth/typed %16/%17/%18 app %19/%20/%21 analysis pend %22 inflight %23 done %24/%25 over %26 raw pend %27/%28B inflight %29 done %30/%31 overB %32 truth emit %33/%34 pend %35")
+            QStringLiteral("ready %1 emit %2 schedule %3 invoke %4 suppressed %5 pump %6 ignored %7 blocks %8 bytes %9 status %10 diag %11 rawQ %12/%13 max %14 overrun %15 statusRx proj/latest/typed %16/%17/%18 app %19/%20/%21 analysis pend %22 inflight %23 done %24/%25 over %26 raw pend %27/%28B inflight %29 done %30/%31 overB %32 latest emit %33/%34 pend %35")
                 .arg(traceText(m_drainEventTrace, QStringLiteral("readyRead_calls")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("bytes_available_emits")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("scheduleDrainPump_calls")))
@@ -834,10 +834,10 @@ QVariantList TransportSession::rows() const {
                 .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_max_used_bytes")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("drain_queue_overrun_bytes")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("typedProjectionStatus_receive")))
-                .arg(traceText(m_drainEventTrace, QStringLiteral("typedTruthStatus_receive")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("typedLiveLatestStatus_receive")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("typedTransportStatus_receive")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("app_typedProjectionStatus_receive")))
-                .arg(traceText(m_drainEventTrace, QStringLiteral("app_typedTruthStatus_receive")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("app_typedLiveLatestStatus_receive")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("app_typedTransportStatus_receive")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("analysis_handoff_pending_frames")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("analysis_handoff_inflight"), QStringLiteral("false")))
@@ -850,9 +850,9 @@ QVariantList TransportSession::rows() const {
                 .arg(traceText(m_drainEventTrace, QStringLiteral("raw_ledger_handoff_complete_count")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("raw_ledger_handoff_complete_frames")))
                 .arg(traceText(m_drainEventTrace, QStringLiteral("raw_ledger_handoff_overrun_bytes")))
-                .arg(traceText(m_drainEventTrace, QStringLiteral("truth_handoff_emit_count")))
-                .arg(traceText(m_drainEventTrace, QStringLiteral("truth_handoff_emit_frames")))
-                .arg(traceText(m_drainEventTrace, QStringLiteral("truth_handoff_pending_keys"))),
+                .arg(traceText(m_drainEventTrace, QStringLiteral("latest_handoff_emit_count")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("latest_handoff_emit_frames")))
+                .arg(traceText(m_drainEventTrace, QStringLiteral("latest_handoff_pending_keys"))),
             drainTraceRowLevel == QStringLiteral("ERR"))
     };
 }

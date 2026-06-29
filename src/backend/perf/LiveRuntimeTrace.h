@@ -14,7 +14,7 @@ namespace CanMonitorPerf {
 
 enum class LiveTraceSignal : int {
     FramesReceived = 0,
-    TypedTruthStatusChanged,
+    typedLiveLatestStatusChanged,
     TypedProjectionStatusChanged,
     TypedTransportStatusChanged,
     TransportDiagnosticsChanged,
