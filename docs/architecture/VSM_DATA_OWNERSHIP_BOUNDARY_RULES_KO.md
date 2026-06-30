@@ -40,6 +40,7 @@ CSM typed bytes
        QML bounded models
   -> Optional Debug Tap Plane
        default OFF
+       vsm-debug-tap.exe Core IPC sidecar
        fixed-cap non-blocking tap
 ```
 
@@ -71,6 +72,8 @@ The only authoritative production truth is `capture.stream` plus
 - Do not push full materialized snapshots to UI at high rate. Use
   `ViewChanged` plus bounded `GetView(...)`.
 - Do not run debug/gateway/profiler writers in normal production mode.
+- Do not use the COM-owning lab gateway as Passive Product diagnostics.
+- Do not let `vsm-debug-tap.exe` own COM, send host TX/control, or update Core state.
 - Do not open production serial as `QIODevice::ReadWrite` outside `RuntimeProfile`.
 - Do not hard-assert DTR/RTS in Passive Product.
 - Do not pass `host_frame`, `control_cycle`, or `gateway_tcp` through Passive Product IPC/Core gates.

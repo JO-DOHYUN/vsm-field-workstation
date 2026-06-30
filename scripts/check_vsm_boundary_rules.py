@@ -121,6 +121,20 @@ RULES = (
         path_hints=("src/backend",),
         allow_hints=("RuntimeProfile.cpp",),
     ),
+    Rule(
+        "passive_debug_tap_must_not_own_com",
+        "vsm-debug-tap must be a non-owning Core IPC sidecar and must not use serial APIs.",
+        re.compile(r"\bQSerialPort\b|\bQSerialPortInfo\b|SerialPort|setDataTerminalReady|setRequestToSend"),
+        True,
+        path_hints=("src/debug_tap",),
+    ),
+    Rule(
+        "passive_ui_must_not_label_tap_as_gateway",
+        "Passive product UI must not expose the diagnostics button as GW/gateway.",
+        re.compile(r"GW\s*(켜기|끄기)|Gateway\s*(ON|OFF)|gateway\s*(on|off)"),
+        True,
+        path_hints=("qml/",),
+    ),
 )
 
 

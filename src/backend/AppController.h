@@ -339,7 +339,9 @@ public:
     QString debugGatewayArtifactPath() const { return m_debugGatewayArtifactPath; }
     QString debugGatewayModeSummary() const {
         if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
-            return QStringLiteral("Passive Product - COM-owning lab gateway blocked; use sidecar/tap only");
+            return debugGatewayActive()
+                ? QStringLiteral("Passive Debug Tap ON - non-owning Core IPC sidecar")
+                : QStringLiteral("Passive Debug Tap OFF - COM-owning lab gateway blocked");
         }
         return debugGatewayActive()
             ? QStringLiteral("Full/Lab gateway ON - not passive production")
@@ -831,6 +833,7 @@ private:
 
     void setStatus(const QString& text);
     void startDebugGatewayNow(const QString& portName);
+    void startPassiveDebugTapNow(const QString& reason);
     void finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
     void refreshDebugGatewayDiagnostics(const QString& reason = QString());
     void finishVerificationRunnerProcess(int exitCode, QProcess::ExitStatus exitStatus, QProcess* process);
@@ -1386,7 +1389,7 @@ private:
     CanMonitorTransport::TransportSession m_transportSession;
     QString m_transportModeKey = QStringLiteral("typed");
     QProcess* m_debugGatewayProcess = nullptr;
-    QString m_debugGatewayStatus = QStringLiteral("Debug gateway off");
+    QString m_debugGatewayStatus = QStringLiteral("Passive debug tap off");
     QString m_debugGatewayEndpoint;
     QString m_debugGatewayArtifactPath;
     QString m_debugGatewayReadyPath;

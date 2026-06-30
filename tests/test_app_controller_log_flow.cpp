@@ -343,16 +343,17 @@ private slots:
         QVERIFY(controller.controlOperatorSummary().contains(QStringLiteral("CAN_TX_RAW 미확인")));
         QVERIFY(controller.transportDiagnosticsSummary().contains(QStringLiteral("transport")));
         const QVariantList transportRows = controller.transportDiagnostics();
-        QCOMPARE(transportRows.size(), 15);
-        QCOMPARE(transportRows.at(2).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
-        QCOMPARE(transportRows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
-        QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
-        QCOMPARE(transportRows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
-        QCOMPARE(transportRows.at(13).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
-        QCOMPARE(transportRows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
+        QCOMPARE(transportRows.size(), 16);
+        QCOMPARE(transportRows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_safety_profile"));
+        QCOMPARE(transportRows.at(3).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_drain"));
+        QCOMPARE(transportRows.at(4).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_writer"));
+        QCOMPARE(transportRows.at(5).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("analysis_queue"));
+        QCOMPARE(transportRows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("csm_uplink"));
+        QCOMPARE(transportRows.at(14).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("live_path_trace"));
+        QCOMPARE(transportRows.at(15).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("drain_event_trace"));
         QVERIFY(controller.controlActionVerdict().contains(QStringLiteral("COM 연결 없음")));
-        QCOMPARE(controller.controlOperatorChecklist().size(), 8);
-        QCOMPARE(controller.controlPolicyChecklist().size(), 1);
+        QCOMPARE(controller.controlOperatorChecklist().size(), 9);
+        QCOMPARE(controller.controlPolicyChecklist().size(), 2);
         QVERIFY(controller.controlPolicySummary().contains(QStringLiteral("default policy")));
 
         auto stageMap = [&controller](const QString& key) {
@@ -374,6 +375,8 @@ private slots:
             return QVariantMap{};
         };
         QCOMPARE(checklistMap(QStringLiteral("serial")).value(QStringLiteral("level")).toString(), QStringLiteral("error"));
+        QCOMPARE(checklistMap(QStringLiteral("runtime_profile")).value(QStringLiteral("state")).toString(), QStringLiteral("BLOCK"));
+        QCOMPARE(checklistMap(QStringLiteral("runtime_profile")).value(QStringLiteral("blocking")).toBool(), true);
         QCOMPARE(checklistMap(QStringLiteral("policy")).value(QStringLiteral("state")).toString(), QStringLiteral("BLOCK"));
         QCOMPARE(checklistMap(QStringLiteral("tx")).value(QStringLiteral("state")).toString(), QStringLiteral("NO AUDIT"));
         QCOMPARE(checklistMap(QStringLiteral("tx")).value(QStringLiteral("blocking")).toBool(), false);
@@ -493,6 +496,32 @@ private slots:
         const QJsonObject trace = controller.livePathTraceObject();
         QVERIFY(trace.value(QStringLiteral("live_view_panel_drops")).toString().toULongLong() >= quint64(1));
         QCOMPARE(trace.value(QStringLiteral("append_live_batch_frames")).toString().toULongLong(), quint64(0));
+    }
+
+    void passiveDebugTapStartsAsCoreIpcSidecar() {
+        AppController controller;
+        controller.clearSavedSession();
+
+        controller.startDebugGateway(QStringLiteral("COM_SHOULD_NOT_BE_USED"));
+
+        QTRY_VERIFY_WITH_TIMEOUT(controller.debugGatewayActive(), 5000);
+        QVERIFY(controller.debugGatewayEndpoint().startsWith(QStringLiteral("local://")));
+        QVERIFY(controller.debugGatewayModeSummary().contains(QStringLiteral("Passive Debug Tap ON")));
+        QVERIFY(controller.debugGatewayStatus().contains(QStringLiteral("Passive debug tap")));
+        QVERIFY(controller.debugGatewayArtifactPath().contains(QStringLiteral("vsm_debug_tap")));
+
+        const QString readyPath = QDir(controller.debugGatewayArtifactPath()).filePath(QStringLiteral("debug_tap.ready.json"));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(readyPath), 10000);
+
+        QFile readyFile(readyPath);
+        QVERIFY(readyFile.open(QIODevice::ReadOnly));
+        const QJsonDocument readyDoc = QJsonDocument::fromJson(readyFile.readAll());
+        QVERIFY(readyDoc.isObject());
+        QCOMPARE(readyDoc.object().value(QStringLiteral("process")).toString(), QStringLiteral("vsm-debug-tap"));
+        QCOMPARE(readyDoc.object().value(QStringLiteral("ready")).toBool(), true);
+
+        controller.stopDebugGateway();
+        QTRY_VERIFY_WITH_TIMEOUT(!controller.debugGatewayActive(), 7000);
     }
 
     void legacyLiveLoggingDoesNotCreateTempArtifactsInCoreOnlyMode() {

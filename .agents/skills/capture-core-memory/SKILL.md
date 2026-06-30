@@ -12,6 +12,7 @@ Use this skill when the task can affect long-run memory, queue backpressure, raw
 ## Non-Negotiable Invariants
 - Production truth is the accepted CSM typed stream raw bytes.
 - Product default is Passive-Safe 2+1: UI queries Core views, Core owns read-only transport, optional debug/tap is default OFF.
+- Passive diagnostics uses `vsm-debug-tap.exe` as a non-owning Core IPC sidecar; the COM-owning gateway is Full/Instrumented lab-only.
 - Passive Product profile must not open serial read/write, touch RTS, send host TX, run control cycle, or start a COM-owning gateway. DTR may be asserted only as a read-only Arduino CDC session gate when the CSM capability declares it session-only.
 - Live hot path must not pass full `TypedRecordList` through Qt queued signals.
 - Live parser output must not create both `payload` and `frameBytes` owning `QByteArray` per frame.
@@ -104,6 +105,7 @@ snapshots, graph buckets, and transport summaries are derived materialized views
 - Materialized view queries must return already-built bounded views; they must not perform full capture scans in response to UI demand.
 - Debug/gateway/tap paths must be default-off and must not run in the normal live production path.
 - COM-owning debug gateway is Full/Instrumented lab profile only; production diagnostics must use non-owning sidecar/tap or materialized views.
+- `vsm-debug-tap.exe` must not open COM/USB, send host TX/control, or update Core state.
 - Add telemetry before claiming improvement.
 - Do not hide memory growth by reducing evidence fidelity.
 

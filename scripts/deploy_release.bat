@@ -92,6 +92,12 @@ if exist "%BUILD_DIR%\vsm-capture-core.exe" (
   copy /y "%BUILD_DIR%\Release\vsm-capture-core.exe" "%OUTPUT%\" >nul
 )
 if exist "%BUILD_DIR%\vsm-capture-core.pdb" copy /y "%BUILD_DIR%\vsm-capture-core.pdb" "%OUTPUT%\" >nul
+if exist "%BUILD_DIR%\vsm-debug-tap.exe" (
+  copy /y "%BUILD_DIR%\vsm-debug-tap.exe" "%OUTPUT%\" >nul
+) else if exist "%BUILD_DIR%\Release\vsm-debug-tap.exe" (
+  copy /y "%BUILD_DIR%\Release\vsm-debug-tap.exe" "%OUTPUT%\" >nul
+)
+if exist "%BUILD_DIR%\vsm-debug-tap.pdb" copy /y "%BUILD_DIR%\vsm-debug-tap.pdb" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\README_SETUP_KO.md" copy /y "%BUILD_DIR%\README_SETUP_KO.md" "%OUTPUT%\" >nul
 if exist "%BUILD_DIR%\BUILD_FOLDER_USAGE_KO.md" copy /y "%BUILD_DIR%\BUILD_FOLDER_USAGE_KO.md" "%OUTPUT%\" >nul
 if exist "%PROJECT_DIR%\scripts\run_release_here.bat" (
@@ -180,6 +186,7 @@ if exist "%PROJECT_DIR%\scripts\hil_analysis_truth_stress.py" (
 
 echo [5/5] helper and manifest
 if not exist "%OUTPUT%\vsm-capture-core.exe" echo Missing vsm-capture-core.exe.& exit /b 1
+if not exist "%OUTPUT%\vsm-debug-tap.exe" echo Missing vsm-debug-tap.exe.& exit /b 1
 if not exist "%OUTPUT%\vsm_debug_gateway.py" echo Missing vsm_debug_gateway.py.& exit /b 1
 if not exist "%PROJECT_DIR%\scripts\run_release_here.bat" echo Missing run_release_here.bat.& exit /b 1
 copy /y "%PROJECT_DIR%\scripts\run_release_here.bat" "%OUTPUT%\run_release_here.bat" >nul

@@ -55,6 +55,8 @@ Core는 QML model, AppController UI 상태, 그래프 위젯을 소유하지 않
 - raw/evidence deep trace가 필요하면 non-blocking sidecar/tap으로 붙는다.
 - drop counter와 artifact는 debug evidence이며 production truth를 대체하지 않는다.
 - 기존 `vsm_debug_gateway.py` 식 COM-owning gateway는 Full Instrumented lab profile에서만 허용한다.
+- Passive Product diagnostics는 `vsm-debug-tap.exe` non-owning Core IPC sidecar만 허용한다.
+- `vsm-debug-tap.exe`는 COM/USB를 열지 않고 `ViewChanged`/`GetView`만 사용한다.
 
 ## Truth와 View
 - Authoritative truth: `capture.stream` + `capture.index`
@@ -73,6 +75,7 @@ Core는 QML model, AppController UI 상태, 그래프 위젯을 소유하지 않
 
 ## 완료 기준
 - UI 실행 시 child `vsm-capture-core.exe`가 `--profile passive_product`로 뜬다.
+- 진단 기록을 켜면 `vsm-debug-tap.exe`가 세 번째 프로세스로 뜨며 Core/UI transport를 끊지 않는다.
 - 전송 상세 `passive_safety_profile` row가 serial `read_only`, DTR/RTS `no_touch`, host/control/gateway `off`를 보인다.
 - Passive Product에서 GW 버튼, host TX, control cycle은 실행되지 않고 blocked evidence만 남는다.
 - Full Instrumented는 명시 프로필로만 가능하고 실차 PASS로 표기하지 않는다.

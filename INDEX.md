@@ -17,6 +17,7 @@
 - [[docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO]]: capture-core memory/hot-path 최종 구조.
 - [[docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO]]: Core-owned data plane, view query plane, optional debug tap plane.
 - [[docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO]]: Passive Product profile, 2+1 process split, vehicle-impact-free runtime policy.
+- [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]]: Passive Product non-owning debug tap process, data flow, and USB lifecycle evidence contract.
 - [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]: live/capture-core data owner, consumer, drop policy, forbidden boundary rules, static boundary scan.
 - [[docs/architecture/VMS_ARCHITECTURE_KO]]: VMS runtime split target.
 - [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]: typed stream v1 human contract.

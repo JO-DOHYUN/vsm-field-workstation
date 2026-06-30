@@ -10,6 +10,8 @@ read_when:
 ---
 # HARNESS_MASTER_KO
 
+2026-06-30 passive diagnostics 기준: Passive product에서 디버그는 COM-owning gateway가 아니라 `vsm-debug-tap.exe` Core IPC sidecar로만 실행한다. 근거 문서: [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]], [[history/decisions/2026-06-30-passive-debug-tap-productization]].
+
 이 문서는 하네스 구조 변경 전용 상위 목적 문서다.
 routine 코드 수정, 단순 build fix, UI patch에서는 읽지 않는다.
 

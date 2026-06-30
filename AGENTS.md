@@ -62,6 +62,7 @@
 - capture-core memory architecture: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
 - core data/view/tap architecture: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
 - passive-safe product architecture: `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
+- passive debug tap product architecture: `docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO.md`
 - data ownership boundary rules: `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
 - control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
 - build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`

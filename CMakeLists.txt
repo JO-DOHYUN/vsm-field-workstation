@@ -255,6 +255,30 @@ target_compile_definitions(vsm_capture_core
 )
 target_link_libraries(vsm_capture_core PRIVATE Qt6::Core Qt6::SerialPort Qt6::Network)
 
+qt_add_executable(vsm_debug_tap
+    src/debug_tap_main.cpp
+    src/backend/BuildMetadata.h
+    src/backend/BuildMetadata.cpp
+    src/backend/core/CoreIpcClientRuntime.h
+    src/backend/core/CoreIpcClientRuntime.cpp
+)
+set_target_properties(vsm_debug_tap PROPERTIES
+    OUTPUT_NAME "vsm-debug-tap"
+)
+target_include_directories(vsm_debug_tap PRIVATE src src/backend)
+target_compile_definitions(vsm_debug_tap
+    PRIVATE
+        CAN_MONITOR_APP_NAME="${CAN_MONITOR_APP_NAME}"
+        CAN_MONITOR_APP_ID="${CAN_MONITOR_APP_ID}"
+        CAN_MONITOR_ORG_NAME="${CAN_MONITOR_ORG_NAME}"
+        CAN_MONITOR_ORG_DOMAIN="${CAN_MONITOR_ORG_DOMAIN}"
+        CAN_MONITOR_VERSION="${PROJECT_VERSION}"
+        CAN_MONITOR_BASELINE_ID="${CAN_MONITOR_BASELINE_ID}"
+        CAN_MONITOR_BUILD_TIMESTAMP_UTC="${CAN_MONITOR_BUILD_TIMESTAMP_UTC}"
+        CAN_MONITOR_BUILD_TYPE="$<CONFIG>"
+)
+target_link_libraries(vsm_debug_tap PRIVATE Qt6::Core Qt6::Network)
+
 
 qt_add_resources(can_monitor_qml_reboot "can_monitor_data"
     PREFIX "/"
@@ -292,7 +316,7 @@ target_link_libraries(can_monitor_qml_reboot
         Qt6::SerialPort
         Qt6::Network
 )
-add_dependencies(can_monitor_qml_reboot vsm_capture_core)
+add_dependencies(can_monitor_qml_reboot vsm_capture_core vsm_debug_tap)
 
 if (WIN32)
     target_link_libraries(can_monitor_qml_reboot PRIVATE winmm psapi)
@@ -340,6 +364,9 @@ if (WIN32)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:vsm_capture_core>"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/$<TARGET_FILE_NAME:vsm_capture_core>"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:vsm_debug_tap>"
+                    "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/$<TARGET_FILE_NAME:vsm_debug_tap>"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CMAKE_CURRENT_SOURCE_DIR}/scripts/hil_control_smoke.py"
                     "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/hil_control_smoke.py"
@@ -393,7 +420,7 @@ if (WIN32)
         COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/scripts/deploy_release.bat"
                 "$<TARGET_FILE_DIR:can_monitor_qml_reboot>"
                 "$<TARGET_FILE_DIR:can_monitor_qml_reboot>/portable_release"
-        DEPENDS can_monitor_qml_reboot vsm_capture_core
+        DEPENDS can_monitor_qml_reboot vsm_capture_core vsm_debug_tap
         COMMENT "Creating portable release folder with deploy_release.bat"
         VERBATIM)
 
@@ -408,6 +435,10 @@ endif()
 
 install(TARGETS can_monitor_qml_reboot
     BUNDLE DESTINATION .
+    RUNTIME DESTINATION .
+)
+
+install(TARGETS vsm_capture_core vsm_debug_tap
     RUNTIME DESTINATION .
 )
 

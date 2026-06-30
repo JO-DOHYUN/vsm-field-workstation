@@ -255,6 +255,14 @@ backpressure 대응 이후의 확장 health payload는 192 bytes 이상일 수 �
 또는 truth loss 위험 진단이다. VMS는 이를 display sampling/projection drop과 섞지
 말고 transport/CSM uplink 진단으로 노출한다.
 
+USB lifecycle board events used by passive diagnostics:
+
+```text
+27 USB_CDC_SESSION_OPEN
+28 USB_CDC_SESSION_CLOSE  reported on the next open; detail is previous
+                          session duration ms saturated at 0xFFFF
+```
+
 Typed capture session sidecars:
 
 ```text

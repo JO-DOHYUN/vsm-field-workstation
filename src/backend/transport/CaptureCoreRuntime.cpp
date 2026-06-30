@@ -133,8 +133,23 @@ QJsonObject capabilityToJson(const TypedCapabilityRecord& capability) {
 }
 
 QJsonObject boardEventToJson(const TypedBoardEventRecord& event) {
+    const auto eventName = [](quint16 code) {
+        switch (code) {
+        case 1: return QStringLiteral("BOOT");
+        case 9: return QStringLiteral("MCP2515_ERROR");
+        case 10: return QStringLiteral("MCP2515_SPI_SNAPSHOT");
+        case 23: return QStringLiteral("FIRMWARE_IDENTITY");
+        case 24: return QStringLiteral("SERIAL_TX_BACKPRESSURE");
+        case 25: return QStringLiteral("SERIAL_TX_RING_CLEAR");
+        case 26: return QStringLiteral("CAN_RX_SEGMENT_ENQUEUE_FAILED");
+        case 27: return QStringLiteral("USB_CDC_SESSION_OPEN");
+        case 28: return QStringLiteral("USB_CDC_SESSION_CLOSE");
+        default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
+        }
+    };
     return QJsonObject{{QStringLiteral("mono_us"), u64Text(event.monoUs)},
                        {QStringLiteral("code"), int(event.code)},
+                       {QStringLiteral("name"), eventName(event.code)},
                        {QStringLiteral("detail"), int(event.detail)},
                        {QStringLiteral("counter"), u64Text(event.counter)}};
 }

@@ -167,6 +167,16 @@ QString coreProcessExecutablePath() {
     return QDir(QCoreApplication::applicationDirPath()).filePath(suffix);
 }
 
+QString debugTapExecutablePath() {
+    const QString suffix =
+#ifdef Q_OS_WIN
+        QStringLiteral("vsm-debug-tap.exe");
+#else
+        QStringLiteral("vsm-debug-tap");
+#endif
+    return QDir(QCoreApplication::applicationDirPath()).filePath(suffix);
+}
+
 quint16 boundedFpsFromDelta(quint32 delta, quint64 elapsedUs) {
     if (elapsedUs == 0) return 0;
     const double fps = (double(delta) * 1'000'000.0) / double(elapsedUs);
@@ -2949,9 +2959,7 @@ AppController::AppController(QObject* parent) : QObject(parent) {
 AppController::~AppController() {
     stopLiveRuntimeTraceSession(QStringLiteral("app_destroy"));
     prepareControlSafeStopForDisconnect(QStringLiteral("application shutdown safety stop"));
-    m_coreProcessClient.stop();
     stopDebugGateway();
-    stopVerificationRunner();
     if (m_debugGatewayProcess) {
         if (m_debugGatewayProcess->state() != QProcess::NotRunning && !m_debugGatewayProcess->waitForFinished(1500)) {
             m_debugGatewayProcess->terminate();
@@ -2963,6 +2971,8 @@ AppController::~AppController() {
         delete m_debugGatewayProcess;
         m_debugGatewayProcess = nullptr;
     }
+    m_coreProcessClient.stop();
+    stopVerificationRunner();
     if (m_verificationProcess) {
         if (m_verificationProcess->state() != QProcess::NotRunning && !m_verificationProcess->waitForFinished(1500)) {
             m_verificationProcess->terminate();
@@ -8670,19 +8680,23 @@ void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
     };
 
     const bool active = debugGatewayActive();
+    const bool labGatewayMode = m_runtimeProfile.transportPolicy().labGatewayEnabled;
     if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
         addRow(QStringLiteral("runtime_profile"),
                QStringLiteral("Runtime profile"),
                m_runtimeProfile.key(),
-               QStringLiteral("COM-owning lab gateway is blocked in passive product mode; use a non-owning sidecar/tap for production diagnostics."),
+               QStringLiteral("COM-owning lab gateway is blocked; passive diagnostics use vsm-debug-tap over Core IPC only."),
                QStringLiteral("OK"));
     }
     addRow(QStringLiteral("plane"),
            QStringLiteral("Debug tap plane"),
            active ? QStringLiteral("ON") : QStringLiteral("OFF"),
-           active ? QStringLiteral("Lab gateway process is running; this is not passive production")
-                  : QStringLiteral("Normal mode: debug process is not running"),
-           active ? QStringLiteral("WARN") : QStringLiteral("OK"));
+           active
+               ? (labGatewayMode
+                      ? QStringLiteral("Lab gateway process is running; this is not passive production")
+                      : QStringLiteral("Passive debug tap is running as a non-owning Core IPC sidecar"))
+               : QStringLiteral("Normal mode: debug process is not running"),
+           active && labGatewayMode ? QStringLiteral("WARN") : QStringLiteral("OK"));
     addRow(QStringLiteral("production_substitute"),
            QStringLiteral("Production substitute"),
            QStringLiteral("NO"),
@@ -8692,7 +8706,7 @@ void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
            QStringLiteral("Tap endpoint"),
            m_debugGatewayEndpoint.isEmpty() ? QStringLiteral("-") : m_debugGatewayEndpoint,
            reason.isEmpty() ? m_debugGatewayStatus : reason,
-           active ? QStringLiteral("WARN") : QStringLiteral("INFO"));
+           active && labGatewayMode ? QStringLiteral("WARN") : QStringLiteral("INFO"));
     addRow(QStringLiteral("artifact"),
            QStringLiteral("Tap artifact"),
            m_debugGatewayArtifactPath.isEmpty() ? QStringLiteral("-") : m_debugGatewayArtifactPath,
@@ -8700,37 +8714,59 @@ void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
 
     const QJsonObject ready = readJsonObject(m_debugGatewayReadyPath);
     if (!ready.isEmpty()) {
-        addRow(QStringLiteral("ready"),
-               QStringLiteral("Ready file"),
-               QStringLiteral("present"),
-               QStringLiteral("port %1 serial %2 policy %3")
-                   .arg(QString::number(ready.value(QStringLiteral("port")).toInt()),
-                        ready.value(QStringLiteral("serial_port")).toString(QStringLiteral("-")),
-                        ready.value(QStringLiteral("backpressure_policy")).toString(QStringLiteral("-"))),
-               QStringLiteral("OK"));
+        if (ready.value(QStringLiteral("process")).toString() == QStringLiteral("vsm-debug-tap")) {
+            addRow(QStringLiteral("ready"),
+                   QStringLiteral("Ready file"),
+                   ready.value(QStringLiteral("ready")).toBool(false) ? QStringLiteral("connected") : QStringLiteral("starting"),
+                   QStringLiteral("server %1 trace %2")
+                       .arg(ready.value(QStringLiteral("server_name")).toString(QStringLiteral("-")),
+                            ready.value(QStringLiteral("trace_path")).toString(QStringLiteral("-"))),
+                   ready.value(QStringLiteral("ready")).toBool(false) ? QStringLiteral("OK") : QStringLiteral("INFO"));
+        } else {
+            addRow(QStringLiteral("ready"),
+                   QStringLiteral("Ready file"),
+                   QStringLiteral("present"),
+                   QStringLiteral("port %1 serial %2 policy %3")
+                       .arg(QString::number(ready.value(QStringLiteral("port")).toInt()),
+                            ready.value(QStringLiteral("serial_port")).toString(QStringLiteral("-")),
+                            ready.value(QStringLiteral("backpressure_policy")).toString(QStringLiteral("-"))),
+                   QStringLiteral("OK"));
+        }
     }
     const QJsonObject result = readJsonObject(m_debugGatewayResultPath);
     if (!result.isEmpty()) {
-        const QJsonObject stats = result.value(QStringLiteral("stats")).toObject();
-        const quint64 droppedBytes = quint64(stats.value(QStringLiteral("tcp_queue_dropped_bytes")).toDouble());
-        const quint64 droppedChunks = quint64(stats.value(QStringLiteral("tcp_queue_dropped_chunks")).toDouble());
-        addRow(QStringLiteral("drop_counter"),
-               QStringLiteral("Tap drop counter"),
-               QStringLiteral("%1B / %2 chunks").arg(droppedBytes).arg(droppedChunks),
-               QStringLiteral("serial_rx %1 tcp_tx %2 tcp_rx %3 serial_tx %4")
-                   .arg(quint64(stats.value(QStringLiteral("serial_rx_bytes")).toDouble()))
-                   .arg(quint64(stats.value(QStringLiteral("tcp_tx_bytes")).toDouble()))
-                   .arg(quint64(stats.value(QStringLiteral("tcp_rx_bytes")).toDouble()))
-                   .arg(quint64(stats.value(QStringLiteral("serial_tx_bytes")).toDouble())),
-               droppedBytes > 0 || droppedChunks > 0 ? QStringLiteral("WARN") : QStringLiteral("OK"));
-        const QJsonObject capture = result.value(QStringLiteral("capture")).toObject();
-        addRow(QStringLiteral("capture"),
-               QStringLiteral("Tap capture"),
-               result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("finalized") : QStringLiteral("not finalized"),
-               QStringLiteral("stream %1 parser %2")
-                   .arg(capture.value(QStringLiteral("stream")).toString(QStringLiteral("-")),
-                        capture.value(QStringLiteral("parser")).toString(QStringLiteral("-"))),
-               result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("OK") : QStringLiteral("WARN"));
+        if (result.value(QStringLiteral("process")).toString() == QStringLiteral("vsm-debug-tap")) {
+            addRow(QStringLiteral("tap_summary"),
+                   QStringLiteral("Tap summary"),
+                   result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("captured") : QStringLiteral("incomplete"),
+                   QStringLiteral("views %1 snapshots %2 errors %3 timeouts %4")
+                       .arg(result.value(QStringLiteral("view_changed_total")).toString(QStringLiteral("0")),
+                            result.value(QStringLiteral("snapshot_total")).toString(QStringLiteral("0")),
+                            result.value(QStringLiteral("ipc_error_total")).toString(QStringLiteral("0")),
+                            result.value(QStringLiteral("request_timeout_total")).toString(QStringLiteral("0"))),
+                   result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("OK") : QStringLiteral("WARN"));
+        } else {
+            const QJsonObject stats = result.value(QStringLiteral("stats")).toObject();
+            const quint64 droppedBytes = quint64(stats.value(QStringLiteral("tcp_queue_dropped_bytes")).toDouble());
+            const quint64 droppedChunks = quint64(stats.value(QStringLiteral("tcp_queue_dropped_chunks")).toDouble());
+            addRow(QStringLiteral("drop_counter"),
+                   QStringLiteral("Tap drop counter"),
+                   QStringLiteral("%1B / %2 chunks").arg(droppedBytes).arg(droppedChunks),
+                   QStringLiteral("serial_rx %1 tcp_tx %2 tcp_rx %3 serial_tx %4")
+                       .arg(quint64(stats.value(QStringLiteral("serial_rx_bytes")).toDouble()))
+                       .arg(quint64(stats.value(QStringLiteral("tcp_tx_bytes")).toDouble()))
+                       .arg(quint64(stats.value(QStringLiteral("tcp_rx_bytes")).toDouble()))
+                       .arg(quint64(stats.value(QStringLiteral("serial_tx_bytes")).toDouble())),
+                   droppedBytes > 0 || droppedChunks > 0 ? QStringLiteral("WARN") : QStringLiteral("OK"));
+            const QJsonObject capture = result.value(QStringLiteral("capture")).toObject();
+            addRow(QStringLiteral("capture"),
+                   QStringLiteral("Tap capture"),
+                   result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("finalized") : QStringLiteral("not finalized"),
+                   QStringLiteral("stream %1 parser %2")
+                       .arg(capture.value(QStringLiteral("stream")).toString(QStringLiteral("-")),
+                            capture.value(QStringLiteral("parser")).toString(QStringLiteral("-"))),
+                   result.value(QStringLiteral("ok")).toBool(false) ? QStringLiteral("OK") : QStringLiteral("WARN"));
+        }
     }
 
     m_debugGatewayDiagnostics = rows;
@@ -8747,9 +8783,7 @@ void AppController::toggleDebugGateway(const QString& portName) {
 
 void AppController::startDebugGateway(const QString& portName) {
     if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
-        m_debugGatewayStatus = QStringLiteral("Passive profile blocks COM-owning debug gateway");
-        refreshDebugGatewayDiagnostics(QStringLiteral("blocked by runtime profile"));
-        setStatus(QStringLiteral("Passive product mode blocks GW; use sidecar/tap diagnostics"));
+        startPassiveDebugTapNow(portName);
         return;
     }
     const QString trimmed = portName.trimmed();
@@ -8774,6 +8808,124 @@ void AppController::startDebugGateway(const QString& portName) {
         return;
     }
     startDebugGatewayNow(trimmed);
+}
+
+void AppController::startPassiveDebugTapNow(const QString& reason) {
+    if (debugGatewayActive()) {
+        setStatus(m_debugGatewayStatus);
+        return;
+    }
+
+    QString error;
+    if (!m_coreProcessClient.isActive()) {
+        if (!m_coreProcessClient.startServerOnly(coreProcessExecutablePath(), &error)) {
+            m_debugGatewayStatus = QStringLiteral("Passive debug tap start failed: %1").arg(error);
+            refreshDebugGatewayDiagnostics(QStringLiteral("core start failed"));
+            setStatus(m_debugGatewayStatus);
+            return;
+        }
+    }
+
+    const QString serverName = m_coreProcessClient.serverName();
+    if (serverName.trimmed().isEmpty()) {
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap start failed: empty core IPC server");
+        refreshDebugGatewayDiagnostics(QStringLiteral("empty core server"));
+        setStatus(m_debugGatewayStatus);
+        return;
+    }
+
+    const QString exePath = debugTapExecutablePath();
+    if (!QFileInfo::exists(exePath)) {
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap executable missing");
+        refreshDebugGatewayDiagnostics(QStringLiteral("vsm-debug-tap.exe missing"));
+        setStatus(QStringLiteral("vsm-debug-tap.exe를 찾지 못했습니다"));
+        return;
+    }
+
+    const QString projectRoot = RuntimePaths::projectRoot();
+    const QString artifactRoot = QFileInfo::exists(projectRoot)
+        ? QDir(projectRoot).filePath(QStringLiteral("artifacts/vsm_debug_tap"))
+        : QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("artifacts/vsm_debug_tap"));
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    const QString outDir = QDir(artifactRoot).filePath(QStringLiteral("app_%1").arg(stamp));
+    if (!QDir().mkpath(outDir)) {
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap output directory failed");
+        refreshDebugGatewayDiagnostics(QStringLiteral("output directory failed"));
+        setStatus(m_debugGatewayStatus);
+        return;
+    }
+
+    const QString stopFile = QDir(outDir).filePath(QStringLiteral("debug_tap.stop"));
+    auto* process = new QProcess(this);
+    process->setWorkingDirectory(QFileInfo::exists(projectRoot) ? projectRoot : QCoreApplication::applicationDirPath());
+    process->setProcessChannelMode(QProcess::SeparateChannels);
+
+    connect(process, &QProcess::readyReadStandardOutput, this, [this, process]() {
+        const QByteArray data = process->readAllStandardOutput();
+        for (const QByteArray& rawLine : data.split('\n')) {
+            const QByteArray line = rawLine.trimmed();
+            if (line.isEmpty()) continue;
+            const QJsonDocument doc = QJsonDocument::fromJson(line);
+            if (!doc.isObject()) continue;
+            const QJsonObject object = doc.object();
+            if (object.value(QStringLiteral("process")).toString() == QStringLiteral("vsm-debug-tap") &&
+                object.value(QStringLiteral("ok")).toBool(false)) {
+                m_debugGatewayStatus = QStringLiteral("Passive debug tap ready · %1")
+                                           .arg(object.value(QStringLiteral("server_name")).toString(QStringLiteral("-")));
+                refreshDebugGatewayDiagnostics(QStringLiteral("ready"));
+                setStatus(m_debugGatewayStatus);
+            }
+        }
+    });
+    connect(process, &QProcess::readyReadStandardError, this, [this, process]() {
+        const QString errorText = QString::fromUtf8(process->readAllStandardError()).trimmed();
+        if (errorText.isEmpty()) return;
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap stderr: %1").arg(errorText.left(180));
+        refreshDebugGatewayDiagnostics(QStringLiteral("stderr"));
+        setStatus(m_debugGatewayStatus);
+    });
+    connect(process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError errorCode) {
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap process error: %1").arg(int(errorCode));
+        refreshDebugGatewayDiagnostics(QStringLiteral("process error"));
+        setStatus(m_debugGatewayStatus);
+    });
+    connect(process, qOverload<int, QProcess::ExitStatus>(&QProcess::finished),
+            this, [this, process](int exitCode, QProcess::ExitStatus exitStatus) {
+        finishDebugGatewayProcess(exitCode, exitStatus, process);
+    });
+
+    const QStringList args{
+        QStringLiteral("--server"), serverName,
+        QStringLiteral("--out-dir"), outDir,
+        QStringLiteral("--stop-file"), stopFile,
+        QStringLiteral("--deep"),
+    };
+
+    m_debugGatewayProcess = process;
+    m_debugGatewayEndpoint = QStringLiteral("local://%1").arg(serverName);
+    m_debugGatewayArtifactPath = outDir;
+    m_debugGatewayReadyPath = QDir(outDir).filePath(QStringLiteral("debug_tap.ready.json"));
+    m_debugGatewayResultPath = QDir(outDir).filePath(QStringLiteral("debug_tap_summary.json"));
+    m_debugGatewayStopFile = stopFile;
+    m_debugGatewayStatus = reason.trimmed().isEmpty()
+        ? QStringLiteral("Passive debug tap starting · %1").arg(serverName)
+        : QStringLiteral("Passive debug tap starting · %1 · %2").arg(serverName, reason.trimmed());
+    refreshDebugGatewayDiagnostics(QStringLiteral("starting"));
+    setStatus(m_debugGatewayStatus);
+
+    process->start(exePath, args);
+    if (!process->waitForStarted(1500)) {
+        m_debugGatewayStatus = QStringLiteral("Passive debug tap start failed: %1").arg(process->errorString());
+        emit debugGatewayChanged();
+        setStatus(m_debugGatewayStatus);
+        m_debugGatewayProcess = nullptr;
+        m_debugGatewayEndpoint.clear();
+        m_debugGatewayReadyPath.clear();
+        m_debugGatewayResultPath.clear();
+        m_debugGatewayStopFile.clear();
+        refreshDebugGatewayDiagnostics(QStringLiteral("start failed"));
+        process->deleteLater();
+    }
 }
 
 void AppController::startDebugGatewayNow(const QString& portName) {
@@ -8879,12 +9031,15 @@ void AppController::stopDebugGateway() {
         m_debugGatewayReadyPath.clear();
         m_debugGatewayResultPath.clear();
         m_debugGatewayStopFile.clear();
-        m_debugGatewayStatus = QStringLiteral("Debug gateway off");
+        m_debugGatewayStatus = m_runtimeProfile.transportPolicy().labGatewayEnabled
+            ? QStringLiteral("Debug gateway off")
+            : QStringLiteral("Passive debug tap off");
         refreshDebugGatewayDiagnostics(QStringLiteral("off"));
         return;
     }
 
-    if (m_connected && !m_debugGatewayEndpoint.isEmpty()) {
+    const bool labGatewayMode = m_debugGatewayEndpoint.startsWith(QStringLiteral("tcp://"));
+    if (labGatewayMode && m_connected && !m_debugGatewayEndpoint.isEmpty()) {
         disconnectPort();
     }
 
@@ -8896,7 +9051,9 @@ void AppController::stopDebugGateway() {
         }
     }
 
-    m_debugGatewayStatus = QStringLiteral("Debug gateway stop requested");
+    m_debugGatewayStatus = labGatewayMode
+        ? QStringLiteral("Debug gateway stop requested")
+        : QStringLiteral("Passive debug tap stop requested");
     refreshDebugGatewayDiagnostics(QStringLiteral("stop requested"));
     setStatus(m_debugGatewayStatus);
 
@@ -8920,8 +9077,8 @@ void AppController::finishDebugGatewayProcess(int exitCode, QProcess::ExitStatus
     m_debugGatewayEndpoint.clear();
     m_debugGatewayStopFile.clear();
     m_debugGatewayStatus = normal
-        ? QStringLiteral("디버그 게이트웨이 종료됨")
-        : QStringLiteral("디버그 게이트웨이 비정상 종료: exit=%1").arg(exitCode);
+        ? QStringLiteral("디버그 프로세스 종료됨")
+        : QStringLiteral("디버그 프로세스 비정상 종료: exit=%1").arg(exitCode);
     refreshDebugGatewayDiagnostics(normal ? QStringLiteral("finished") : QStringLiteral("abnormal finish"));
     setStatus(m_debugGatewayStatus);
     process->deleteLater();
@@ -9000,11 +9157,13 @@ QVariantList AppController::verificationScenarioCatalog() const {
             QStringLiteral("제어 명령/ACK/CAN_TX_RAW 분리 경로 smoke"),
             true),
         row(QStringLiteral("debug_gateway"),
-            QStringLiteral("Lab debug gateway"),
+            m_runtimeProfile.transportPolicy().labGatewayEnabled
+                ? QStringLiteral("Lab debug gateway")
+                : QStringLiteral("Passive debug tap"),
             m_runtimeProfile.transportPolicy().labGatewayEnabled
                 ? QStringLiteral("Full/lab profile only: COM-owning raw serial gateway execution")
-                : QStringLiteral("Passive profile blocks COM-owning gateway; use non-owning sidecar/tap diagnostics"),
-            true),
+                : QStringLiteral("Passive-safe non-owning Core IPC diagnostic tap; COM-owning gateway is blocked"),
+            m_runtimeProfile.transportPolicy().labGatewayEnabled),
         row(QStringLiteral("latest_capture_report"),
             QStringLiteral("Latest capture report"),
             QStringLiteral("최근 project-local typed capture 분석"),

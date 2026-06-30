@@ -20,6 +20,7 @@ description: Use when working on board typed stream parsing, typed capture stora
 - Live truth state keys must include bus identity, at minimum `bus + canId + ext + rtr`.
 - Debug gateway capture is opt-in and external to the normal app hot loop; it can preserve raw serial evidence, but it does not replace VSM final capture validation.
 - COM-owning debug gateway is Full/Instrumented lab-only and cannot be used as passive field acceptance.
+- Passive Product diagnostics uses `vsm-debug-tap.exe`, which subscribes to Core IPC views without owning COM or altering typed evidence flow.
 - `capture.stream/index` is the authoritative typed evidence truth; UI/raw tail/graph/analysis rows are bounded derived views.
 
 ## Workflow

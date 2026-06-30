@@ -5,7 +5,7 @@ VSM product default is `passive_product`.
 
 - UI process: `vsm-ui.exe` / `can_monitor_qml_reboot.exe`
 - Core process: `vsm-capture-core.exe --profile passive_product`
-- Optional debug/tap: default OFF, separate plane
+- Optional debug/tap: default OFF, `vsm-debug-tap.exe` non-owning sidecar
 - Serial open: read-only
 - DTR/RTS: DTR is allowed only as a CSM-declared Arduino CDC session gate; RTS
   remains no-touch.
@@ -107,6 +107,19 @@ Debug/Gateway는 production capture를 대체하지 않는다.
 - tap은 fixed cap과 drop counter를 가진다.
 - tap backpressure는 Core capture data plane으로 전파되면 안 된다.
 - debug artifact PASS는 production `capture.stream/index` PASS를 대체하지 않는다.
+
+### Productized Debug Tap Addendum
+
+- Passive Product diagnostics uses `vsm-debug-tap.exe`, not the COM-owning
+  gateway.
+- `vsm-debug-tap.exe` is a Core IPC client only. It never opens COM/USB, never
+  sends host TX/control, and never updates Core state.
+- The old `vsm_debug_gateway.py` remains Full/Instrumented lab-only.
+- The tap records bounded Core view snapshots and lifecycle events to
+  `debug_tap_trace.jsonl`; if the tap is slow or stopped, only debug evidence is
+  degraded.
+- The detailed product contract is
+  [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]].
 
 ## Migration Rule
 Live/capture-core 변경은 [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]의 owner/consumer/drop policy와 금지 경계를 먼저 만족해야 한다.
