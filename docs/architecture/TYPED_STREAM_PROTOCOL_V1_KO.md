@@ -261,7 +261,20 @@ USB lifecycle board events used by passive diagnostics:
 27 USB_CDC_SESSION_OPEN
 28 USB_CDC_SESSION_CLOSE  reported on the next open; detail is previous
                           session duration ms saturated at 0xFFFF
+29 USB_CDC_DTR_CHANGE
+30 USB_HOST_ABSENT_CAN_DISCARD_SUMMARY
+31 MCP_PASSIVE_MODE_READBACK
+32 MCP_PASSIVE_MODE_VIOLATION
+33 MCP_TXREQ_VIOLATION
+34 TRANSCEIVER_SAFE_STATE_CHANGED
+35 USB_POWER_OR_RESET_SUSPECTED
 ```
+
+`BOARD_HEALTH v7` extends v6 with passive lifecycle counters:
+host-absent discard per bus, host-absent FIFO/MCP errors, host-absent duration,
+MCP passive readback count, readback violation count, TXREQ violation count, and
+USB CDC DTR change count. VSM must treat readback/TXREQ violation as
+product-blocking passive evidence, not as display sampling loss.
 
 Typed capture session sidecars:
 

@@ -22,6 +22,7 @@ inline constexpr qsizetype kTypedBoardEventPayloadSize = 16;
 inline constexpr qsizetype kTypedBoardHealthPayloadSize = 52;
 inline constexpr qsizetype kTypedBoardHealthExtendedPayloadSize = 192;
 inline constexpr qsizetype kTypedBoardHealthV5PayloadSize = 224;
+inline constexpr qsizetype kTypedBoardHealthV7PayloadSize = 296;
 inline constexpr qsizetype kTypedCapabilityPayloadSize = 36;
 inline constexpr qsizetype kTypedCapabilityV2PayloadSize = 80;
 inline constexpr qsizetype kTypedCapabilityV3PayloadSize = 112;
@@ -180,6 +181,16 @@ struct TypedBoardHealthRecord {
     quint32 canTruthPoolAllocFailTotal = 0;
     quint32 uplinkDescriptorHighWaterTotal = 0;
     quint32 diagnosticSuppressedTotal = 0;
+    bool hasPassiveLifecycleCounters = false;
+    quint32 hostAbsentRxDiscardBus0Total = 0;
+    quint32 hostAbsentRxDiscardBus1Total = 0;
+    quint32 hostAbsentFifoOverflowTotal = 0;
+    quint32 hostAbsentMcpErrorTotal = 0;
+    quint32 hostAbsentDurationMsTotal = 0;
+    quint32 passiveReadbackTotal = 0;
+    quint32 passiveReadbackViolationTotal = 0;
+    quint32 txreqViolationTotal = 0;
+    quint32 usbCdcDtrChangeTotal = 0;
 };
 
 struct TypedCapabilityBusDescriptor {

@@ -446,7 +446,7 @@ void TransportSession::noteBoardEvent(quint16 code, quint16 detail, quint32 coun
         ++m_mcp2515EventTotal;
         m_mcp2515Details[detail] = m_mcp2515Details.value(detail) + 1;
     }
-    if (code == 12 || code == 17) {
+    if (code == 12 || code == 17 || code == 32 || code == 33 || code == 35) {
         ++m_boardEventFatalTotal;
     }
 }
@@ -471,13 +471,17 @@ QString TransportSession::boardUplinkLevel() const {
     if (m_boardUplink.serialRingClearTotal > 0 ||
         m_boardUplink.serialRingClearedBytesTotal > 0 ||
         m_boardUplink.canSegmentEnqueueFailTotal > 0 ||
-        m_boardUplink.canTruthPoolAllocFailTotal > 0) {
+        m_boardUplink.canTruthPoolAllocFailTotal > 0 ||
+        m_boardUplink.passiveReadbackViolationTotal > 0 ||
+        m_boardUplink.txreqViolationTotal > 0) {
         return QStringLiteral("ERR");
     }
     if (m_boardUplink.serialEnqueueFailTotal > 0 ||
         m_boardUplink.serialBackpressureTotal > 0 ||
         m_boardUplink.mcpDrainBudgetHitTotal > 0 ||
-        m_boardUplink.uplinkPoolAllocFailTotal > 0) {
+        m_boardUplink.uplinkPoolAllocFailTotal > 0 ||
+        m_boardUplink.hostAbsentFifoOverflowTotal > 0 ||
+        m_boardUplink.hostAbsentMcpErrorTotal > 0) {
         return QStringLiteral("WARN");
     }
     return QStringLiteral("OK");
@@ -730,6 +734,30 @@ QVariantList TransportSession::rows() const {
             m_boardHealthAgeMs >= 0 ? QStringLiteral("health age %1ms").arg(m_boardHealthAgeMs) : QStringLiteral("no health yet"),
             QStringLiteral("can_drop %1 fifo_overflow %2").arg(m_boardCanDroppedTotal).arg(m_boardFifoOverflowTotal),
             m_boardCanDroppedTotal > 0 || m_boardFifoOverflowTotal > 0),
+        row(QStringLiteral("passive_usb_lifecycle"),
+            QStringLiteral("Passive USB lifecycle"),
+            !m_boardUplink.hasPassiveLifecycleCounters ? QStringLiteral("INFO")
+                : (m_boardUplink.passiveReadbackViolationTotal > 0 || m_boardUplink.txreqViolationTotal > 0
+                       ? QStringLiteral("ERR")
+                       : (m_boardUplink.hostAbsentFifoOverflowTotal > 0 || m_boardUplink.hostAbsentMcpErrorTotal > 0
+                              ? QStringLiteral("WARN")
+                              : QStringLiteral("OK"))),
+            m_boardUplink.hasPassiveLifecycleCounters
+                ? QStringLiteral("discard b0 %1 b1 %2")
+                      .arg(m_boardUplink.hostAbsentRxDiscardBus0Total)
+                      .arg(m_boardUplink.hostAbsentRxDiscardBus1Total)
+                : QStringLiteral("waiting for BOARD_HEALTH v7"),
+            m_boardUplink.hasPassiveLifecycleCounters
+                ? QStringLiteral("absent_ms %1 dtr_change %2 passive_readback %3 violation %4 txreq %5 absent_fifo %6 absent_mcp %7")
+                      .arg(m_boardUplink.hostAbsentDurationMsTotal)
+                      .arg(m_boardUplink.usbCdcDtrChangeTotal)
+                      .arg(m_boardUplink.passiveReadbackTotal)
+                      .arg(m_boardUplink.passiveReadbackViolationTotal)
+                      .arg(m_boardUplink.txreqViolationTotal)
+                      .arg(m_boardUplink.hostAbsentFifoOverflowTotal)
+                      .arg(m_boardUplink.hostAbsentMcpErrorTotal)
+                : QStringLiteral("CSM firmware has not advertised passive USB lifecycle counters"),
+            m_boardUplink.passiveReadbackViolationTotal > 0 || m_boardUplink.txreqViolationTotal > 0),
         row(QStringLiteral("csm_uplink"),
             QStringLiteral("CSM uplink"),
             uplinkLevel,
@@ -764,7 +792,9 @@ QVariantList TransportSession::rows() const {
                 (m_boardUplink.serialRingClearTotal > 0 ||
                  m_boardUplink.serialRingClearedBytesTotal > 0 ||
                  m_boardUplink.canSegmentEnqueueFailTotal > 0 ||
-                 m_boardUplink.canTruthPoolAllocFailTotal > 0)),
+                 m_boardUplink.canTruthPoolAllocFailTotal > 0 ||
+                 m_boardUplink.passiveReadbackViolationTotal > 0 ||
+                 m_boardUplink.txreqViolationTotal > 0)),
         row(QStringLiteral("board_events"),
             QStringLiteral("Board events"),
             eventLevel,

@@ -53,6 +53,16 @@ QJsonObject boardHealthToJson(const TypedBoardHealthRecord& health) {
     out.insert(QStringLiteral("can_truth_pool_alloc_fail_total"), u64Text(health.canTruthPoolAllocFailTotal));
     out.insert(QStringLiteral("uplink_descriptor_high_water_total"), u64Text(health.uplinkDescriptorHighWaterTotal));
     out.insert(QStringLiteral("diagnostic_suppressed_total"), u64Text(health.diagnosticSuppressedTotal));
+    out.insert(QStringLiteral("has_passive_lifecycle_counters"), health.hasPassiveLifecycleCounters);
+    out.insert(QStringLiteral("host_absent_rx_discard_bus0_total"), u64Text(health.hostAbsentRxDiscardBus0Total));
+    out.insert(QStringLiteral("host_absent_rx_discard_bus1_total"), u64Text(health.hostAbsentRxDiscardBus1Total));
+    out.insert(QStringLiteral("host_absent_fifo_overflow_total"), u64Text(health.hostAbsentFifoOverflowTotal));
+    out.insert(QStringLiteral("host_absent_mcp_error_total"), u64Text(health.hostAbsentMcpErrorTotal));
+    out.insert(QStringLiteral("host_absent_duration_ms_total"), u64Text(health.hostAbsentDurationMsTotal));
+    out.insert(QStringLiteral("passive_readback_total"), u64Text(health.passiveReadbackTotal));
+    out.insert(QStringLiteral("passive_readback_violation_total"), u64Text(health.passiveReadbackViolationTotal));
+    out.insert(QStringLiteral("txreq_violation_total"), u64Text(health.txreqViolationTotal));
+    out.insert(QStringLiteral("usb_cdc_dtr_change_total"), u64Text(health.usbCdcDtrChangeTotal));
     return out;
 }
 
@@ -144,6 +154,13 @@ QJsonObject boardEventToJson(const TypedBoardEventRecord& event) {
         case 26: return QStringLiteral("CAN_RX_SEGMENT_ENQUEUE_FAILED");
         case 27: return QStringLiteral("USB_CDC_SESSION_OPEN");
         case 28: return QStringLiteral("USB_CDC_SESSION_CLOSE");
+        case 29: return QStringLiteral("USB_CDC_DTR_CHANGE");
+        case 30: return QStringLiteral("USB_HOST_ABSENT_CAN_DISCARD_SUMMARY");
+        case 31: return QStringLiteral("MCP_PASSIVE_MODE_READBACK");
+        case 32: return QStringLiteral("MCP_PASSIVE_MODE_VIOLATION");
+        case 33: return QStringLiteral("MCP_TXREQ_VIOLATION");
+        case 34: return QStringLiteral("TRANSCEIVER_SAFE_STATE_CHANGED");
+        case 35: return QStringLiteral("USB_POWER_OR_RESET_SUSPECTED");
         default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
         }
     };
@@ -373,12 +390,16 @@ void CaptureCoreRuntime::ingestCriticalRecord(const TypedRecord& record, Result&
             health->canFifoOverflowTotal > 0 ||
             health->serialRingClearTotal > 0 ||
             health->canSegmentEnqueueFailTotal > 0 ||
-            health->canTruthPoolAllocFailTotal > 0) {
+            health->canTruthPoolAllocFailTotal > 0 ||
+            health->passiveReadbackViolationTotal > 0 ||
+            health->txreqViolationTotal > 0) {
             severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Error);
         } else if (health->serialEnqueueFailTotal > 0 ||
                    health->serialBackpressureTotal > 0 ||
                    health->mcpDrainBudgetHitTotal > 0 ||
-                   health->uplinkPoolAllocFailTotal > 0) {
+                   health->uplinkPoolAllocFailTotal > 0 ||
+                   health->hostAbsentFifoOverflowTotal > 0 ||
+                   health->hostAbsentMcpErrorTotal > 0) {
             severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Warn);
         }
     } else if (type == TypedRecordType::BoardEvent) {
@@ -390,7 +411,7 @@ void CaptureCoreRuntime::ingestCriticalRecord(const TypedRecord& record, Result&
             m_mcp2515Details[event->detail] = m_mcp2515Details.value(event->detail) + 1;
             severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Warn);
         }
-        if (event->code == 12 || event->code == 17) {
+        if (event->code == 12 || event->code == 17 || event->code == 32 || event->code == 33 || event->code == 35) {
             ++m_boardEventFatalTotal;
             severity = maxSeverity(severity, CanMonitorCore::CoreViewSeverity::Error);
         }

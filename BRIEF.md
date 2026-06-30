@@ -22,11 +22,12 @@
 - Legacy 20-byte/CRC8/DLC/`t_us` wrap remains replay/import compatibility only.
 
 ## Current Goal
-- Apply `VSM 최종 완성 플랜 Passive-Safe 2+1 Product Architecture.md` as the current VSM product direction.
+- Apply CDC-maintained Passive Product architecture as the current VSM product direction.
 - Close runtime profile ownership across SerialDrainRuntime, CaptureCoreProcessRuntime, IPC, CoreProcessClientRuntime, AppController, TransportSession, docs, and harness.
 - Remove old-flow assumptions that treat debug gateway/control/full instrumentation as normal product behavior.
 - Productize passive diagnostics as `vsm-debug-tap.exe`: a non-owning Core IPC sidecar, distinct from the lab-only COM-owning gateway.
 - Keep build/test verification reproducible and do not claim vehicle passive safety without CSM capability plus hardware safety evidence.
+- Treat CSM `BOARD_HEALTH v7` USB lifecycle/passive readback counters and `BOARD_EVENT` 29..35 as first-class field evidence.
 
 ## Immediate Next Work
 - Finish code boundary cleanup for Passive Product default.
@@ -36,6 +37,7 @@
 - Verify UI/core launch uses `--profile passive_product`.
 - Verify passive diagnostics starts `vsm-debug-tap.exe` without disconnecting Core or owning COM.
 - Verify transport details expose `passive_safety_profile`.
+- Verify transport details expose `passive_usb_lifecycle` and classify MCP listen-only/TXREQ violation as product-blocking.
 - Commit the completed slice only after build/test pass or with explicit failed-command evidence.
 
 ## Read Next

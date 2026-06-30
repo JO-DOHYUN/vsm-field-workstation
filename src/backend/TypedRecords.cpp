@@ -255,6 +255,18 @@ std::optional<TypedBoardHealthRecord> decodeTypedBoardHealth(const TypedRecord& 
         out.uplinkDescriptorHighWaterTotal = typedReadU32Le(p + 216);
         out.diagnosticSuppressedTotal = typedReadU32Le(p + 220);
     }
+    if (payload.size() >= kTypedBoardHealthV7PayloadSize) {
+        out.hasPassiveLifecycleCounters = true;
+        out.hostAbsentRxDiscardBus0Total = typedReadU32Le(p + 260);
+        out.hostAbsentRxDiscardBus1Total = typedReadU32Le(p + 264);
+        out.hostAbsentFifoOverflowTotal = typedReadU32Le(p + 268);
+        out.hostAbsentMcpErrorTotal = typedReadU32Le(p + 272);
+        out.hostAbsentDurationMsTotal = typedReadU32Le(p + 276);
+        out.passiveReadbackTotal = typedReadU32Le(p + 280);
+        out.passiveReadbackViolationTotal = typedReadU32Le(p + 284);
+        out.txreqViolationTotal = typedReadU32Le(p + 288);
+        out.usbCdcDtrChangeTotal = typedReadU32Le(p + 292);
+    }
     return out;
 }
 

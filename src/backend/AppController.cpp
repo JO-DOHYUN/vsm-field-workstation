@@ -293,6 +293,19 @@ QString boardEventCodeText(quint16 code) {
     case 20: return QStringLiteral("HOST_CONTROL_SESSION");
     case 21: return QStringLiteral("HOST_COMMAND_UNSUPPORTED");
     case 22: return QStringLiteral("FAULT_LOCKOUT_CLEARED");
+    case 23: return QStringLiteral("FIRMWARE_IDENTITY");
+    case 24: return QStringLiteral("SERIAL_TX_BACKPRESSURE");
+    case 25: return QStringLiteral("SERIAL_TX_RING_CLEAR");
+    case 26: return QStringLiteral("CAN_RX_SEGMENT_ENQUEUE_FAILED");
+    case 27: return QStringLiteral("USB_CDC_SESSION_OPEN");
+    case 28: return QStringLiteral("USB_CDC_SESSION_CLOSE");
+    case 29: return QStringLiteral("USB_CDC_DTR_CHANGE");
+    case 30: return QStringLiteral("USB_HOST_ABSENT_CAN_DISCARD_SUMMARY");
+    case 31: return QStringLiteral("MCP_PASSIVE_MODE_READBACK");
+    case 32: return QStringLiteral("MCP_PASSIVE_MODE_VIOLATION");
+    case 33: return QStringLiteral("MCP_TXREQ_VIOLATION");
+    case 34: return QStringLiteral("TRANSCEIVER_SAFE_STATE_CHANGED");
+    case 35: return QStringLiteral("USB_POWER_OR_RESET_SUSPECTED");
     default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
     }
 }
@@ -468,6 +481,16 @@ std::optional<TypedBoardHealthRecord> boardHealthFromCoreJson(const QJsonObject&
     out.canTruthPoolAllocFailTotal = quint32(jsonU64Value(object, QStringLiteral("can_truth_pool_alloc_fail_total")));
     out.uplinkDescriptorHighWaterTotal = quint32(jsonU64Value(object, QStringLiteral("uplink_descriptor_high_water_total")));
     out.diagnosticSuppressedTotal = quint32(jsonU64Value(object, QStringLiteral("diagnostic_suppressed_total")));
+    out.hasPassiveLifecycleCounters = object.value(QStringLiteral("has_passive_lifecycle_counters")).toBool(false);
+    out.hostAbsentRxDiscardBus0Total = quint32(jsonU64Value(object, QStringLiteral("host_absent_rx_discard_bus0_total")));
+    out.hostAbsentRxDiscardBus1Total = quint32(jsonU64Value(object, QStringLiteral("host_absent_rx_discard_bus1_total")));
+    out.hostAbsentFifoOverflowTotal = quint32(jsonU64Value(object, QStringLiteral("host_absent_fifo_overflow_total")));
+    out.hostAbsentMcpErrorTotal = quint32(jsonU64Value(object, QStringLiteral("host_absent_mcp_error_total")));
+    out.hostAbsentDurationMsTotal = quint32(jsonU64Value(object, QStringLiteral("host_absent_duration_ms_total")));
+    out.passiveReadbackTotal = quint32(jsonU64Value(object, QStringLiteral("passive_readback_total")));
+    out.passiveReadbackViolationTotal = quint32(jsonU64Value(object, QStringLiteral("passive_readback_violation_total")));
+    out.txreqViolationTotal = quint32(jsonU64Value(object, QStringLiteral("txreq_violation_total")));
+    out.usbCdcDtrChangeTotal = quint32(jsonU64Value(object, QStringLiteral("usb_cdc_dtr_change_total")));
     return out;
 }
 
@@ -2174,6 +2197,16 @@ void AppController::applyCoreTransportSummaryView(const QJsonObject& payload) {
             m_lastTypedHealthUplinkCounters.canTruthPoolAllocFailTotal = health->canTruthPoolAllocFailTotal;
             m_lastTypedHealthUplinkCounters.uplinkDescriptorHighWaterTotal = health->uplinkDescriptorHighWaterTotal;
             m_lastTypedHealthUplinkCounters.diagnosticSuppressedTotal = health->diagnosticSuppressedTotal;
+            m_lastTypedHealthUplinkCounters.hasPassiveLifecycleCounters = health->hasPassiveLifecycleCounters;
+            m_lastTypedHealthUplinkCounters.hostAbsentRxDiscardBus0Total = health->hostAbsentRxDiscardBus0Total;
+            m_lastTypedHealthUplinkCounters.hostAbsentRxDiscardBus1Total = health->hostAbsentRxDiscardBus1Total;
+            m_lastTypedHealthUplinkCounters.hostAbsentFifoOverflowTotal = health->hostAbsentFifoOverflowTotal;
+            m_lastTypedHealthUplinkCounters.hostAbsentMcpErrorTotal = health->hostAbsentMcpErrorTotal;
+            m_lastTypedHealthUplinkCounters.hostAbsentDurationMsTotal = health->hostAbsentDurationMsTotal;
+            m_lastTypedHealthUplinkCounters.passiveReadbackTotal = health->passiveReadbackTotal;
+            m_lastTypedHealthUplinkCounters.passiveReadbackViolationTotal = health->passiveReadbackViolationTotal;
+            m_lastTypedHealthUplinkCounters.txreqViolationTotal = health->txreqViolationTotal;
+            m_lastTypedHealthUplinkCounters.usbCdcDtrChangeTotal = health->usbCdcDtrChangeTotal;
         }
         m_lastLiveStatsWallMs = qint64(nowWallMs);
         ensureTimeAnchorForFrame(QStringLiteral("live"), health->monoUs);
@@ -8710,7 +8743,9 @@ void AppController::refreshDebugGatewayDiagnostics(const QString& reason) {
     addRow(QStringLiteral("artifact"),
            QStringLiteral("Tap artifact"),
            m_debugGatewayArtifactPath.isEmpty() ? QStringLiteral("-") : m_debugGatewayArtifactPath,
-           QStringLiteral("gateway.ready/result.json/summary.md live under this folder"));
+           labGatewayMode
+               ? QStringLiteral("gateway.ready/result.json/summary.md live under this folder")
+               : QStringLiteral("debug_tap.ready.json/debug_tap_trace.jsonl/debug_tap_summary.json live under this folder"));
 
     const QJsonObject ready = readJsonObject(m_debugGatewayReadyPath);
     if (!ready.isEmpty()) {
@@ -8932,7 +8967,7 @@ void AppController::startDebugGatewayNow(const QString& portName) {
     if (!m_runtimeProfile.transportPolicy().labGatewayEnabled) {
         m_debugGatewayStatus = QStringLiteral("Passive profile blocks COM-owning debug gateway");
         refreshDebugGatewayDiagnostics(QStringLiteral("blocked by runtime profile"));
-        setStatus(QStringLiteral("Passive product mode blocks GW; use sidecar/tap diagnostics"));
+        setStatus(QStringLiteral("Passive product mode blocks COM-owning lab gateway; use Debug Tap diagnostics"));
         return;
     }
     if (debugGatewayActive()) return;

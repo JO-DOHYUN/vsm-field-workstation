@@ -697,7 +697,7 @@ private slots:
         QVariant transportCount;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticCount",
                                           Q_RETURN_ARG(QVariant, transportCount)));
-        QCOMPARE(transportCount.toInt(), 16);
+        QCOMPARE(transportCount.toInt(), 17);
 
         QVariant transportSummary;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticSummary",
@@ -714,21 +714,28 @@ private slots:
         QVariant csmUplinkKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, csmUplinkKey),
-                                          Q_ARG(QVariant, QVariant(8)),
+                                          Q_ARG(QVariant, QVariant(9)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(csmUplinkKey.toString(), QStringLiteral("csm_uplink"));
+
+        QVariant passiveLifecycleKey;
+        QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
+                                          Q_RETURN_ARG(QVariant, passiveLifecycleKey),
+                                          Q_ARG(QVariant, QVariant(8)),
+                                          Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
+        QCOMPARE(passiveLifecycleKey.toString(), QStringLiteral("passive_usb_lifecycle"));
 
         QVariant truthKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, truthKey),
-                                          Q_ARG(QVariant, QVariant(10)),
+                                          Q_ARG(QVariant, QVariant(11)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(truthKey.toString(), QStringLiteral("live_latest"));
 
         QVariant decodedTailKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, decodedTailKey),
-                                          Q_ARG(QVariant, QVariant(11)),
+                                          Q_ARG(QVariant, QVariant(12)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(decodedTailKey.toString(), QStringLiteral("decoded_can_tail"));
 
@@ -742,21 +749,21 @@ private slots:
         QVariant projectionKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, projectionKey),
-                                          Q_ARG(QVariant, QVariant(12)),
+                                          Q_ARG(QVariant, QVariant(13)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(projectionKey.toString(), QStringLiteral("live_projection"));
 
         QVariant liveTraceKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, liveTraceKey),
-                                          Q_ARG(QVariant, QVariant(14)),
+                                          Q_ARG(QVariant, QVariant(15)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(liveTraceKey.toString(), QStringLiteral("live_path_trace"));
 
         QVariant drainTraceKey;
         QVERIFY(QMetaObject::invokeMethod(livePage, "testTransportDiagnosticField",
                                           Q_RETURN_ARG(QVariant, drainTraceKey),
-                                          Q_ARG(QVariant, QVariant(15)),
+                                          Q_ARG(QVariant, QVariant(16)),
                                           Q_ARG(QVariant, QVariant(QStringLiteral("key")))));
         QCOMPARE(drainTraceKey.toString(), QStringLiteral("drain_event_trace"));
         QVERIFY2(g_qmlErrors.isEmpty(), qPrintable(g_qmlErrors.join(QStringLiteral("\n"))));

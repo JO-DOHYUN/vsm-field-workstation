@@ -29,6 +29,16 @@ public:
         quint32 canTruthPoolAllocFailTotal = 0;
         quint32 uplinkDescriptorHighWaterTotal = 0;
         quint32 diagnosticSuppressedTotal = 0;
+        bool hasPassiveLifecycleCounters = false;
+        quint32 hostAbsentRxDiscardBus0Total = 0;
+        quint32 hostAbsentRxDiscardBus1Total = 0;
+        quint32 hostAbsentFifoOverflowTotal = 0;
+        quint32 hostAbsentMcpErrorTotal = 0;
+        quint32 hostAbsentDurationMsTotal = 0;
+        quint32 passiveReadbackTotal = 0;
+        quint32 passiveReadbackViolationTotal = 0;
+        quint32 txreqViolationTotal = 0;
+        quint32 usbCdcDtrChangeTotal = 0;
     };
 
     void reset();

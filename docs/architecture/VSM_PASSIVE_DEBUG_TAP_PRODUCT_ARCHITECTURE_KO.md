@@ -87,6 +87,12 @@ USB plug/unplug diagnosis requires aligning three evidence sources:
    - `BOARD_HEALTH` USB/session/passive counters
    - `BOARD_EVENT` `USB_CDC_SESSION_OPEN`
    - `BOARD_EVENT` `USB_CDC_SESSION_CLOSE` reported on next open
+   - `BOARD_EVENT` `USB_CDC_DTR_CHANGE`
+   - `BOARD_EVENT` `USB_HOST_ABSENT_CAN_DISCARD_SUMMARY`
+   - `BOARD_EVENT` `MCP_PASSIVE_MODE_READBACK`
+   - `BOARD_EVENT` `MCP_PASSIVE_MODE_VIOLATION`
+   - `BOARD_EVENT` `MCP_TXREQ_VIOLATION`
+   - `BOARD_HEALTH v7` host-absent discard/passive readback counters
    - MCP error/status events
 3. External physical evidence when required:
    - CAN analyzer error counters
