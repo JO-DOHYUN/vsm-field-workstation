@@ -379,5 +379,29 @@ std::optional<TypedCapabilityRecord> decodeTypedCapability(const TypedRecord& re
         out.usbCdcDtrSessionRequired = p[216] != 0;
         out.usbCdcDtrSessionOnly = p[217] != 0;
     }
+    if (payload.size() >= kTypedCapabilityV6PayloadSize) {
+        out.hasPassiveHardwareEvidenceClaims = true;
+        out.passiveHardwareEvidenceSchema = p[224];
+        out.hardwareSilentStrapped[0] = p[225] != 0;
+        out.hardwareSilentStrapped[1] = p[226] != 0;
+        out.galvanicIsolated[0] = p[227] != 0;
+        out.galvanicIsolated[1] = p[228] != 0;
+        out.powerOffPassive[0] = p[229] != 0;
+        out.powerOffPassive[1] = p[230] != 0;
+        out.resetSafe[0] = p[231] != 0;
+        out.resetSafe[1] = p[232] != 0;
+        out.txdGated[0] = p[233] != 0;
+        out.txdGated[1] = p[234] != 0;
+        out.normalEnablePathPopulated[0] = p[235] != 0;
+        out.normalEnablePathPopulated[1] = p[236] != 0;
+        out.fieldSkuId = typedReadU32Le(p + 240);
+        out.externalAnalyzerArtifactId = typedReadU32Le(p + 244);
+        out.hotplugPassCount = typedReadU32Le(p + 248);
+        out.hostSessionEpoch = typedReadU32Le(p + 252);
+        out.transportEpoch = typedReadU32Le(p + 256);
+        out.usbAttachQuarantineTotal = typedReadU32Le(p + 260);
+        out.hostAbsentGapTotal = typedReadU32Le(p + 264);
+        out.preSessionPayloadReplayTotal = typedReadU32Le(p + 268);
+    }
     return out;
 }

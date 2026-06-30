@@ -13,6 +13,7 @@ public:
     void advanceWallTimeMs(quint64 wallMs);
     void ingestCapability(const TypedCapabilityRecord& capability, quint64 wallMs = 0);
     void ingestBoardHealth(const TypedBoardHealthRecord& health, quint64 wallMs = 0);
+    void setExternalPassiveEvidence(const BoardConnectionState::ExternalPassiveEvidence& evidence);
 
     bool boardAlive() const;
     bool controlCapable() const;

@@ -102,8 +102,10 @@ Payload length: 44 bytes.
 
 ## CAPABILITY Extensions
 
-Minimum payload length: 36 bytes. Newer CSM firmware may emit 224-byte
-`CAPABILITY` records. VSM treats these fields as the product/profile contract:
+Minimum payload length: 36 bytes. Newer CSM firmware may emit 224-byte or
+272-byte `CAPABILITY` records. VSM treats profile fields as the runtime product
+contract. Hardware evidence fields are claims/references only; they are not
+physical proof until matched to external analyzer/scope/DTC artifacts:
 
 ```text
 192 firmware_profile                 u8   1 passive product, 2 full instrumented
@@ -123,6 +125,39 @@ Minimum payload length: 36 bytes. Newer CSM firmware may emit 224-byte
 
 `usb_cdc_dtr_session_only=1` means DTR is only a USB CDC session gate. It must
 not enable host downlink, control, reset watchdog, CAN TX, or MCP normal mode.
+
+Extended 272-byte `CAPABILITY` payload:
+
+```text
+224 passive_hardware_evidence_schema  u8  currently 1
+225 hardware_silent_strapped_bus0     u8  claim/reference only
+226 hardware_silent_strapped_bus1     u8
+227 galvanic_isolated_bus0            u8
+228 galvanic_isolated_bus1            u8
+229 power_off_passive_bus0            u8
+230 power_off_passive_bus1            u8
+231 reset_safe_bus0                   u8
+232 reset_safe_bus1                   u8
+233 txd_gated_bus0                    u8
+234 txd_gated_bus1                    u8
+235 normal_enable_path_populated_bus0 u8
+236 normal_enable_path_populated_bus1 u8
+240 field_sku_id                      u32_le
+244 external_analyzer_artifact_id     u32_le
+248 hotplug_pass_count                u32_le
+252 host_session_epoch                u32_le
+256 transport_epoch                   u32_le
+260 usb_attach_quarantine_total       u32_le
+264 host_absent_gap_total             u32_le
+268 pre_session_payload_replay_total  u32_le
+```
+
+The product SKU is two-bus RX-only. Hosts must keep mismatch diagnostics when
+`bus_count`, descriptors, or passive bus policy do not satisfy both buses. This
+diagnostic is required even though one-bus passive products are not accepted.
+
+`usb_attach_quarantine_total` counts CDC/uplink/session cleanup epochs. It does
+not mean the CAN front-end should stop draining.
 
 ## BOARD_HEALTH
 

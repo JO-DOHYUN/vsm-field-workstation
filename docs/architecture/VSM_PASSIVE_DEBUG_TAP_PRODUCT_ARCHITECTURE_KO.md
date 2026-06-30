@@ -62,6 +62,11 @@ It records:
 - `debug_tap_trace.jsonl`
 - `debug_tap_summary.json`
 
+`debug_tap_summary.json` is updated during heartbeat and finalized on normal
+stop, app quit, IPC disconnect handling, or object destruction. This is required
+so USB/reconnect failures still leave a sidecar summary even when the operator
+stops capture soon after the disturbance.
+
 It subscribes to `ViewChanged` and periodically queries bounded snapshots:
 
 - `profile_status`
@@ -73,6 +78,8 @@ It subscribes to `ViewChanged` and periodically queries bounded snapshots:
   `raw_ledger_tail`, `control_audit`
 
 It never opens COM/USB, never sends host TX/control, and never updates Core state.
+It may drop or coalesce debug view requests, but that loss is debug-only and
+must never affect Core drain, capture, analysis, or UI view ownership.
 
 ## USB Instability Evidence
 USB plug/unplug diagnosis requires aligning three evidence sources:

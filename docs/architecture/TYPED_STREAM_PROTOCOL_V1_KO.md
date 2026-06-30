@@ -276,6 +276,42 @@ MCP passive readback count, readback violation count, TXREQ violation count, and
 USB CDC DTR change count. VSM must treat readback/TXREQ violation as
 product-blocking passive evidence, not as display sampling loss.
 
+## CAPABILITY v6 Passive Evidence Claims
+
+Newer Passive Product CSM firmware may emit a 272-byte `CAPABILITY` payload.
+Offsets `224..268` carry passive hardware evidence claims and host-session
+epoch counters. These fields are claims/references, not proof. VSM may use them
+for mismatch detection and operator guidance, but `verified_passive` requires
+external analyzer/scope/DTC artifact verification.
+
+```text
+224 passive_hardware_evidence_schema  u8
+225 hardware_silent_strapped_bus0     u8
+226 hardware_silent_strapped_bus1     u8
+227 galvanic_isolated_bus0            u8
+228 galvanic_isolated_bus1            u8
+229 power_off_passive_bus0            u8
+230 power_off_passive_bus1            u8
+231 reset_safe_bus0                   u8
+232 reset_safe_bus1                   u8
+233 txd_gated_bus0                    u8
+234 txd_gated_bus1                    u8
+235 normal_enable_path_populated_bus0 u8
+236 normal_enable_path_populated_bus1 u8
+240 field_sku_id                      u32_le
+244 external_analyzer_artifact_id     u32_le
+248 hotplug_pass_count                u32_le
+252 host_session_epoch                u32_le
+256 transport_epoch                   u32_le
+260 usb_attach_quarantine_total       u32_le
+264 host_absent_gap_total             u32_le
+268 pre_session_payload_replay_total  u32_le
+```
+
+The product is two-bus RX-only. A one-bus capability is a blocking mismatch, not
+an accepted passive product. `USB_ATTACH_QUARANTINE` is CDC/uplink/session
+cleanup only; CAN front-end passive drain must continue.
+
 Typed capture session sidecars:
 
 ```text

@@ -23,6 +23,10 @@ void EvidenceRuntime::ingestBoardHealth(const TypedBoardHealthRecord& health, qu
     m_boardConnection.ingestBoardHealth(health, wallMs);
 }
 
+void EvidenceRuntime::setExternalPassiveEvidence(const BoardConnectionState::ExternalPassiveEvidence& evidence) {
+    m_boardConnection.setExternalPassiveEvidence(evidence);
+}
+
 bool EvidenceRuntime::boardAlive() const {
     return m_boardConnection.boardAlive();
 }

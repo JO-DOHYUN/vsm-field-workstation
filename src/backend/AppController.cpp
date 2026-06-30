@@ -423,6 +423,13 @@ quint64 jsonU64Value(const QJsonObject& object, const QString& key) {
     return 0;
 }
 
+void readBoolPair(const QJsonObject& object, const QString& key, bool values[2]) {
+    const QJsonArray array = object.value(key).toArray();
+    for (int index = 0; index < 2; ++index) {
+        values[index] = array.size() > index && array.at(index).toBool(false);
+    }
+}
+
 std::optional<FrameRecord> frameFromCoreLiveLatestRow(const QJsonObject& row) {
     if (!row.contains(QStringLiteral("can_id"))) return std::nullopt;
 
@@ -550,6 +557,22 @@ std::optional<TypedCapabilityRecord> capabilityFromCoreJson(const QJsonObject& o
     out.benchVerificationId = quint32(jsonU64Value(object, QStringLiteral("bench_verification_id")));
     out.usbCdcDtrSessionRequired = object.value(QStringLiteral("usb_cdc_dtr_session_required")).toBool(false);
     out.usbCdcDtrSessionOnly = object.value(QStringLiteral("usb_cdc_dtr_session_only")).toBool(false);
+    out.hasPassiveHardwareEvidenceClaims = object.value(QStringLiteral("has_passive_hardware_evidence_claims")).toBool(false);
+    out.passiveHardwareEvidenceSchema = quint8(std::clamp(object.value(QStringLiteral("passive_hardware_evidence_schema")).toInt(0), 0, 255));
+    readBoolPair(object, QStringLiteral("hardware_silent_strapped"), out.hardwareSilentStrapped);
+    readBoolPair(object, QStringLiteral("galvanic_isolated"), out.galvanicIsolated);
+    readBoolPair(object, QStringLiteral("power_off_passive"), out.powerOffPassive);
+    readBoolPair(object, QStringLiteral("reset_safe"), out.resetSafe);
+    readBoolPair(object, QStringLiteral("txd_gated"), out.txdGated);
+    readBoolPair(object, QStringLiteral("normal_enable_path_populated"), out.normalEnablePathPopulated);
+    out.fieldSkuId = quint32(jsonU64Value(object, QStringLiteral("field_sku_id")));
+    out.externalAnalyzerArtifactId = quint32(jsonU64Value(object, QStringLiteral("external_analyzer_artifact_id")));
+    out.hotplugPassCount = quint32(jsonU64Value(object, QStringLiteral("hotplug_pass_count")));
+    out.hostSessionEpoch = quint32(jsonU64Value(object, QStringLiteral("host_session_epoch")));
+    out.transportEpoch = quint32(jsonU64Value(object, QStringLiteral("transport_epoch")));
+    out.usbAttachQuarantineTotal = quint32(jsonU64Value(object, QStringLiteral("usb_attach_quarantine_total")));
+    out.hostAbsentGapTotal = quint32(jsonU64Value(object, QStringLiteral("host_absent_gap_total")));
+    out.preSessionPayloadReplayTotal = quint32(jsonU64Value(object, QStringLiteral("pre_session_payload_replay_total")));
     const QJsonArray buses = object.value(QStringLiteral("buses")).toArray();
     out.buses.reserve(buses.size());
     for (const QJsonValue& value : buses) {
@@ -4726,15 +4749,50 @@ QVariantList AppController::runtimeProfileDiagnostics() const {
                 QStringLiteral("CSM profile match"),
                 board.profileMatchResult,
                 (board.csmActiveCapable || board.csmVehicleImpactPossible) ? QStringLiteral("error")
-                    : (board.csmPassiveCapabilityCandidate ? QStringLiteral("warn") : QStringLiteral("warn")),
+                    : (board.verifiedPassive ? QStringLiteral("ok") : QStringLiteral("warn")),
                 board.capabilitySeen
-                    ? QStringLiteral("active_capable %1 vehicle_impact_possible %2 passive_candidate %3 dtr_session %4 dtr_reset_sensitive %5; hardware safety evidence still required")
+                    ? QStringLiteral("active_capable %1 vehicle_impact_possible %2 two_bus_rx_only %3 passive_candidate %4 dtr_session %5 dtr_reset_sensitive %6")
                           .arg(board.csmActiveCapable ? QStringLiteral("yes") : QStringLiteral("no"),
                                board.csmVehicleImpactPossible ? QStringLiteral("yes") : QStringLiteral("no"),
+                               board.twoBusProductRequirementSatisfied ? QStringLiteral("yes") : QStringLiteral("no"),
                                board.csmPassiveCapabilityCandidate ? QStringLiteral("yes") : QStringLiteral("no"),
                                board.usbCdcDtrSessionRequired ? QStringLiteral("required") : QStringLiteral("not-required"),
                                board.dtrResetSensitive ? QStringLiteral("yes") : QStringLiteral("no"))
                     : QStringLiteral("waiting for CSM CAPABILITY; passive acceptance forbidden"));
+    rows << row(QStringLiteral("passive_state_gate"),
+                QStringLiteral("Passive state gate"),
+                board.verifiedPassive ? QStringLiteral("verified_passive")
+                    : (board.runtimePassive ? QStringLiteral("runtime_passive_hardware_unverified")
+                       : (board.configuredPassive ? QStringLiteral("configured_passive_runtime_blocked")
+                          : QStringLiteral("not_passive_product_ready"))),
+                board.verifiedPassive ? QStringLiteral("ok") : QStringLiteral("warn"),
+                QStringLiteral("configured %1 / runtime %2 / hardware_claim_complete %3 / external_artifact_verified %4")
+                    .arg(board.configuredPassive ? QStringLiteral("yes") : QStringLiteral("no"),
+                         board.runtimePassive ? QStringLiteral("yes") : QStringLiteral("no"),
+                         board.hardwareEvidenceCompleteClaim ? QStringLiteral("yes") : QStringLiteral("no"),
+                         board.externalPassiveEvidenceVerified ? QStringLiteral("yes") : QStringLiteral("no")));
+    rows << row(QStringLiteral("passive_hardware_evidence"),
+                QStringLiteral("Hardware evidence"),
+                QStringLiteral("sku %1 / case %2 / bench %3 / analyzer %4 / hotplug %5")
+                    .arg(board.fieldSkuId)
+                    .arg(board.hardwareSafetyCaseId)
+                    .arg(board.benchVerificationId)
+                    .arg(board.externalAnalyzerArtifactId)
+                    .arg(board.hotplugPassCount),
+                board.verifiedPassive ? QStringLiteral("ok") : QStringLiteral("warn"),
+                board.hardwareEvidenceCompleteClaim
+                    ? QStringLiteral("CSM advertises complete hardware evidence claims, but VSM still requires independent artifact verification before PASS.")
+                    : QStringLiteral("Hardware evidence claim is incomplete; this remains Software Passive Prototype, not vehicle-impact-free PASS."));
+    rows << row(QStringLiteral("host_session_no_replay"),
+                QStringLiteral("Host absent/no-replay"),
+                QStringLiteral("host_epoch %1 / transport_epoch %2 / quarantine %3")
+                    .arg(board.hostSessionEpoch)
+                    .arg(board.transportEpoch)
+                    .arg(board.usbAttachQuarantineTotal),
+                board.preSessionPayloadReplayTotal == 0 ? QStringLiteral("ok") : QStringLiteral("error"),
+                QStringLiteral("host_absent_gap %1 / pre_session_payload_replay %2. USB attach quarantine is an uplink/session cleanup only; CAN front-end must keep passive drain running.")
+                    .arg(board.hostAbsentGapTotal)
+                    .arg(board.preSessionPayloadReplayTotal));
     return rows;
 }
 
@@ -4747,6 +4805,10 @@ QString AppController::boardConnectionSummary() const {
     if (state.capabilitySeen) {
         parts << QStringLiteral("profile %1.%2").arg(state.profileMajor).arg(state.profileMinor);
         parts << QStringLiteral("match %1").arg(state.profileMatchResult);
+        parts << QStringLiteral("passive cfg %1 runtime %2 verified %3")
+                     .arg(state.configuredPassive ? QStringLiteral("yes") : QStringLiteral("no"),
+                          state.runtimePassive ? QStringLiteral("yes") : QStringLiteral("no"),
+                          state.verifiedPassive ? QStringLiteral("yes") : QStringLiteral("no"));
     }
     if (state.healthSeen) {
         parts << QStringLiteral("safety %1").arg(state.safetyState);

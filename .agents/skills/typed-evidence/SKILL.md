@@ -22,6 +22,9 @@ description: Use when working on board typed stream parsing, typed capture stora
 - COM-owning debug gateway is Full/Instrumented lab-only and cannot be used as passive field acceptance.
 - Passive Product diagnostics uses `vsm-debug-tap.exe`, which subscribes to Core IPC views without owning COM or altering typed evidence flow.
 - `capture.stream/index` is the authoritative typed evidence truth; UI/raw tail/graph/analysis rows are bounded derived views.
+- Hardware evidence fields in CSM `CAPABILITY` are claims/references only. `verified_passive` requires matching external analyzer/scope/DTC artifact verification.
+- The product target is two-bus RX-only. A one-bus or missing-bus capability is a blocking mismatch diagnostic, not an accepted passive SKU.
+- USB attach quarantine is CDC/uplink/session cleanup only. CAN front-end passive drain must continue.
 
 ## Workflow
 1. Read `BRIEF.md`, `docs/architecture/PROJECT_CONSTITUTION_KO.md`, and `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`.
@@ -41,3 +44,5 @@ description: Use when working on board typed stream parsing, typed capture stora
 - debug gateway raw capture is used to claim PASS when VSM `capture.stream` is missing, stale, or corrupt
 - passive product profile allows host TX/control/gateway execution or non-session-only serial line control
 - UI consumes raw typed evidence directly instead of querying Core materialized views
+- capability hardware claims are treated as proof without external artifact verification
+- bus-count mismatch diagnostics are removed because the product is two-bus only

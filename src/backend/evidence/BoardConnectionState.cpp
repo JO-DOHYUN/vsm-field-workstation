@@ -69,6 +69,64 @@ bool hasVehicleImpactCapableRxBus(const TypedCapabilityRecord& capability) {
     return false;
 }
 
+bool busPolicyIsPassive(const TypedCapabilityRecord& capability, int busId) {
+    if (!capability.hasPassivePolicy || busId < 0 || busId >= 2) {
+        return false;
+    }
+    const quint8 busMode = capability.busMode[busId];
+    return (busMode == kCsmBusModeListenOnly || busMode == kCsmBusModeHardwareSilent) &&
+           !capability.busAckCapable[busId] &&
+           !capability.busErrorFrameCapable[busId];
+}
+
+bool hasRequiredTwoBusRxOnlyProductProfile(const TypedCapabilityRecord& capability) {
+    bool bus0Rx = false;
+    bool bus1Rx = false;
+    bool bus0RxOnly = false;
+    bool bus1RxOnly = false;
+    for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
+        if (bus.busId != 0 && bus.busId != 1) {
+            continue;
+        }
+        const bool rxOnly = bus.rxSupported && !bus.txSupported && !bus.controlTxAllowed;
+        if (bus.busId == 0) {
+            bus0Rx = bus.rxSupported;
+            bus0RxOnly = rxOnly;
+        } else if (bus.busId == 1) {
+            bus1Rx = bus.rxSupported;
+            bus1RxOnly = rxOnly;
+        }
+    }
+    return capability.busCount >= 2 &&
+           bus0Rx &&
+           bus1Rx &&
+           bus0RxOnly &&
+           bus1RxOnly &&
+           busPolicyIsPassive(capability, 0) &&
+           busPolicyIsPassive(capability, 1);
+}
+
+bool hardwareEvidenceClaimIsComplete(const TypedCapabilityRecord& capability) {
+    if (!capability.hasPassiveHardwareEvidenceClaims) {
+        return false;
+    }
+    for (int bus = 0; bus < 2; ++bus) {
+        if (!capability.hardwareSilentStrapped[bus] ||
+            !capability.galvanicIsolated[bus] ||
+            !capability.powerOffPassive[bus] ||
+            !capability.resetSafe[bus] ||
+            !capability.txdGated[bus] ||
+            capability.normalEnablePathPopulated[bus]) {
+            return false;
+        }
+    }
+    return capability.hardwareSafetyCaseId != 0 &&
+           capability.benchVerificationId != 0 &&
+           capability.fieldSkuId != 0 &&
+           capability.externalAnalyzerArtifactId != 0 &&
+           capability.hotplugPassCount > 0;
+}
+
 } // namespace
 
 BoardConnectionState::BoardConnectionState(quint8 requiredProtocolVersion,
@@ -86,6 +144,7 @@ void BoardConnectionState::reset() {
     m_serialOpen = false;
     m_capabilitySeen = false;
     m_healthSeen = false;
+    m_externalPassiveEvidence = ExternalPassiveEvidence{};
     m_capability = TypedCapabilityRecord{};
     m_health = TypedBoardHealthRecord{};
 }
@@ -120,6 +179,10 @@ void BoardConnectionState::ingestBoardHealth(const TypedBoardHealthRecord& healt
     } else if (m_nowWallMs > 0) {
         m_lastHealthWallMs = m_nowWallMs;
     }
+}
+
+void BoardConnectionState::setExternalPassiveEvidence(const ExternalPassiveEvidence& evidence) {
+    m_externalPassiveEvidence = evidence;
 }
 
 void BoardConnectionState::advanceMonotonicTime(quint64 monoUs) {
@@ -170,31 +233,65 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
     out.vehicleImpactState = m_capabilitySeen ? m_capability.vehicleImpactState : 0;
     out.safetyState = m_healthSeen ? m_health.safetyState : 0;
     out.faultFlags = m_healthSeen ? m_health.faultFlags : 0;
+    out.hardwareSafetyCaseId = m_capabilitySeen ? m_capability.hardwareSafetyCaseId : 0;
+    out.benchVerificationId = m_capabilitySeen ? m_capability.benchVerificationId : 0;
+    out.fieldSkuId = m_capabilitySeen ? m_capability.fieldSkuId : 0;
+    out.externalAnalyzerArtifactId = m_capabilitySeen ? m_capability.externalAnalyzerArtifactId : 0;
+    out.hotplugPassCount = m_capabilitySeen ? m_capability.hotplugPassCount : 0;
+    out.hostSessionEpoch = m_capabilitySeen ? m_capability.hostSessionEpoch : 0;
+    out.transportEpoch = m_capabilitySeen ? m_capability.transportEpoch : 0;
+    out.usbAttachQuarantineTotal = m_capabilitySeen ? m_capability.usbAttachQuarantineTotal : 0;
+    out.hostAbsentGapTotal = m_capabilitySeen ? m_capability.hostAbsentGapTotal : 0;
+    out.preSessionPayloadReplayTotal = m_capabilitySeen ? m_capability.preSessionPayloadReplayTotal : 0;
 
     const bool activePath = m_capabilitySeen && hasHostActivePath(m_capability);
     const bool vehicleImpactPath = m_capabilitySeen && hasVehicleImpactCapableRxBus(m_capability);
+    const bool twoBusRequirement = m_capabilitySeen && hasRequiredTwoBusRxOnlyProductProfile(m_capability);
+    const bool passivePolicyProfile = m_capabilitySeen &&
+        m_capability.hasPassivePolicy &&
+        m_capability.firmwareProfile == kCsmFirmwareProfilePassiveProduct &&
+        !m_capability.hostCommandRx &&
+        !m_capability.controlPath;
+    const bool healthRuntimePassive = !m_healthSeen ||
+        (m_health.passiveReadbackViolationTotal == 0 && m_health.txreqViolationTotal == 0);
     out.csmActiveCapable = activePath;
     out.csmVehicleImpactPossible = vehicleImpactPath;
-    out.csmPassiveCapabilityCandidate = m_capabilitySeen &&
+    out.twoBusProductRequirementSatisfied = twoBusRequirement;
+    out.configuredPassive = passivePolicyProfile &&
+        twoBusRequirement &&
         !out.csmActiveCapable &&
         !out.csmVehicleImpactPossible &&
-        (!m_capability.hasPassivePolicy ||
-         (m_capability.firmwareProfile == kCsmFirmwareProfilePassiveProduct &&
-          !m_capability.hostCommandRx &&
-          !m_capability.controlPath)) &&
         m_capability.supportsCanRxRaw &&
         m_capability.supportsBoardHealth;
+    out.runtimePassive = out.configuredPassive && healthRuntimePassive;
+    out.hardwareEvidenceClaimed = m_capabilitySeen && m_capability.hasPassiveHardwareEvidenceClaims;
+    out.hardwareEvidenceCompleteClaim = m_capabilitySeen && hardwareEvidenceClaimIsComplete(m_capability);
+    out.externalPassiveEvidenceVerified = m_externalPassiveEvidence.isComplete() &&
+        (!m_capabilitySeen || m_externalPassiveEvidence.artifactId == m_capability.externalAnalyzerArtifactId) &&
+        (!m_capabilitySeen || m_externalPassiveEvidence.hotplugPassCount >= m_capability.hotplugPassCount);
+    out.verifiedPassive = out.runtimePassive &&
+        out.hardwareEvidenceCompleteClaim &&
+        out.externalPassiveEvidenceVerified &&
+        m_capability.vehicleImpactState == kCsmVehicleImpactVerifiedPassive &&
+        m_capability.passiveAcceptanceAllowed;
+    out.csmPassiveCapabilityCandidate = m_capabilitySeen &&
+        out.configuredPassive;
     if (!m_capabilitySeen) {
         out.profileMatchResult = QStringLiteral("blocked_unknown");
     } else if (out.csmActiveCapable) {
         out.profileMatchResult = QStringLiteral("blocked_active_csm");
     } else if (out.csmVehicleImpactPossible) {
         out.profileMatchResult = QStringLiteral("blocked_vehicle_impact_possible");
-    } else if (out.csmPassiveCapabilityCandidate &&
-               m_capability.hasPassivePolicy &&
-               m_capability.vehicleImpactState == kCsmVehicleImpactVerifiedPassive &&
-               m_capability.passiveAcceptanceAllowed) {
+    } else if (!out.twoBusProductRequirementSatisfied) {
+        out.profileMatchResult = QStringLiteral("blocked_incomplete_2bus_passive_capability");
+    } else if (out.verifiedPassive) {
         out.profileMatchResult = QStringLiteral("verified_passive");
+    } else if (out.configuredPassive && !out.runtimePassive) {
+        out.profileMatchResult = QStringLiteral("configured_passive_runtime_violation");
+    } else if (out.configuredPassive && !out.hardwareEvidenceCompleteClaim) {
+        out.profileMatchResult = QStringLiteral("configured_passive_hardware_claim_incomplete");
+    } else if (out.configuredPassive && !out.externalPassiveEvidenceVerified) {
+        out.profileMatchResult = QStringLiteral("configured_passive_external_evidence_unverified");
     } else if (out.csmPassiveCapabilityCandidate) {
         out.profileMatchResult = QStringLiteral("csm_passive_candidate_hardware_unverified");
     } else {

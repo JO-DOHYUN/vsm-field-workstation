@@ -19,6 +19,10 @@ QString u64Text(quint64 value) {
     return QString::number(value);
 }
 
+QJsonArray boolPairToJson(const bool values[2]) {
+    return QJsonArray{values[0], values[1]};
+}
+
 QJsonObject boardHealthToJson(const TypedBoardHealthRecord& health) {
     QJsonObject out;
     out.insert(QStringLiteral("mono_us"), u64Text(health.monoUs));
@@ -121,6 +125,22 @@ QJsonObject capabilityToJson(const TypedCapabilityRecord& capability) {
     out.insert(QStringLiteral("bench_verification_id"), u64Text(capability.benchVerificationId));
     out.insert(QStringLiteral("usb_cdc_dtr_session_required"), capability.usbCdcDtrSessionRequired);
     out.insert(QStringLiteral("usb_cdc_dtr_session_only"), capability.usbCdcDtrSessionOnly);
+    out.insert(QStringLiteral("has_passive_hardware_evidence_claims"), capability.hasPassiveHardwareEvidenceClaims);
+    out.insert(QStringLiteral("passive_hardware_evidence_schema"), int(capability.passiveHardwareEvidenceSchema));
+    out.insert(QStringLiteral("hardware_silent_strapped"), boolPairToJson(capability.hardwareSilentStrapped));
+    out.insert(QStringLiteral("galvanic_isolated"), boolPairToJson(capability.galvanicIsolated));
+    out.insert(QStringLiteral("power_off_passive"), boolPairToJson(capability.powerOffPassive));
+    out.insert(QStringLiteral("reset_safe"), boolPairToJson(capability.resetSafe));
+    out.insert(QStringLiteral("txd_gated"), boolPairToJson(capability.txdGated));
+    out.insert(QStringLiteral("normal_enable_path_populated"), boolPairToJson(capability.normalEnablePathPopulated));
+    out.insert(QStringLiteral("field_sku_id"), u64Text(capability.fieldSkuId));
+    out.insert(QStringLiteral("external_analyzer_artifact_id"), u64Text(capability.externalAnalyzerArtifactId));
+    out.insert(QStringLiteral("hotplug_pass_count"), u64Text(capability.hotplugPassCount));
+    out.insert(QStringLiteral("host_session_epoch"), u64Text(capability.hostSessionEpoch));
+    out.insert(QStringLiteral("transport_epoch"), u64Text(capability.transportEpoch));
+    out.insert(QStringLiteral("usb_attach_quarantine_total"), u64Text(capability.usbAttachQuarantineTotal));
+    out.insert(QStringLiteral("host_absent_gap_total"), u64Text(capability.hostAbsentGapTotal));
+    out.insert(QStringLiteral("pre_session_payload_replay_total"), u64Text(capability.preSessionPayloadReplayTotal));
     QJsonArray buses;
     for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
         buses.append(QJsonObject{{QStringLiteral("bus_id"), int(bus.busId)},

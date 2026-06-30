@@ -91,6 +91,10 @@ public:
         connect(&m_timeoutTimer, &QTimer::timeout, this, &DebugTapRuntime::expireRequests);
     }
 
+    ~DebugTapRuntime() override {
+        finalizeSummary(QStringLiteral("destructor"), false);
+    }
+
     bool start(QString* errorOut) {
         if (m_serverName.trimmed().isEmpty()) {
             if (errorOut) *errorOut = QStringLiteral("empty core server name");
@@ -145,9 +149,7 @@ public slots:
     void stop(const QString& reason = QStringLiteral("stop_requested")) {
         if (m_stopping) return;
         m_stopping = true;
-        appendTrace(QStringLiteral("tap_stop"), summaryJson(reason));
-        writeJsonFile(m_summaryPath, summaryJson(reason));
-        m_trace.flush();
+        finalizeSummary(reason, true);
         QCoreApplication::quit();
     }
 
@@ -247,6 +249,7 @@ private slots:
                                 {QStringLiteral("snapshot_total"), QString::number(m_snapshotTotal)},
                                 {QStringLiteral("ipc_error_total"), QString::number(m_ipcErrorTotal)},
                                 {QStringLiteral("inflight"), m_viewInFlight.size()}});
+        writeJsonFile(m_summaryPath, summaryJson(QStringLiteral("heartbeat")));
         if (!m_client.isConnected()) return;
         requestAllViews(QStringLiteral("periodic"));
     }
@@ -346,6 +349,21 @@ private:
                                   {QStringLiteral("build"), buildInfoJson()}});
     }
 
+    void finalizeSummary(const QString& reason, bool appendStopTrace) {
+        if (m_summaryFinalized) {
+            return;
+        }
+        m_summaryFinalized = true;
+        const QJsonObject summary = summaryJson(reason);
+        if (appendStopTrace && m_trace.isOpen()) {
+            appendTrace(QStringLiteral("tap_stop"), summary);
+        }
+        writeJsonFile(m_summaryPath, summary);
+        if (m_trace.isOpen()) {
+            m_trace.flush();
+        }
+    }
+
     void appendTrace(const QString& event, QJsonObject object) {
         object.insert(QStringLiteral("event"), event);
         object.insert(QStringLiteral("wall_ms"), QString::number(QDateTime::currentMSecsSinceEpoch()));
@@ -386,6 +404,7 @@ private:
     quint64 m_linesWritten = 0;
     bool m_connectedOnce = false;
     bool m_stopping = false;
+    bool m_summaryFinalized = false;
 };
 
 QVector<ViewSpec> defaultViews(bool deep) {

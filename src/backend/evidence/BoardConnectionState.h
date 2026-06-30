@@ -9,6 +9,22 @@ namespace CanMonitorEvidence {
 
 class BoardConnectionState {
 public:
+    struct ExternalPassiveEvidence {
+        bool referenceAnalyzerPass = false;
+        bool scopeHotplugPass = false;
+        bool vehicleDtcDeltaZero = false;
+        quint32 artifactId = 0;
+        quint32 hotplugPassCount = 0;
+
+        bool isComplete() const {
+            return referenceAnalyzerPass &&
+                   scopeHotplugPass &&
+                   vehicleDtcDeltaZero &&
+                   artifactId != 0 &&
+                   hotplugPassCount > 0;
+        }
+    };
+
     struct Snapshot {
         bool serialOpen = false;
         bool capabilitySeen = false;
@@ -25,12 +41,29 @@ public:
         bool usbCdcDtrSessionOnly = false;
         bool dtrResetSensitive = false;
         bool passiveAcceptanceAllowed = false;
+        bool configuredPassive = false;
+        bool runtimePassive = false;
+        bool hardwareEvidenceClaimed = false;
+        bool hardwareEvidenceCompleteClaim = false;
+        bool externalPassiveEvidenceVerified = false;
+        bool verifiedPassive = false;
+        bool twoBusProductRequirementSatisfied = false;
         quint8 firmwareProfile = 0;
         quint8 vehicleImpactState = 0;
         quint8 profileMajor = 0;
         quint8 profileMinor = 0;
         quint8 safetyState = 0;
         quint32 faultFlags = 0;
+        quint32 hardwareSafetyCaseId = 0;
+        quint32 benchVerificationId = 0;
+        quint32 fieldSkuId = 0;
+        quint32 externalAnalyzerArtifactId = 0;
+        quint32 hotplugPassCount = 0;
+        quint32 hostSessionEpoch = 0;
+        quint32 transportEpoch = 0;
+        quint32 usbAttachQuarantineTotal = 0;
+        quint32 hostAbsentGapTotal = 0;
+        quint32 preSessionPayloadReplayTotal = 0;
         quint64 lastCapabilityMonoUs = 0;
         quint64 lastHealthMonoUs = 0;
         quint64 lastHealthWallMs = 0;
@@ -47,6 +80,7 @@ public:
     void setSerialOpen(bool open);
     void ingestCapability(const TypedCapabilityRecord& capability, quint64 wallMs = 0);
     void ingestBoardHealth(const TypedBoardHealthRecord& health, quint64 wallMs = 0);
+    void setExternalPassiveEvidence(const ExternalPassiveEvidence& evidence);
     void advanceMonotonicTime(quint64 monoUs);
     void advanceWallTimeMs(quint64 wallMs);
 
@@ -70,6 +104,7 @@ private:
     bool m_serialOpen = false;
     bool m_capabilitySeen = false;
     bool m_healthSeen = false;
+    ExternalPassiveEvidence m_externalPassiveEvidence;
     TypedCapabilityRecord m_capability;
     TypedBoardHealthRecord m_health;
 };

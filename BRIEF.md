@@ -15,6 +15,13 @@
 - COM open is not board alive; valid `CAPABILITY` and fresh `BOARD_HEALTH` are required.
 - `capture.stream/index` is the only authoritative truth.
 - UI/graph/decoded tail/analysis rows are bounded materialized views.
+- Hardware passive evidence in CSM `CAPABILITY` is a claim/reference only. VSM
+  must not display `verified_passive` until external analyzer/scope/DTC artifacts
+  are independently verified.
+- The product target is fixed at two CAN RX buses. A one-bus capability is a
+  blocking mismatch, not an accepted passive SKU.
+- USB attach quarantine means CDC/uplink/session cleanup only; CAN front-end
+  passive drain must continue.
 - Typed evidence separation is mandatory: CAN RX, CAN TX audit, voltage raw, board health/event, capability, control ack.
 - Host-requested TX, `CONTROL_ACK`, `CAN_TX_RAW`, and feedback remain separate evidence.
 - Actual CAN TX success requires matching `CAN_TX_RAW`; passive product blocks host TX entirely.
@@ -38,6 +45,8 @@
 - Verify passive diagnostics starts `vsm-debug-tap.exe` without disconnecting Core or owning COM.
 - Verify transport details expose `passive_safety_profile`.
 - Verify transport details expose `passive_usb_lifecycle` and classify MCP listen-only/TXREQ violation as product-blocking.
+- Verify passive state gate separates configured passive, runtime passive,
+  hardware evidence claim, external artifact verification, and verified passive.
 - Commit the completed slice only after build/test pass or with explicit failed-command evidence.
 
 ## Read Next
@@ -48,4 +57,7 @@
 - [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]
 - [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]
 - [[docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO]]
+- [[docs/reviews/passive_product_boundary_audit]]
+- [[docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS]]
+- [[docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE]]
 - [[docs/ai_harness/BUILD_VERIFY_POLICY_KO]]

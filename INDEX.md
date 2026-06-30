@@ -19,6 +19,11 @@
 - [[docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO]]: Passive Product profile, 2+1 process split, vehicle-impact-free runtime policy.
 - [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]]: Passive Product non-owning debug tap process, data flow, and USB lifecycle evidence contract.
 - [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]: live/capture-core data owner, consumer, drop policy, forbidden boundary rules, static boundary scan.
+- [[docs/reviews/passive_product_boundary_audit]]: Passive Product truth taxonomy, scenario audit, capability-claim/proof separation, 2-bus mismatch and quarantine policy.
+- [[docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS]]: CSM passive front-end firmware/hardware requirements.
+- [[docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE]]: analyzer/scope/DTC acceptance requirements for vehicle-impact-free PASS.
+- [[docs/hardware/CSM_FIELD_SKU_BOM_RULES]]: field SKU BOM and hardware evidence reference rules.
+- [[docs/hardware/CSM_USB_CAN_ISOLATION_POLICY]]: USB/CAN isolation and hotplug disturbance policy.
 - [[docs/architecture/VMS_ARCHITECTURE_KO]]: VMS runtime split target.
 - [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]: typed stream v1 human contract.
 - [[shared/protocol/typed_stream_v1]]: CSM/VSM shared binary contract.

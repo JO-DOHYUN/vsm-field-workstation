@@ -42,9 +42,12 @@
 - Passive Product profile에서는 VSM이 serial read-only로 열고, CSM capability가 요구하는 Arduino CDC session gate 목적의 DTR만 허용하며, RTS/host TX/control cycle/COM-owning lab gateway를 실행하지 않는다.
 - Full/Instrumented profile은 bench/lab 전용이며 실차 PASS나 passive product acceptance로 주장하지 않는다.
 - `capture.stream/index`만 authoritative truth이며 UI/graph/raw tail/analysis rows는 bounded materialized view로 다룬다.
+- "truth"는 항상 authoritative capture truth, CAN frame truth, display/materialized view, hardware passive proof, debug evidence 중 하나로 구분한다. capability hardware fields는 proof가 아니라 claim/reference다.
 - live/capture-core 리팩토링은 데이터 흐름도, owner/consumer/drop policy, 기존 owner 위반 검색을 먼저 끝낸 뒤 기능 이동과 구 경로 삭제를 진행한다.
 - 금지 경계: `TypedRecordList` UI/analysis/projection 공용 fanout, `AppController` transport raw state 조립, diagnostics payload 기반 runtime state 갱신, UI projection의 timing truth 사용, storage `frameBytes` live view 전달.
 - 금지 경계: RuntimeProfile을 우회한 `QIODevice::ReadWrite` serial open, DTR/RTS hard assert, passive profile에서 host_frame/control_cycle/gateway_tcp 실행.
+- 제품은 2-bus passive monitor다. 1-bus product/acceptance는 금지하지만, capability가 2-bus 요구를 만족하지 못하는 mismatch 경고는 반드시 유지한다.
+- `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이며 CAN front-end drain 정지가 아니다.
 
 ## 4. 작업 라우팅
 - capture-core memory/hot path/slab/bounded queue/projection snapshot: `.agents/skills/capture-core-memory/SKILL.md`
@@ -63,6 +66,8 @@
 - core data/view/tap architecture: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
 - passive-safe product architecture: `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
 - passive debug tap product architecture: `docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO.md`
+- passive product boundary audit: `docs/reviews/passive_product_boundary_audit.md`
+- passive hardware requirements/acceptance: `docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS.md`, `docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE.md`, `docs/hardware/CSM_FIELD_SKU_BOM_RULES.md`, `docs/hardware/CSM_USB_CAN_ISOLATION_POLICY.md`
 - data ownership boundary rules: `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
 - control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
 - build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`

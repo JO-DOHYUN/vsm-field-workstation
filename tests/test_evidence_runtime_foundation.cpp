@@ -37,6 +37,45 @@ TypedCapabilityRecord capability(quint8 protocol = kTypedTransportVersion) {
     return out;
 }
 
+TypedCapabilityRecord passiveTwoBusCapability() {
+    TypedCapabilityRecord passive = capability();
+    passive.supportsCanTxRaw = false;
+    passive.supportedDownlinkRecords = 0;
+    passive.hostTxQueueSize = 0;
+    passive.hasPassivePolicy = true;
+    passive.firmwareProfile = 1;
+    passive.vehicleImpactState = 2;
+    passive.hostCommandRx = false;
+    passive.controlPath = false;
+    passive.usbCdcDtrSessionRequired = true;
+    passive.usbCdcDtrSessionOnly = true;
+    passive.dtrResetSensitive = false;
+    passive.busCount = 2;
+    passive.buses.clear();
+
+    TypedCapabilityBusDescriptor bus0;
+    bus0.busId = 0;
+    bus0.rxSupported = true;
+    bus0.txSupported = false;
+    bus0.controlTxAllowed = false;
+    passive.buses.push_back(bus0);
+
+    TypedCapabilityBusDescriptor bus1;
+    bus1.busId = 1;
+    bus1.rxSupported = true;
+    bus1.txSupported = false;
+    bus1.controlTxAllowed = false;
+    passive.buses.push_back(bus1);
+
+    passive.busMode[0] = 1;
+    passive.busMode[1] = 1;
+    passive.busAckCapable[0] = false;
+    passive.busAckCapable[1] = false;
+    passive.busErrorFrameCapable[0] = false;
+    passive.busErrorFrameCapable[1] = false;
+    return passive;
+}
+
 TypedBoardHealthRecord health(quint64 monoUs = 200, quint8 safetyState = 1, quint32 faultFlags = 0) {
     TypedBoardHealthRecord out;
     out.monoUs = monoUs;
@@ -162,11 +201,7 @@ private slots:
     }
 
     void passiveCandidateStillRequiresHardwareEvidence() {
-        TypedCapabilityRecord passive = capability();
-        passive.supportsCanTxRaw = false;
-        passive.supportedDownlinkRecords = 0;
-        passive.hostTxQueueSize = 0;
-        passive.buses.clear();
+        TypedCapabilityRecord passive = passiveTwoBusCapability();
 
         CanMonitorEvidence::BoardConnectionState state;
         state.setSerialOpen(true);
@@ -175,23 +210,14 @@ private slots:
         const auto snapshot = state.snapshot();
         QVERIFY(!snapshot.csmActiveCapable);
         QVERIFY(snapshot.csmPassiveCapabilityCandidate);
-        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
+        QVERIFY(snapshot.configuredPassive);
+        QVERIFY(snapshot.runtimePassive);
+        QVERIFY(!snapshot.verifiedPassive);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("configured_passive_hardware_claim_incomplete"));
     }
 
     void passiveCdcSessionPolicyIsNotActiveControl() {
-        TypedCapabilityRecord passive = capability();
-        passive.supportsCanTxRaw = false;
-        passive.supportedDownlinkRecords = 0;
-        passive.hostTxQueueSize = 0;
-        passive.buses.clear();
-        passive.hasPassivePolicy = true;
-        passive.firmwareProfile = 1;
-        passive.vehicleImpactState = 2;
-        passive.hostCommandRx = false;
-        passive.controlPath = false;
-        passive.usbCdcDtrSessionRequired = true;
-        passive.usbCdcDtrSessionOnly = true;
-        passive.dtrResetSensitive = false;
+        TypedCapabilityRecord passive = passiveTwoBusCapability();
 
         CanMonitorEvidence::BoardConnectionState state;
         state.setSerialOpen(true);
@@ -204,21 +230,11 @@ private slots:
         QVERIFY(!snapshot.dtrResetSensitive);
         QVERIFY(!snapshot.csmActiveCapable);
         QVERIFY(snapshot.csmPassiveCapabilityCandidate);
-        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("configured_passive_hardware_claim_incomplete"));
     }
 
     void passivePolicyRejectsAckCapableRxBus() {
-        TypedCapabilityRecord passive = capability();
-        passive.supportsCanTxRaw = false;
-        passive.supportedDownlinkRecords = 0;
-        passive.hostTxQueueSize = 0;
-        passive.hasPassivePolicy = true;
-        passive.firmwareProfile = 1;
-        passive.vehicleImpactState = 2;
-        passive.hostCommandRx = false;
-        passive.controlPath = false;
-        passive.usbCdcDtrSessionRequired = true;
-        passive.usbCdcDtrSessionOnly = true;
+        TypedCapabilityRecord passive = passiveTwoBusCapability();
         passive.buses.clear();
 
         TypedCapabilityBusDescriptor bus0;
@@ -250,6 +266,63 @@ private slots:
         QVERIFY(snapshot.csmVehicleImpactPossible);
         QVERIFY(!snapshot.csmPassiveCapabilityCandidate);
         QCOMPARE(snapshot.profileMatchResult, QStringLiteral("blocked_vehicle_impact_possible"));
+    }
+
+    void passiveProductRequiresTwoBusRxOnlyCapability() {
+        TypedCapabilityRecord passive = passiveTwoBusCapability();
+        passive.busCount = 1;
+        passive.buses.removeLast();
+
+        CanMonitorEvidence::BoardConnectionState state;
+        state.setSerialOpen(true);
+        state.ingestCapability(passive);
+
+        const auto snapshot = state.snapshot();
+        QVERIFY(!snapshot.twoBusProductRequirementSatisfied);
+        QVERIFY(!snapshot.csmPassiveCapabilityCandidate);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("blocked_incomplete_2bus_passive_capability"));
+    }
+
+    void verifiedPassiveRequiresExternalArtifactVerification() {
+        TypedCapabilityRecord passive = passiveTwoBusCapability();
+        passive.vehicleImpactState = 3;
+        passive.passiveAcceptanceAllowed = true;
+        passive.hasPassiveHardwareEvidenceClaims = true;
+        passive.hardwareSafetyCaseId = 101;
+        passive.benchVerificationId = 202;
+        passive.fieldSkuId = 303;
+        passive.externalAnalyzerArtifactId = 404;
+        passive.hotplugPassCount = 100;
+        for (int bus = 0; bus < 2; ++bus) {
+            passive.hardwareSilentStrapped[bus] = true;
+            passive.galvanicIsolated[bus] = true;
+            passive.powerOffPassive[bus] = true;
+            passive.resetSafe[bus] = true;
+            passive.txdGated[bus] = true;
+            passive.normalEnablePathPopulated[bus] = false;
+        }
+
+        CanMonitorEvidence::BoardConnectionState state;
+        state.setSerialOpen(true);
+        state.ingestCapability(passive);
+
+        auto snapshot = state.snapshot();
+        QVERIFY(snapshot.hardwareEvidenceCompleteClaim);
+        QVERIFY(!snapshot.externalPassiveEvidenceVerified);
+        QVERIFY(!snapshot.verifiedPassive);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("configured_passive_external_evidence_unverified"));
+
+        state.setExternalPassiveEvidence(CanMonitorEvidence::BoardConnectionState::ExternalPassiveEvidence{
+            true,
+            true,
+            true,
+            404,
+            100,
+        });
+        snapshot = state.snapshot();
+        QVERIFY(snapshot.externalPassiveEvidenceVerified);
+        QVERIFY(snapshot.verifiedPassive);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("verified_passive"));
     }
 
     void boardAliveExpiresOnWallClockWhenStreamStops() {

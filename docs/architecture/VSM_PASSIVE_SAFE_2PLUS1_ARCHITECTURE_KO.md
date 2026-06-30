@@ -63,6 +63,21 @@ Core는 QML model, AppController UI 상태, 그래프 위젯을 소유하지 않
 - Derived view: `live_latest`, `decoded_can_tail`, `analysis_snapshot`, `graph_bucket`, `transport_summary`, `profile_status`
 - UI 표시 drop은 display/tail drop으로만 표시한다. capture/parser/CSM truth loss와 섞지 않는다.
 
+## Passive Gate Refinement
+- VSM은 `configured_passive`, `runtime_passive`,
+  `hardware_evidence_claimed`, `external_artifact_verified`,
+  `verified_passive`를 분리한다.
+- CSM `CAPABILITY` hardware field는 runtime claim/reference다. mismatch
+  진단에는 사용하지만 물리적 PASS proof로 쓰지 않는다.
+- `verified_passive`는 2-bus RX-only passive capability, host/control/downlink
+  path 없음, MCP passive/TXREQ violation 0, complete hardware claim, 그리고
+  reference analyzer/scope/DTC artifact 검증이 모두 맞을 때만 가능하다.
+- 제품은 2-bus 전용이다. capability가 2-bus RX-only를 만족하지 못하면
+  VSM은 blocking mismatch로 표시한다. 이것은 1-bus product path가 아니다.
+- USB attach quarantine은 CDC/uplink/session payload cleanup이다. CAN
+  front-end passive drain을 멈추거나 MCP/transceiver를 reset/reconfigure하는
+  상태가 아니다.
+
 ## 금지 경계
 - RuntimeProfile 없이 serial `ReadWrite`를 직접 열지 않는다.
 - Passive Product에서 DTR/RTS를 직접 assert하지 않는다.
