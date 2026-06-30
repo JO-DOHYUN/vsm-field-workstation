@@ -1,3 +1,10 @@
+# Current Correction - 2026-06-30
+
+- Product passive CSM is two-bus RX only.
+- portenta_h7_m7_mid_mcp2515_j4_dual_csm_passive must expose bus0 MCP2515 listen-only and bus1 Mid Carrier J4/U2 silent-monitor RX.
+- portenta_h7_m7_mid_mcp2515_j4_dual_csm_passive_2bus_rx is only a compatibility alias, not a separate product direction.
+- Any passive upload that exposes fewer than two RX buses is an operator/build-profile error and must not be used as field product evidence.
+- If any passive product bus advertises normal mode, ACK capability, or error-frame capability, VSM must classify the CSM as locked_vehicle_impact_possible.
 # VSM/CSM CDC 유지형 Passive Product 최종 플랜
 
 작성 기준: 2026-06-30  
@@ -26,7 +33,7 @@ CDC-maintained Vehicle-Bus-Non-Interfering Passive CAN Probe
 - **CSM은 “USB CDC logger”가 아니라 “차량 CAN 비간섭형 passive probe”로 재정의한다.**
 - **VSM은 “CAN에 영향을 주는 프로그램”이 아니라 “CSM passive evidence를 검증·표시·기록하는 product workstation”으로 재정의한다.**
 - **CDC는 유지하지만, CDC session open/close/DTR/re-enumeration이 MCP2515/CAN transceiver/reset/TX gate에 영향을 주면 제품 실패다.**
-- **bus1 미표시는 VSM 버그가 아니라 현재 CSM passive profile이 1-bus MCP2515 product로 광고되는 상태다. 2-bus 실차 제품이 목표면 별도 dual-bus passive RX profile을 만들어야 한다.**
+- **정정: bus1 미표시는 VSM 버그가 아니라 잘못된 CSM build/upload 선택으로 발생한 운용 오류였다. 제품 passive profile은 항상 2-bus RX이며, 2개 미만 RX bus를 광고하는 build/upload는 실차 제품 근거로 금지한다.**
 
 ---
 
@@ -423,13 +430,13 @@ Trace 예시:
 VSM은 다음 셋을 구분해야 한다.
 
 ```text
-case A: CSM capability bus_count=1
+case A: CSM capability bus_count<2
 → CSM이 bus1을 광고하지 않음
 
 case B: CSM capability bus_count=2, bus1 rx_supported=1, bus1 frame=0
 → bus1 active but no traffic
 
-case C: vehicle profile expects 2 buses, CSM capability bus_count=1
+case C: vehicle profile expects 2 buses, CSM capability bus_count<2
 → current CSM firmware/profile does not satisfy vehicle 2-bus requirement
 ```
 
@@ -695,7 +702,7 @@ passive product boot default:
 
 #### P0-5. Passive 2-Bus Product Profile
 
-현재 passive profile은 1-bus MCP2515 product다. 실차 2-bus가 목표면 별도 profile을 만든다.
+정정: 현재 제품 passive profile은 항상 2-bus RX여야 한다. 2개 미만 RX bus를 광고하는 build/upload는 실차 제품이 아니며, VSM은 vehicle profile mismatch 또는 passive capability rejection으로 표시해야 한다.
 
 ```ini
 [env:portenta_h7_m7_mid_mcp2515_j4_dual_csm_passive_2bus_rx]

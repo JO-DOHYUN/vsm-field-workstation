@@ -6,6 +6,9 @@ namespace {
 
 constexpr quint8 kCsmFirmwareProfilePassiveProduct = 1;
 constexpr quint8 kCsmVehicleImpactVerifiedPassive = 3;
+constexpr quint8 kCsmBusModeListenOnly = 1;
+constexpr quint8 kCsmBusModeHardwareSilent = 2;
+constexpr quint8 kCsmBusModeNormal = 3;
 
 bool hasBoardTxOrControl(const TypedCapabilityRecord& capability) {
     for (const TypedCapabilityBusDescriptor& bus : capability.buses) {
@@ -38,6 +41,32 @@ bool hasControlPath(const TypedCapabilityRecord& capability) {
            capability.supportedDownlinkRecords != 0 ||
            capability.hostTxQueueSize != 0 ||
            hasBoardTxOrControl(capability);
+}
+
+bool hasVehicleImpactCapableRxBus(const TypedCapabilityRecord& capability) {
+    if (!capability.hasPassivePolicy) {
+        return false;
+    }
+    for (qsizetype index = 0; index < capability.buses.size(); ++index) {
+        const TypedCapabilityBusDescriptor& bus = capability.buses.at(index);
+        if (!bus.rxSupported) {
+            continue;
+        }
+        const int policyIndex = bus.busId < 2 ? int(bus.busId) : int(index);
+        const bool hasPolicySlot = policyIndex >= 0 && policyIndex < 2;
+        const quint8 busMode = hasPolicySlot ? capability.busMode[policyIndex] : quint8(0);
+        const bool modeIsPassive = busMode == kCsmBusModeListenOnly ||
+                                   busMode == kCsmBusModeHardwareSilent;
+        const bool canAffectBus = !hasPolicySlot ||
+                                  capability.busAckCapable[policyIndex] ||
+                                  capability.busErrorFrameCapable[policyIndex] ||
+                                  busMode == kCsmBusModeNormal ||
+                                  !modeIsPassive;
+        if (canAffectBus) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -143,9 +172,12 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
     out.faultFlags = m_healthSeen ? m_health.faultFlags : 0;
 
     const bool activePath = m_capabilitySeen && hasHostActivePath(m_capability);
+    const bool vehicleImpactPath = m_capabilitySeen && hasVehicleImpactCapableRxBus(m_capability);
     out.csmActiveCapable = activePath;
+    out.csmVehicleImpactPossible = vehicleImpactPath;
     out.csmPassiveCapabilityCandidate = m_capabilitySeen &&
         !out.csmActiveCapable &&
+        !out.csmVehicleImpactPossible &&
         (!m_capability.hasPassivePolicy ||
          (m_capability.firmwareProfile == kCsmFirmwareProfilePassiveProduct &&
           !m_capability.hostCommandRx &&
@@ -156,6 +188,8 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
         out.profileMatchResult = QStringLiteral("blocked_unknown");
     } else if (out.csmActiveCapable) {
         out.profileMatchResult = QStringLiteral("blocked_active_csm");
+    } else if (out.csmVehicleImpactPossible) {
+        out.profileMatchResult = QStringLiteral("blocked_vehicle_impact_possible");
     } else if (out.csmPassiveCapabilityCandidate &&
                m_capability.hasPassivePolicy &&
                m_capability.vehicleImpactState == kCsmVehicleImpactVerifiedPassive &&

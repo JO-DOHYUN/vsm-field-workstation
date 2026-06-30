@@ -4725,10 +4725,12 @@ QVariantList AppController::runtimeProfileDiagnostics() const {
     rows << row(QStringLiteral("csm_profile_match"),
                 QStringLiteral("CSM profile match"),
                 board.profileMatchResult,
-                board.csmActiveCapable ? QStringLiteral("error") : (board.csmPassiveCapabilityCandidate ? QStringLiteral("warn") : QStringLiteral("warn")),
+                (board.csmActiveCapable || board.csmVehicleImpactPossible) ? QStringLiteral("error")
+                    : (board.csmPassiveCapabilityCandidate ? QStringLiteral("warn") : QStringLiteral("warn")),
                 board.capabilitySeen
-                    ? QStringLiteral("active_capable %1 passive_candidate %2 dtr_session %3 dtr_reset_sensitive %4; hardware safety evidence still required")
+                    ? QStringLiteral("active_capable %1 vehicle_impact_possible %2 passive_candidate %3 dtr_session %4 dtr_reset_sensitive %5; hardware safety evidence still required")
                           .arg(board.csmActiveCapable ? QStringLiteral("yes") : QStringLiteral("no"),
+                               board.csmVehicleImpactPossible ? QStringLiteral("yes") : QStringLiteral("no"),
                                board.csmPassiveCapabilityCandidate ? QStringLiteral("yes") : QStringLiteral("no"),
                                board.usbCdcDtrSessionRequired ? QStringLiteral("required") : QStringLiteral("not-required"),
                                board.dtrResetSensitive ? QStringLiteral("yes") : QStringLiteral("no"))

@@ -19,6 +19,7 @@ public:
         bool controlCapable = false;
         bool csmActiveCapable = false;
         bool csmPassiveCapabilityCandidate = false;
+        bool csmVehicleImpactPossible = false;
         bool csmPassivePolicySeen = false;
         bool usbCdcDtrSessionRequired = false;
         bool usbCdcDtrSessionOnly = false;

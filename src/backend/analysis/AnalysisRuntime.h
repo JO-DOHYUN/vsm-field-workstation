@@ -5,6 +5,7 @@
 #include "../ModelPack.h"
 
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -138,6 +139,7 @@ private:
     static quint64 rowFingerprint(const QVariantMap& row);
     static QString busTextForFrame(const FrameRecord& frame);
     static void appendDlcHistogram(QVariantMap& row, const State& state);
+    bool noteCaptureSeq(quint64 captureSeq);
 
     Config m_config;
     QHash<Key, State> m_states;
@@ -146,6 +148,9 @@ private:
     quint64 m_nextSnapshotSeq = 1;
     bool m_hasMaxCaptureSeq = false;
     quint64 m_maxCaptureSeq = 0;
+    bool m_captureSeqContinuityInitialized = false;
+    quint64 m_nextExpectedCaptureSeq = 0;
+    QSet<quint64> m_pendingCaptureSeq;
     quint64 m_transportGapEpoch = 0;
 };
 

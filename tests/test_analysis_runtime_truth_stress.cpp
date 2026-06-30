@@ -197,6 +197,7 @@ class AnalysisRuntimeTruthStressTest : public QObject {
 private slots:
     void fixtureTruthCoversTimingValueAlarmAndBusKeys();
     void typedSegmentAnalysisParity();
+    void outOfOrderCaptureSeqDoesNotBecomeLoss();
     void captureSeqGapDoesNotBecomePeriodError();
 };
 
@@ -290,6 +291,38 @@ void AnalysisRuntimeTruthStressTest::typedSegmentAnalysisParity() {
              rawTiming.value(QStringLiteral("lastGapMsText")).toString());
     QCOMPARE(segmentTiming.value(QStringLiteral("dlcHistogram")).toString(),
              rawTiming.value(QStringLiteral("dlcHistogram")).toString());
+}
+
+void AnalysisRuntimeTruthStressTest::outOfOrderCaptureSeqDoesNotBecomeLoss() {
+    AnalysisRuntime runtime;
+    AnalysisRuntime::Config config;
+    config.maxStateKeys = 16;
+    config.maxRowsPerSnapshot = 16;
+    runtime.setConfig(config);
+
+    FrameRecord a = makeFrame(0, 0x510, 0, 8, {0x01});
+    a.hasCaptureSeq = true;
+    a.captureSeq = 100;
+    FrameRecord c = makeFrame(1, 0x520, 40000, 8, {0x03});
+    c.hasCaptureSeq = true;
+    c.captureSeq = 102;
+    FrameRecord b = makeFrame(0, 0x511, 20000, 8, {0x02});
+    b.hasCaptureSeq = true;
+    b.captureSeq = 101;
+
+    runtime.ingestFrame(a, QStringLiteral("live"));
+    runtime.ingestFrame(c, QStringLiteral("live"));
+    runtime.ingestFrame(b, QStringLiteral("live"));
+
+    const auto snapshot = runtime.makeSnapshot(40, QStringLiteral("live"));
+    QCOMPARE(snapshot.status.acceptedCanRxFrames, quint64(3));
+    QCOMPARE(snapshot.status.captureSeqGapEvents, quint64(0));
+    QCOMPARE(snapshot.status.transportContaminatedIntervals, quint64(0));
+    QCOMPARE(snapshot.summary.value(QStringLiteral("level")).toString(), QStringLiteral("OK"));
+
+    const QVariantMap row = findRow(snapshot.timingRows, QStringLiteral("0X510"));
+    QVERIFY(!row.isEmpty());
+    QVERIFY(!row.value(QStringLiteral("transportContaminated")).toBool());
 }
 
 void AnalysisRuntimeTruthStressTest::captureSeqGapDoesNotBecomePeriodError() {

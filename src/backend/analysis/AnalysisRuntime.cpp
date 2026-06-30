@@ -13,6 +13,8 @@ namespace {
 
 constexpr quint64 kRuleOnlyBit = quint64(1) << 53;
 constexpr int kTimingHistoryLimit = 6;
+constexpr qsizetype kCaptureSeqPendingLimit = 65536;
+constexpr quint64 kCaptureSeqGapDeclareWindow = 65536;
 
 bool lessBySeverityThenId(const QVariantMap& a, const QVariantMap& b) {
     const int rankA = a.value(QStringLiteral("sortRank")).toInt();
@@ -43,6 +45,9 @@ void AnalysisRuntime::reset() {
     m_nextSnapshotSeq = 1;
     m_hasMaxCaptureSeq = false;
     m_maxCaptureSeq = 0;
+    m_captureSeqContinuityInitialized = false;
+    m_nextExpectedCaptureSeq = 0;
+    m_pendingCaptureSeq.clear();
     m_transportGapEpoch = 0;
 }
 
@@ -81,19 +86,7 @@ void AnalysisRuntime::ingestFrame(const FrameRecord& frame, const QString& sourc
 
     bool transportGapBeforeFrame = false;
     if (frame.hasCaptureSeq) {
-        if (!m_hasMaxCaptureSeq) {
-            m_hasMaxCaptureSeq = true;
-            m_maxCaptureSeq = frame.captureSeq;
-        } else if (frame.captureSeq > m_maxCaptureSeq) {
-            if (frame.captureSeq != m_maxCaptureSeq + 1) {
-                transportGapBeforeFrame = true;
-                ++m_status.captureSeqGapEvents;
-                ++m_transportGapEpoch;
-            }
-            m_maxCaptureSeq = frame.captureSeq;
-        } else {
-            ++m_status.captureSeqReorderEvents;
-        }
+        transportGapBeforeFrame = noteCaptureSeq(frame.captureSeq);
     }
 
     const Key key = keyForFrame(frame);
@@ -183,6 +176,48 @@ void AnalysisRuntime::ingestFrame(const FrameRecord& frame, const QString& sourc
 
 void AnalysisRuntime::ingestFrames(const FrameRecordList& frames, const QString& source) {
     for (const FrameRecord& frame : frames) ingestFrame(frame, source);
+}
+
+bool AnalysisRuntime::noteCaptureSeq(quint64 captureSeq) {
+    if (!m_captureSeqContinuityInitialized) {
+        m_captureSeqContinuityInitialized = true;
+        m_hasMaxCaptureSeq = true;
+        m_maxCaptureSeq = captureSeq;
+        m_nextExpectedCaptureSeq = captureSeq + 1;
+        return false;
+    }
+
+    if (captureSeq > m_maxCaptureSeq) {
+        m_maxCaptureSeq = captureSeq;
+        m_hasMaxCaptureSeq = true;
+    }
+
+    if (captureSeq < m_nextExpectedCaptureSeq) {
+        ++m_status.captureSeqReorderEvents;
+        return false;
+    }
+
+    if (captureSeq == m_nextExpectedCaptureSeq) {
+        ++m_nextExpectedCaptureSeq;
+        while (m_pendingCaptureSeq.remove(m_nextExpectedCaptureSeq)) {
+            ++m_nextExpectedCaptureSeq;
+        }
+        return false;
+    }
+
+    const quint64 distance = captureSeq - m_nextExpectedCaptureSeq;
+    if (distance <= kCaptureSeqGapDeclareWindow &&
+        m_pendingCaptureSeq.size() < kCaptureSeqPendingLimit) {
+        m_pendingCaptureSeq.insert(captureSeq);
+        return false;
+    }
+
+    ++m_status.captureSeqGapEvents;
+    ++m_transportGapEpoch;
+    ++m_status.captureSeqReorderEvents;
+    m_pendingCaptureSeq.clear();
+    m_nextExpectedCaptureSeq = captureSeq + 1;
+    return true;
 }
 
 AnalysisRuntime::Snapshot AnalysisRuntime::makeSnapshot(qint64 nowMs, const QString& source) {

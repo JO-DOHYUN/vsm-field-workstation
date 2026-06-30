@@ -207,6 +207,51 @@ private slots:
         QCOMPARE(snapshot.profileMatchResult, QStringLiteral("csm_passive_candidate_hardware_unverified"));
     }
 
+    void passivePolicyRejectsAckCapableRxBus() {
+        TypedCapabilityRecord passive = capability();
+        passive.supportsCanTxRaw = false;
+        passive.supportedDownlinkRecords = 0;
+        passive.hostTxQueueSize = 0;
+        passive.hasPassivePolicy = true;
+        passive.firmwareProfile = 1;
+        passive.vehicleImpactState = 2;
+        passive.hostCommandRx = false;
+        passive.controlPath = false;
+        passive.usbCdcDtrSessionRequired = true;
+        passive.usbCdcDtrSessionOnly = true;
+        passive.buses.clear();
+
+        TypedCapabilityBusDescriptor bus0;
+        bus0.busId = 0;
+        bus0.rxSupported = true;
+        bus0.txSupported = false;
+        bus0.controlTxAllowed = false;
+        passive.buses.push_back(bus0);
+        passive.busMode[0] = 1; // listen-only
+        passive.busAckCapable[0] = false;
+        passive.busErrorFrameCapable[0] = false;
+
+        TypedCapabilityBusDescriptor bus1;
+        bus1.busId = 1;
+        bus1.rxSupported = true;
+        bus1.txSupported = false;
+        bus1.controlTxAllowed = false;
+        passive.buses.push_back(bus1);
+        passive.busMode[1] = 3; // normal mode would ACK and can affect a vehicle bus.
+        passive.busAckCapable[1] = true;
+        passive.busErrorFrameCapable[1] = true;
+
+        CanMonitorEvidence::BoardConnectionState state;
+        state.setSerialOpen(true);
+        state.ingestCapability(passive);
+
+        const auto snapshot = state.snapshot();
+        QVERIFY(!snapshot.csmActiveCapable);
+        QVERIFY(snapshot.csmVehicleImpactPossible);
+        QVERIFY(!snapshot.csmPassiveCapabilityCandidate);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("blocked_vehicle_impact_possible"));
+    }
+
     void boardAliveExpiresOnWallClockWhenStreamStops() {
         CanMonitorEvidence::BoardConnectionState state(kTypedTransportVersion, 2'000'000, 2'500);
 
