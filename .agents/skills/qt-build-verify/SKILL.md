@@ -9,10 +9,11 @@ description: Use when building this Qt/CMake Windows app, fixing compile/link er
 1. Read `BRIEF.md`.
 2. Identify whether the change touches build-risk files.
 3. Use the canonical workspace and Windows build shell before running CMake.
-4. Choose the smallest verification that proves the changed path.
+4. Choose the smallest verification that proves the changed path. Do not build
+   because "it might be useful"; build only when the changed surface requires it.
 
 ## Verification Ladder
-- Level 0: docs/text/constants/narrow QML wording. Use `git diff --check` plus targeted search; skip build unless imports, registered types, or generated files changed.
+- Level 0: docs/text/constants/narrow QML wording. Use `git diff --check` plus targeted search; skip build unless imports, registered types, generated files, or runtime code changed.
 - Level 1: one subsystem. Build the affected target if needed and run the smallest matching `ctest -R` subset.
 - Level 2: `AppController`, `SerialWorker`, `TypedRecords`, CMake, QML registration, new C++ files, control/transport boundaries, or QML state roles. Run Release build plus relevant subset tests.
 - Level 3: PR-ready, release/deploy, or completed runtime boundary slice. Run Release build, full ctest, and release exe startup smoke. Add active CSM PlatformIO build only when shared protocol/control firmware compatibility is touched or explicitly requested.
@@ -26,8 +27,9 @@ Subset defaults:
 
 ## Workspace
 - Active implementation/build workspace: this standalone VSM repository root, local path `C:\WORKS\VS\turn81_full_buildfix2`.
+- CSM firmware workspace, only when explicitly required: `C:\Users\JEON0295\Documents\PlatformIO\Projects\J_ArdP7_AM2_CSM`.
 - Run Qt/CMake commands in the active VSM repository.
-- Run CSM PlatformIO commands from the separate CSM firmware workspace only when the firmware gate is explicitly required.
+- Run CSM PlatformIO commands from the separate CSM firmware workspace only when the firmware gate is explicitly required. Do not run CSM builds for VSM-only docs/UI changes.
 
 ## Commands
 Windows rule:
@@ -71,6 +73,9 @@ CSM firmware:
 
 ## Rules
 - Do not claim build/test/deploy success unless the command was run in this turn or clearly inherited as historical state.
+- Do not run full Release build/full ctest for docs-only or harness-only work.
+- Do not run CSM PlatformIO builds unless CSM firmware/platformio/passive guard/shared protocol changed or the user explicitly asks for that gate.
+- Do not upload CSM firmware as a verification shortcut. Upload causes MCU reset/USB re-enumeration and requires explicit user instruction plus safe hardware context.
 - Keep unrelated UI/docs cleanup out of build-fix turns.
 - If `QTP0004` appears, report it as known dev warning unless it blocks generation.
 - If `CMakeLists.txt`, QML registration, or new C++ files changed, verify declaration/definition/CMake/QML registration together.

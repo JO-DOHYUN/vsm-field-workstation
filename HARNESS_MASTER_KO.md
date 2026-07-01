@@ -31,6 +31,34 @@ Codex 작업이 과거 실패 이력이나 임시 패치 흐름으로 되돌아�
 - Hardware PASS:
   external analyzer/scope/DTC artifact verification required.
 
+## Cross-Repo Rule
+
+- VSM repo: `C:\WORKS\VS\turn81_full_buildfix2`.
+- CSM repo: `C:\Users\JEON0295\Documents\PlatformIO\Projects\J_ArdP7_AM2_CSM`.
+- System-level passive, protocol, capability, board-health, USB/CAN lifecycle,
+  and vehicle-impact-free work must inspect both repo states.
+- Do not edit or build CSM from the VSM workspace.
+- Do not edit or build VSM from the CSM workspace.
+- Commit/push each repo independently.
+
+## Verification Budget Rule
+
+Builds are evidence, but unnecessary builds are waste and can disturb hardware.
+Choose the smallest verification that proves the changed surface.
+
+- Docs/harness-only: `git diff --check` plus targeted search. No build.
+- VSM C++/QML/runtime change: Release build or affected target build plus
+  relevant `ctest -R` subset.
+- VSM completed runtime boundary/release slice: Release build, full ctest, and
+  startup smoke.
+- CSM docs-only: `git diff --check`. No PlatformIO build.
+- CSM firmware/platformio/guard/protocol change: build only the affected env.
+  Build passive alias/full env only when profile separation is part of the
+  change.
+- Upload is not a normal verification step. Upload only when explicitly
+  requested and when the current hardware/vehicle context is safe for MCU reset
+  and USB re-enumeration.
+
 ## Document Roles
 
 - `AGENTS.md`: stable top-level rules, read order, routing.
@@ -40,15 +68,6 @@ Codex 작업이 과거 실패 이력이나 임시 패치 흐름으로 되돌아�
 - `.agents/skills/*`: narrow reusable workflows.
 - `docs/`: architecture, protocol, runbooks, acceptance contracts.
 - `history/`: previous attempts, decisions, rollback notes.
-
-## Skill Routing
-
-- Harness/doc boundary: `harness-maint`.
-- Typed evidence/protocol/control gates: `typed-evidence`.
-- Capture hot path, bounded queue, memory plateau: `capture-core-memory`.
-- Build/test/startup smoke: `qt-build-verify`.
-- Replay source semantics: `replay-semantics`.
-- Graph renderer/performance: `graph-performance`.
 
 ## Mandatory Refactor Order
 
@@ -73,21 +92,12 @@ File splitting without ownership closure is not accepted.
 - Debug/gateway/profiler writers running in normal production mode.
 - One-bus passive product/acceptance.
 - Claiming `verified_passive` from CSM capability fields without external proof.
+- Treating Kvaser/PCAN single-node ACK failure as vehicle passive failure.
+- Treating build/upload success as vehicle-impact-free proof.
 
 ## Rollback Rule
 
 If a harness change causes Codex to ignore current product identity, skip required
-verification, conflate debug evidence with capture truth, or route passive work
-through lab/full-instrumented paths, revert that harness slice and restore this
-contract.
-
-## Current Required Links
-
-- `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`
-- `docs/architecture/PROJECT_CONSTITUTION_KO.md`
-- `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
-- `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
-- `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
-- `docs/reviews/passive_product_boundary_audit.md`
-- `docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS.md`
-- `docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE.md`
+verification, overbuild without reason, upload during unsafe hardware context,
+conflate debug evidence with capture truth, or route passive work through
+lab/full-instrumented paths, revert that harness slice and restore this contract.

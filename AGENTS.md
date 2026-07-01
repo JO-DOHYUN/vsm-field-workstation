@@ -1,9 +1,11 @@
 # AGENTS.md
 
-이 저장소의 Codex 상위 운영 맵이다. 이 파일은 짧고 안정적으로 유지한다.
-상세 절차는 `.agents/skills/`, 설계 근거는 `docs/`, 오래된 이력은 `history/`에 둔다.
+이 저장소의 Codex 상위 운영 맵이다. 짧고 안정적으로 유지한다.
+상세 절차는 `.agents/skills/`, 설계 근거는 `docs/`, 오래된 이력은
+`history/`에 둔다.
 
 ## 1. 먼저 읽을 것
+
 항상 아래 순서로 본다.
 
 1. `START_HERE_KO.md`
@@ -13,66 +15,120 @@
 5. 하네스 자체를 바꾸는 턴일 때만 `HARNESS_MASTER_KO.md`
 
 ## 2. 프로젝트 목표
-목표는 실차/현장 기준에서 신뢰 가능한 CAN monitor / logger / replay / decode / evidence-first control workstation을 완성하는 것이다.
+
+목표는 실차/현장 기준에서 차량 CAN에 영향을 주지 않는 2-bus
+Passive-Safe CAN monitor / logger / replay / decode / evidence-first
+workstation을 완성하는 것이다.
 
 항상 보존한다.
 
+- VSM field/product 기본 실행은 Passive-Safe 2+1이다:
+  `vsm-ui.exe + vsm-capture-core.exe`, optional `vsm-debug-tap.exe` default OFF.
 - VSM live production path는 CSM typed evidence stream 전용이다.
-- COM open만으로 board alive로 보지 않고 valid `CAPABILITY`와 fresh `BOARD_HEALTH`를 기준으로 판단한다.
-- typed board stream 원본 byte가 production truth다.
-- CAN RX, CAN TX audit, voltage/ADC raw, board health/event, capability, control ack evidence type은 분리한다.
-- host 요청 TX, `CONTROL_ACK`, `CAN_TX_RAW`, feedback은 서로 다른 evidence다.
-- host 요청 TX는 matching `CAN_TX_RAW` 전까지 실제 CAN 송신 성공으로 보지 않는다.
-- live와 replay 의미는 분리한다.
-- graph는 truth-first, fixed-axis, peak-preserving 기준을 유지한다.
-- legacy 20-byte packet / CRC8 / DLC / `t_us` wrap은 replay/import 호환으로만 보존한다.
-- Windows Qt/CMake build, test, deploy 재현성을 유지한다.
+- COM open만으로 board alive로 보지 않고 valid `CAPABILITY`와 fresh
+  `BOARD_HEALTH`를 기준으로 판단한다.
+- `capture.stream/index`만 authoritative capture truth다.
+- UI/graph/decoded tail/analysis rows는 bounded materialized view다.
+- CAN RX, CAN TX audit, voltage/ADC raw, board health/event, capability,
+  control ack evidence type은 분리한다.
+- Host 요청 TX, `CONTROL_ACK`, `CAN_TX_RAW`, feedback은 서로 다른 evidence다.
+- Host 요청 TX는 matching `CAN_TX_RAW` 전까지 실제 CAN 송신 성공으로 보지 않는다.
+- Passive Product profile에서는 serial read-only, DTR은 CSM-declared Arduino
+  CDC session gate일 때만 허용, RTS/host TX/control cycle/COM-owning lab
+  gateway는 금지한다.
+- Full/Instrumented profile은 bench/lab 전용이며 실차 PASS나 passive product
+  acceptance로 주장하지 않는다.
+- Hardware passive evidence in CSM `CAPABILITY` is a claim/reference only.
+  `verified_passive`는 외부 analyzer/scope/DTC artifact 검증 전에는 금지한다.
+- 제품은 2-bus passive monitor다. 1-bus product/acceptance는 금지하지만,
+  missing/one-bus capability mismatch 경고는 반드시 유지한다.
+- `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이며 CAN
+  front-end drain 정지가 아니다.
+- Passive monitor는 ACK provider가 아니다. Kvaser/PCAN 단독 송신 시험은 active
+  ACK node 또는 lab ACK/TX profile로 분리한다.
 
-## 3. 상시 규칙
-- `BRIEF.md`는 현재 기준본, 유지 기능, 현재 목표, 즉시 다음 작업만 둔다.
-- 과거 실패, 시행착오, 결정 배경은 `history/`로 보낸다.
-- routine 코드 수정 턴에서 하네스 재설계를 섞지 않는다.
-- `.agents/`와 `.codex/` 수정은 명시적인 하네스 변경 턴에서만 한다.
+## 3. VSM/CSM 동시 작업 기준
+
+- VSM repo: `C:\WORKS\VS\turn81_full_buildfix2`.
+- CSM repo: `C:\Users\JEON0295\Documents\PlatformIO\Projects\J_ArdP7_AM2_CSM`.
+- VSM/CSM 통합 동작, wire contract, passive lifecycle, capability, board health,
+  USB/CAN safety를 건드리는 턴은 두 repo 상태를 모두 확인한다.
+- CSM 파일 수정/빌드/upload는 반드시 CSM repo root에서만 한다.
+- VSM 파일 수정/빌드/test는 반드시 VSM repo root에서만 한다.
+- 두 repo는 독립 commit/push한다. 한쪽 변경을 다른 repo commit에 섞지 않는다.
+- 사용자 입력/분석용 untracked 문서는 명시 없이는 commit하지 않는다.
+
+## 4. 검증 최소화 규칙
+
+불필요한 빌드는 금지한다. 검증은 변경 위험을 증명하는 최소 단위로 선택한다.
+
+- 문서/하네스/주석만 변경: `git diff --check`와 관련 텍스트 검색만 수행한다.
+  빌드하지 않는다.
+- VSM C++/QML/runtime 경계 변경: affected target build와 관련 `ctest -R`부터
+  수행한다.
+- VSM release/runtime boundary 완성 slice: Release build, 필요한 subset test,
+  필요 시 full ctest와 startup smoke를 수행한다.
+- CSM 문서만 변경: `git diff --check`만 수행한다. PlatformIO build하지 않는다.
+- CSM firmware/platformio/guard/protocol 변경: 해당 env만 PlatformIO build한다.
+  passive product env와 alias/full env를 모두 빌드하는 것은 profile 분리 검증이
+  필요한 경우에만 한다.
+- Upload는 빌드 검증이 아니다. MCU reset/USB re-enumeration으로 차량 CAN에
+  영향을 줄 수 있으므로 사용자가 명시적으로 요구하고 현재 hardware context가
+  안전할 때만 수행한다.
+- 실차 PASS는 코드 빌드로 주장하지 않는다. external analyzer/scope/DTC evidence가
+  필요하다.
+
+## 5. 상시 금지 경계
+
 - 기능을 없애서 UI/성능/빌드 문제를 숨기지 않는다.
 - 검증하지 않은 build/run/replay/graph/deploy/HIL 성공은 단정하지 않는다.
-- 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary, telemetry, tests, exit condition을 같은 slice에 포함한다.
-- live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라 capture-core ownership 문제로 먼저 의심한다.
-- VSM long-run live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다.
-- VSM field/product 기본 실행은 Passive-Safe 2+1 기준이다: `vsm-ui.exe + vsm-capture-core.exe`가 기본 2프로세스이고, debug/tap은 기본 OFF인 별도 plane이다.
-- Passive Product profile에서는 VSM이 serial read-only로 열고, CSM capability가 요구하는 Arduino CDC session gate 목적의 DTR만 허용하며, RTS/host TX/control cycle/COM-owning lab gateway를 실행하지 않는다.
-- Full/Instrumented profile은 bench/lab 전용이며 실차 PASS나 passive product acceptance로 주장하지 않는다.
-- `capture.stream/index`만 authoritative truth이며 UI/graph/raw tail/analysis rows는 bounded materialized view로 다룬다.
-- "truth"는 항상 authoritative capture truth, CAN frame truth, display/materialized view, hardware passive proof, debug evidence 중 하나로 구분한다. capability hardware fields는 proof가 아니라 claim/reference다.
-- live/capture-core 리팩토링은 데이터 흐름도, owner/consumer/drop policy, 기존 owner 위반 검색을 먼저 끝낸 뒤 기능 이동과 구 경로 삭제를 진행한다.
-- 금지 경계: `TypedRecordList` UI/analysis/projection 공용 fanout, `AppController` transport raw state 조립, diagnostics payload 기반 runtime state 갱신, UI projection의 timing truth 사용, storage `frameBytes` live view 전달.
-- 금지 경계: RuntimeProfile을 우회한 `QIODevice::ReadWrite` serial open, DTR/RTS hard assert, passive profile에서 host_frame/control_cycle/gateway_tcp 실행.
-- 제품은 2-bus passive monitor다. 1-bus product/acceptance는 금지하지만, capability가 2-bus 요구를 만족하지 못하는 mismatch 경고는 반드시 유지한다.
-- `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이며 CAN front-end drain 정지가 아니다.
+- `TypedRecordList` UI/analysis/projection 공용 fanout 금지.
+- `AppController` transport raw state 조립 금지.
+- diagnostics payload 기반 runtime state 갱신 금지.
+- UI projection의 timing/value/alarm truth 사용 금지.
+- storage `frameBytes` live view 전달 금지.
+- RuntimeProfile을 우회한 `QIODevice::ReadWrite` serial open 금지.
+- Passive profile에서 host_frame/control_cycle/gateway_tcp 실행 금지.
+- 나중에 Runtime으로 뺄 책임이면 `AppController`에 임시 누적하지 말고 boundary,
+  telemetry, tests, exit condition을 같은 slice에 포함한다.
+- live hot path에서 시간 비례 메모리 증가가 보이면 UI throttle이 아니라
+  capture-core ownership 문제로 먼저 의심한다.
 
-## 4. 작업 라우팅
-- capture-core memory/hot path/slab/bounded queue/projection snapshot: `.agents/skills/capture-core-memory/SKILL.md`
-- typed board evidence/storage/control gate/protocol semantics: `.agents/skills/typed-evidence/SKILL.md`
-- graph truth/performance/overview/detail: `.agents/skills/graph-performance/SKILL.md`
-- replay/live/source semantics: `.agents/skills/replay-semantics/SKILL.md`
-- build/test/deploy/startup smoke: `.agents/skills/qt-build-verify/SKILL.md`
-- AGENTS/.codex/skill boundary/harness structure: `.agents/skills/harness-maint/SKILL.md`
-- BRIEF 축소/history 이관/Obsidian link: `.agents/skills/doc-history-rollup/SKILL.md`
+## 6. 작업 라우팅
+
+- capture-core memory/hot path/slab/bounded queue/projection snapshot:
+  `.agents/skills/capture-core-memory/SKILL.md`
+- typed board evidence/storage/control gate/protocol semantics:
+  `.agents/skills/typed-evidence/SKILL.md`
+- graph truth/performance/overview/detail:
+  `.agents/skills/graph-performance/SKILL.md`
+- replay/live/source semantics:
+  `.agents/skills/replay-semantics/SKILL.md`
+- build/test/deploy/startup smoke:
+  `.agents/skills/qt-build-verify/SKILL.md`
+- AGENTS/.codex/skill boundary/harness structure:
+  `.agents/skills/harness-maint/SKILL.md`
+- BRIEF 축소/history 이관/Obsidian link:
+  `.agents/skills/doc-history-rollup/SKILL.md`
 
 핵심 계약 문서:
 
-- VSM-CSM 통합 원칙: `docs/architecture/PROJECT_CONSTITUTION_KO.md`
-- typed stream/protocol: `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`, `shared/protocol/typed_stream_v1.md`
-- capture-core memory architecture: `docs/architecture/VSM_CAPTURE_CORE_MEMORY_ARCHITECTURE_KO.md`
-- core data/view/tap architecture: `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
-- passive-safe product architecture: `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
-- passive debug tap product architecture: `docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO.md`
-- passive product boundary audit: `docs/reviews/passive_product_boundary_audit.md`
-- passive hardware requirements/acceptance: `docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS.md`, `docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE.md`, `docs/hardware/CSM_FIELD_SKU_BOM_RULES.md`, `docs/hardware/CSM_USB_CAN_ISOLATION_POLICY.md`
-- data ownership boundary rules: `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
-- control evidence: `docs/architecture/CONTROL_EVIDENCE_CONTRACT_KO.md`
-- build/verification policy: `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
+- `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`
+- `docs/architecture/PROJECT_CONSTITUTION_KO.md`
+- `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`
+- `shared/protocol/typed_stream_v1.md`
+- `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
+- `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
+- `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
+- `docs/reviews/passive_product_boundary_audit.md`
+- `docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS.md`
+- `docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE.md`
+- `docs/hardware/CSM_FIELD_SKU_BOM_RULES.md`
+- `docs/hardware/CSM_USB_CAN_ISOLATION_POLICY.md`
+- `docs/ai_harness/BUILD_VERIFY_POLICY_KO.md`
 
-## 5. 보고 형식
+## 7. 보고 형식
+
 작업 결과는 기본적으로 아래를 포함한다.
 
 - 변경 파일
@@ -81,5 +137,7 @@
 - build-risk 또는 미검증 리스크
 - 사용자가 바로 확인할 포인트
 
-## 6. 한 줄 원칙
-현재 프로젝트 폴더의 실제 파일을 기준으로, 기준본과 invariant를 흔들지 않고, 필요한 문서만 지연 참조한다.
+## 8. 한 줄 원칙
+
+현재 프로젝트 폴더의 실제 파일을 기준으로, VSM/CSM 경계를 혼동하지 않고,
+필요한 검증만 수행하며, 실차 안전을 빌드 성공으로 과장하지 않는다.
