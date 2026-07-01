@@ -24,7 +24,7 @@ acceptance에 사용할 수 없다.
    view이며 truth를 소유하지 않는다.
 4. Passive proof separation: CSM capability의 hardware fields는 claim/reference다.
    `verified_passive`는 외부 analyzer/scope/DTC artifact 검증 전에는 금지한다.
-5. Two-bus product: 제품은 2-bus RX-only passive monitor다. 1-bus product나
+5. Two-bus product: 제품은 2-bus ACK-capable observe-only monitor다. 1-bus product나
    acceptance는 없다. missing/one-bus mismatch는 blocking diagnostic이다.
 
 ## Non-Negotiable Invariants
@@ -43,8 +43,9 @@ acceptance에 사용할 수 없다.
   않는다.
 - `USB_ATTACH_QUARANTINE`은 CDC/uplink/session cleanup이다. CAN front-end
   passive drain을 멈추거나 MCP/transceiver를 reset/reconfigure하는 상태가 아니다.
-- Kvaser/PCAN 단독 송신 테스트는 passive monitor가 ACK하지 않아 실패할 수 있다.
-  Bench ACK/TX 검증과 vehicle passive monitor 검증은 분리한다.
+- Kvaser/PCAN 단독 송신 테스트는 CSM host session 이후 ACK-observe가 켜진
+  상태에서만 의미가 있다. ACK 가능 수신은 host TX/control 능력이 아니며,
+  USB hotplug/vehicle-impact 검증과 분리한다.
 
 ## Architecture Contract
 

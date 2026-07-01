@@ -23,8 +23,14 @@ description: Use when working on board typed stream parsing, typed capture stora
 - Passive Product diagnostics uses `vsm-debug-tap.exe`, which subscribes to Core IPC views without owning COM or altering typed evidence flow.
 - `capture.stream/index` is the authoritative typed evidence truth; UI/raw tail/graph/analysis rows are bounded derived views.
 - Hardware evidence fields in CSM `CAPABILITY` are claims/references only. `verified_passive` requires matching external analyzer/scope/DTC artifact verification.
-- The product target is two-bus RX-only. A one-bus or missing-bus capability is a blocking mismatch diagnostic, not an accepted passive SKU.
-- USB attach quarantine is CDC/uplink/session cleanup only. CAN front-end passive drain must continue.
+- The product target is two-bus ACK-capable observe-only. A one-bus or
+  missing-bus capability is a blocking mismatch diagnostic, not an accepted SKU.
+- ACK capability is not host TX/control capability. Passive Product may ACK
+  after a stable CSM host session while host-originated CAN TX/control/downlink
+  remains forbidden.
+- USB attach quarantine is CDC/uplink/session cleanup only. CAN front-end must
+  remain in pre-session safe receive during quarantine and may enter ACK-observe
+  only after session stability.
 
 ## Workflow
 1. Read `BRIEF.md`, `docs/architecture/PROJECT_CONSTITUTION_KO.md`, and `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`.

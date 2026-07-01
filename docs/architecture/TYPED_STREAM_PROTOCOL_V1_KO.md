@@ -273,8 +273,10 @@ USB lifecycle board events used by passive diagnostics:
 `BOARD_HEALTH v7` extends v6 with passive lifecycle counters:
 host-absent discard per bus, host-absent FIFO/MCP errors, host-absent duration,
 MCP passive readback count, readback violation count, TXREQ violation count, and
-USB CDC DTR change count. VSM must treat readback/TXREQ violation as
-product-blocking passive evidence, not as display sampling loss.
+USB CDC DTR change count. In the product profile, readback checks the configured
+safe mode: pre-session safe receive before host session, ACK-observe normal mode
+after session quarantine. VSM must treat unexpected mode/TXREQ violation as
+product-blocking evidence, not as display sampling loss.
 
 ## CAPABILITY v6 Passive Evidence Claims
 
@@ -308,7 +310,7 @@ external analyzer/scope/DTC artifact verification.
 268 pre_session_payload_replay_total  u32_le
 ```
 
-The product is two-bus RX-only. A one-bus capability is a blocking mismatch, not
+The product is two-bus observe-only. A one-bus capability is a blocking mismatch, not
 an accepted passive product. `USB_ATTACH_QUARANTINE` is CDC/uplink/session
 cleanup only; CAN front-end passive drain must continue.
 

@@ -31,7 +31,8 @@ evidence-first 제품이다. 최종 제품의 첫 번째 정체성은 "차량에
 
 ## 최종 목적
 
-- 실차 CAN에 영향 0인 2-bus passive monitor/logger/replay/decode workstation.
+- host TX/control 없이 안정화 후 ACK 가능한 2-bus observe-only
+  monitor/logger/replay/decode workstation.
 - `capture.stream/index`를 유일한 authoritative evidence truth로 보존.
 - UI/live/raw tail/graph/analysis는 모두 bounded materialized view로만 표시.
 - CSM capability/health/event는 claim/evidence로 분리하고, hardware passive
@@ -46,12 +47,13 @@ evidence-first 제품이다. 최종 제품의 첫 번째 정체성은 "차량에
 - Passive Product profile에서 VSM은 serial read-only로 열고, CSM이
   `usb_cdc_dtr_session_only=1`을 선언한 경우에만 session gate 목적의 DTR을
   허용한다. RTS, host TX, control cycle, COM-owning gateway는 금지한다.
-- 제품은 2-bus passive monitor다. 1-bus product/acceptance는 금지한다.
+- 제품은 2-bus ACK-capable observe-only monitor다. 1-bus product/acceptance는 금지한다.
   단, missing/one-bus capability mismatch 경고는 반드시 유지한다.
 - `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이지 CAN
   front-end 정지가 아니다.
-- Kvaser/PCAN 단독 송신 테스트는 passive monitor가 ACK하지 않으므로 실패할 수
-  있다. 이는 vehicle passive monitor 실패 판정과 분리한다.
+- Kvaser/PCAN 단독 송신 테스트는 CSM host session이 열리고 ACK-observe가
+  켜진 뒤에만 의미가 있다. ACK 능력은 host TX/control 능력이 아니며,
+  USB hotplug/차량 영향 판정과 분리한다.
 
 ## 작업 원칙
 

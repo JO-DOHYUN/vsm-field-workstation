@@ -67,12 +67,12 @@ TypedCapabilityRecord passiveTwoBusCapability() {
     bus1.controlTxAllowed = false;
     passive.buses.push_back(bus1);
 
-    passive.busMode[0] = 1;
-    passive.busMode[1] = 1;
-    passive.busAckCapable[0] = false;
-    passive.busAckCapable[1] = false;
-    passive.busErrorFrameCapable[0] = false;
-    passive.busErrorFrameCapable[1] = false;
+    passive.busMode[0] = 3;
+    passive.busMode[1] = 3;
+    passive.busAckCapable[0] = true;
+    passive.busAckCapable[1] = true;
+    passive.busErrorFrameCapable[0] = true;
+    passive.busErrorFrameCapable[1] = true;
     return passive;
 }
 
@@ -233,7 +233,7 @@ private slots:
         QCOMPARE(snapshot.profileMatchResult, QStringLiteral("configured_passive_hardware_claim_incomplete"));
     }
 
-    void passivePolicyRejectsAckCapableRxBus() {
+    void passivePolicyAcceptsAckCapableObserveBus() {
         TypedCapabilityRecord passive = passiveTwoBusCapability();
         passive.buses.clear();
 
@@ -253,7 +253,7 @@ private slots:
         bus1.txSupported = false;
         bus1.controlTxAllowed = false;
         passive.buses.push_back(bus1);
-        passive.busMode[1] = 3; // normal mode would ACK and can affect a vehicle bus.
+        passive.busMode[1] = 3; // normal observe mode may ACK but is not host TX/control.
         passive.busAckCapable[1] = true;
         passive.busErrorFrameCapable[1] = true;
 
@@ -263,9 +263,9 @@ private slots:
 
         const auto snapshot = state.snapshot();
         QVERIFY(!snapshot.csmActiveCapable);
-        QVERIFY(snapshot.csmVehicleImpactPossible);
-        QVERIFY(!snapshot.csmPassiveCapabilityCandidate);
-        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("blocked_vehicle_impact_possible"));
+        QVERIFY(!snapshot.csmVehicleImpactPossible);
+        QVERIFY(snapshot.csmPassiveCapabilityCandidate);
+        QCOMPARE(snapshot.profileMatchResult, QStringLiteral("configured_passive_hardware_claim_incomplete"));
     }
 
     void passiveProductRequiresTwoBusRxOnlyCapability() {

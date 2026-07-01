@@ -40,12 +40,13 @@ workstation을 완성하는 것이다.
   acceptance로 주장하지 않는다.
 - Hardware passive evidence in CSM `CAPABILITY` is a claim/reference only.
   `verified_passive`는 외부 analyzer/scope/DTC artifact 검증 전에는 금지한다.
-- 제품은 2-bus passive monitor다. 1-bus product/acceptance는 금지하지만,
+- 제품은 2-bus ACK-capable observe-only monitor다. 1-bus product/acceptance는 금지하지만,
   missing/one-bus capability mismatch 경고는 반드시 유지한다.
 - `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이며 CAN
   front-end drain 정지가 아니다.
-- Passive monitor는 ACK provider가 아니다. Kvaser/PCAN 단독 송신 시험은 active
-  ACK node 또는 lab ACK/TX profile로 분리한다.
+- Passive Product는 host TX/control/downlink를 제공하지 않는다. 단, 안정된
+  CSM host session 이후 ACK-capable observe mode는 제품 동작이다. ACK 능력과
+  `CAN_TX_RAW`/control 능력을 절대 같은 것으로 취급하지 않는다.
 
 ## 3. VSM/CSM 동시 작업 기준
 

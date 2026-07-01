@@ -24,8 +24,8 @@ new file names.
 
 | Scenario | Current required behavior | Evidence counter/view | Failure mode if violated |
 | --- | --- | --- | --- |
-| Vehicle CAN connected before USB | CSM drains both CAN front-ends and discards payload while host absent; no typed payload staging | host absent discard counters, host absent gap total | stale CAN payload replayed into next VSM capture |
-| USB plug | CSM enters uplink/session quarantine only; CAN front-end keeps passive drain running | USB session open, DTR change, attach quarantine total | MCP/transceiver reset or normal mode changes vehicle CAN |
+| Vehicle CAN connected before USB | CSM starts in pre-session safe receive and does not stage typed payload while host absent | host absent discard counters, host absent gap total | stale CAN payload replayed into next VSM capture or unsafe ACK before session |
+| USB plug | CSM enters uplink/session quarantine; only after quarantine may it enter ACK-observe | USB session open, DTR change, attach quarantine total | unsafe mode change during power/CDC instability |
 | USB unplug | CSM discards pending uplink payload and continues host-absent drain | USB session close reported on next open | old segment is emitted after reconnect |
 | VSM connect | Core owns COM read-only and asserts DTR only as declared session gate | runtime profile, transport policy | UI or debug process opens COM directly or write-capable |
 | Log start/stop | Capture writer owns `capture.stream/index`; UI reads views only | capture progress, diagnostics | UI state becomes capture truth owner |
@@ -58,7 +58,7 @@ new file names.
 - Passive VSM must not run host TX, control cycle, or COM-owning gateway.
 - UI must not consume raw typed stream, `TypedRecordList`, or storage
   `frameBytes` in production live paths.
-- Passive CSM must compile out host downlink, host TX, control TX, test TX, USB
-  reconnect reset, and MCP normal mode transitions.
+- Passive CSM must compile out host downlink, host TX, control TX, test TX, and
+  USB reconnect reset. MCP normal mode transitions are allowed only for the
+  controlled ACK-observe session state.
 - Passive CSM must advertise two RX buses or be rejected by VSM as incomplete.
-

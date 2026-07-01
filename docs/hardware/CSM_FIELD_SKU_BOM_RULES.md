@@ -6,8 +6,9 @@ device.
 ## Mandatory BOM Rules
 
 - Two CAN RX lanes are mandatory for the current product.
-- Normal/enable path for active transmit must be not populated or physically
-  inaccessible on the field SKU.
+- Host-originated active transmit/control path must be not populated or
+  physically inaccessible on the field SKU. A controlled normal/observe enable
+  path is allowed only for ACK-capable monitoring after session stability.
 - TXD gate or fail-safe recessive default is mandatory.
 - Silent/STB/EN default must keep the transceiver non-transmitting through
   power-off, reset, bootloader, and firmware boot.
@@ -29,4 +30,3 @@ device.
 
 These fields may be referenced by CSM capability, but the capability is still a
 runtime claim. VSM must validate matching external artifacts before PASS.
-

@@ -25,7 +25,8 @@ Codex 작업이 과거 실패 이력이나 임시 패치 흐름으로 되돌아�
 - Optional debug:
   `vsm-debug-tap.exe`, default OFF, Core IPC read-only sidecar.
 - CSM target:
-  2-bus RX-only Passive Product firmware.
+  2-bus ACK-capable observe-only Passive Product firmware with host TX/control
+  compiled out.
 - Authoritative evidence:
   `capture.stream/index`.
 - Hardware PASS:
@@ -92,7 +93,8 @@ File splitting without ownership closure is not accepted.
 - Debug/gateway/profiler writers running in normal production mode.
 - One-bus passive product/acceptance.
 - Claiming `verified_passive` from CSM capability fields without external proof.
-- Treating Kvaser/PCAN single-node ACK failure as vehicle passive failure.
+- Treating ACK-observe capability as host TX/control capability, or treating a
+  pre-session no-ACK state as a product TX failure.
 - Treating build/upload success as vehicle-impact-free proof.
 
 ## Rollback Rule

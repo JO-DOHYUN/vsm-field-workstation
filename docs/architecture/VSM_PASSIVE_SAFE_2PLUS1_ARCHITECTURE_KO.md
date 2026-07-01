@@ -2,38 +2,43 @@
 
 ## Purpose
 
-VSM의 field/product 기본 실행은 실차 CAN에 영향을 주지 않는 passive evidence
-workstation이다. 기본 프로세스는 `vsm-ui.exe + vsm-capture-core.exe`이고,
-debug가 필요할 때만 `vsm-debug-tap.exe`를 추가하는 2+1 구조다.
+VSM의 field/product 기본 실행은 실차 CAN을 흔들지 않는 evidence workstation이다.
+기본 프로세스는 `vsm-ui.exe + vsm-capture-core.exe`, debug가 필요할 때만
+`vsm-debug-tap.exe`를 붙이는 2+1 구조다.
 
 ## Runtime Profiles
 
 ### Passive Product
 
-기본 제품 모드다.
-
-- Serial open: read-only.
+- Serial open: RuntimeProfile을 통과한 Core 단독 open.
 - DTR: CSM `CAPABILITY`가 `usb_cdc_dtr_session_only=1`을 선언한 경우에만
   Arduino CDC session gate 목적으로 허용.
 - RTS: no-touch.
 - Host TX/control/control cycle/gateway TCP: disabled.
+- CAN behavior: CSM session 안정 후 ACK-capable observe-only. ACK는
+  host-originated CAN TX가 아니다.
 - Debug: `vsm-debug-tap.exe` non-owning Core IPC sidecar만 허용.
-- Vehicle PASS: external analyzer/scope/DTC artifact 검증 전에는
-  `verified_passive` 표시 금지.
+- Vehicle PASS: external analyzer/scope/DTC artifact 검증 전 `verified_passive`
+  표시 금지.
+
+### Pre-session Safe
+
+USB 물리 연결, DTR 미assert, Core 미연결, session quarantine 중의 상태다.
+
+- CSM은 CAN payload를 다음 session으로 replay하지 않는다.
+- CSM은 host TX/control/downlink를 실행하지 않는다.
+- CSM은 firmware가 제어 가능한 pin/mode를 safe receive 상태로 먼저 둔다.
+- 이 상태의 no-ACK는 제품 TX 실패가 아니라 session-before-observe 상태다.
 
 ### Full Instrumented
 
-bench/lab 전용 모드다.
+bench/lab 전용 모드다. Serial read/write, host TX, control, lab gateway가 가능할
+수 있지만 실차 Passive Product acceptance에 쓰면 실패다.
 
-- Serial read/write, host TX, control, lab gateway가 가능하다.
-- 실차 Passive Product acceptance에 사용할 수 없다.
-- UI는 이 모드를 product PASS로 표시하면 안 된다.
+### Listen-only Diagnostic
 
-### Bench ACK Test
-
-Kvaser/PCAN 단독 송신 테스트용 lab profile이다. Passive monitor는 ACK하지
-않으므로 Kvaser 단독 송신 상대가 될 수 없다. ACK/TX가 필요한 시험은 이 모드에서
-명시적으로 수행한다.
+no-ACK 물리 진단용 모드다. Kvaser/PCAN 단독 송신 counterpart가 아니며 제품 기본
+모드가 아니다.
 
 ## Process Responsibilities
 
@@ -55,7 +60,7 @@ Core는 QML model, AppController UI state, graph model, raw UI table을 소유�
 
 `vsm-ui.exe`는 CoreClient다.
 
-- Core가 `ViewChanged` cheap notification을 보낸다.
+- Core는 `ViewChanged` cheap notification만 보낸다.
 - UI는 `GetView(view_name, since_seq, limit)`로 필요한 view만 query한다.
 - UI는 raw typed stream, full `TypedRecordList`, storage `frameBytes`를 직접 받지
   않는다.
@@ -69,39 +74,31 @@ Core는 QML model, AppController UI state, graph model, raw UI table을 소유�
 - COM/USB를 열지 않는다.
 - host TX/control/Core mutation을 하지 않는다.
 - slow tap은 debug drop counter만 증가시키고 Core capture를 막지 않는다.
-- debug artifact는 production capture truth나 vehicle PASS의 대체물이 아니다.
-
-## Truth And View
-
-- Authoritative truth: `capture.stream` + `capture.index`.
-- CAN frame truth: accepted typed evidence에서 복원한 CAN frame.
-- Display view: `live_latest`, `decoded_can_tail`, `analysis_snapshot`,
-  `graph_bucket`, `transport_summary`, `profile_status`.
-- Hardware passive proof: external analyzer/scope/DTC artifacts.
-- Debug evidence: tap artifact.
+- debug artifact는 production capture truth나 vehicle PASS를 대체하지 않는다.
 
 ## Passive Gates
 
 VSM은 다음 상태를 분리한다.
 
-- `configured_passive`: capability상 TX/control/downlink가 없다.
-- `runtime_passive`: runtime 중 CAN_TX_RAW, passive violation, TXREQ violation이 0.
+- `configured_observe`: capability상 two-bus RX, no host TX/control/downlink.
+- `runtime_observe`: CAN_TX_RAW 0, unexpected MCP mode violation 0, TXREQ violation 0.
 - `hardware_evidence_claimed`: CSM capability가 evidence reference를 제공한다.
-- `external_artifact_verified`: analyzer/scope/DTC artifact가 VSM에서 검증됐다.
-- `verified_passive`: 위 조건이 모두 통과했다.
+- `external_artifact_verified`: analyzer/scope/DTC artifact가 VSM에서 검증된다.
+- `verified_passive`: 위 조건과 hardware proof가 모두 통과한다.
 
 `verified_passive`는 capability claim만으로 true가 될 수 없다.
 
 ## Two-Bus Product Rule
 
-제품은 2-bus RX-only passive monitor다. 1-bus product/acceptance는 없다. 그러나
+제품은 2-bus observe-only monitor다. 1-bus product/acceptance는 없다. 그러나
 1-bus 또는 missing-bus capability mismatch 경고는 반드시 유지한다. 이 경고를
 제거하면 잘못된 firmware upload 또는 wiring 오류를 숨긴다.
 
 ## USB Attach Quarantine
 
 `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload cleanup이다. CAN front-end
-drain을 정지하거나 MCP/transceiver mode를 바꾸는 상태가 아니다.
+전체 정지가 아니다. CSM은 quarantine 중 pre-session safe receive 상태를 유지하고,
+quarantine 완료 후에만 ACK-observe로 전환한다.
 
 ## Forbidden Boundaries
 
@@ -117,8 +114,9 @@ drain을 정지하거나 MCP/transceiver mode를 바꾸는 상태가 아니다.
 
 - UI 실행 시 child `vsm-capture-core.exe --profile passive_product`가 뜬다.
 - Debug Tap ON 시 세 번째 `vsm-debug-tap.exe`가 뜨고 COM/USB를 소유하지 않는다.
-- Transport detail은 `passive_safety_profile`, `passive_usb_lifecycle`,
-  passive violation/TXREQ violation, hardware evidence gate를 표시한다.
-- `scripts/check_vsm_boundary_rules.py --mode strict`가 forbidden boundary를
-  재발 방지한다.
+- Transport detail은 ACK-observe와 host TX/control disabled를 분리 표시한다.
+- Transport detail은 `passive_usb_lifecycle`, unexpected mode/TXREQ violation,
+  hardware evidence gate를 표시한다.
+- `scripts/check_vsm_boundary_rules.py --mode strict`가 forbidden boundary 재발을
+  차단한다.
 - Release build, targeted/full ctest, startup smoke가 통과한다.

@@ -43,7 +43,7 @@ bool hasControlPath(const TypedCapabilityRecord& capability) {
            hasBoardTxOrControl(capability);
 }
 
-bool hasVehicleImpactCapableRxBus(const TypedCapabilityRecord& capability) {
+bool hasUnexpectedVehicleImpactRxPolicy(const TypedCapabilityRecord& capability) {
     if (!capability.hasPassivePolicy) {
         return false;
     }
@@ -55,28 +55,24 @@ bool hasVehicleImpactCapableRxBus(const TypedCapabilityRecord& capability) {
         const int policyIndex = bus.busId < 2 ? int(bus.busId) : int(index);
         const bool hasPolicySlot = policyIndex >= 0 && policyIndex < 2;
         const quint8 busMode = hasPolicySlot ? capability.busMode[policyIndex] : quint8(0);
-        const bool modeIsPassive = busMode == kCsmBusModeListenOnly ||
-                                   busMode == kCsmBusModeHardwareSilent;
-        const bool canAffectBus = !hasPolicySlot ||
-                                  capability.busAckCapable[policyIndex] ||
-                                  capability.busErrorFrameCapable[policyIndex] ||
-                                  busMode == kCsmBusModeNormal ||
-                                  !modeIsPassive;
-        if (canAffectBus) {
+        const bool modeIsObserveCompatible = busMode == kCsmBusModeListenOnly ||
+                                             busMode == kCsmBusModeHardwareSilent ||
+                                             busMode == kCsmBusModeNormal;
+        if (!hasPolicySlot || !modeIsObserveCompatible) {
             return true;
         }
     }
     return false;
 }
 
-bool busPolicyIsPassive(const TypedCapabilityRecord& capability, int busId) {
+bool busPolicyIsObserveOnly(const TypedCapabilityRecord& capability, int busId) {
     if (!capability.hasPassivePolicy || busId < 0 || busId >= 2) {
         return false;
     }
     const quint8 busMode = capability.busMode[busId];
-    return (busMode == kCsmBusModeListenOnly || busMode == kCsmBusModeHardwareSilent) &&
-           !capability.busAckCapable[busId] &&
-           !capability.busErrorFrameCapable[busId];
+    return busMode == kCsmBusModeListenOnly ||
+           busMode == kCsmBusModeHardwareSilent ||
+           busMode == kCsmBusModeNormal;
 }
 
 bool hasRequiredTwoBusRxOnlyProductProfile(const TypedCapabilityRecord& capability) {
@@ -102,8 +98,8 @@ bool hasRequiredTwoBusRxOnlyProductProfile(const TypedCapabilityRecord& capabili
            bus1Rx &&
            bus0RxOnly &&
            bus1RxOnly &&
-           busPolicyIsPassive(capability, 0) &&
-           busPolicyIsPassive(capability, 1);
+           busPolicyIsObserveOnly(capability, 0) &&
+           busPolicyIsObserveOnly(capability, 1);
 }
 
 bool hardwareEvidenceClaimIsComplete(const TypedCapabilityRecord& capability) {
@@ -115,8 +111,7 @@ bool hardwareEvidenceClaimIsComplete(const TypedCapabilityRecord& capability) {
             !capability.galvanicIsolated[bus] ||
             !capability.powerOffPassive[bus] ||
             !capability.resetSafe[bus] ||
-            !capability.txdGated[bus] ||
-            capability.normalEnablePathPopulated[bus]) {
+            !capability.txdGated[bus]) {
             return false;
         }
     }
@@ -245,7 +240,7 @@ BoardConnectionState::Snapshot BoardConnectionState::computeSnapshot() const {
     out.preSessionPayloadReplayTotal = m_capabilitySeen ? m_capability.preSessionPayloadReplayTotal : 0;
 
     const bool activePath = m_capabilitySeen && hasHostActivePath(m_capability);
-    const bool vehicleImpactPath = m_capabilitySeen && hasVehicleImpactCapableRxBus(m_capability);
+    const bool vehicleImpactPath = m_capabilitySeen && hasUnexpectedVehicleImpactRxPolicy(m_capability);
     const bool twoBusRequirement = m_capabilitySeen && hasRequiredTwoBusRxOnlyProductProfile(m_capability);
     const bool passivePolicyProfile = m_capabilitySeen &&
         m_capability.hasPassivePolicy &&
