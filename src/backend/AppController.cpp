@@ -306,6 +306,9 @@ QString boardEventCodeText(quint16 code) {
     case 33: return QStringLiteral("MCP_TXREQ_VIOLATION");
     case 34: return QStringLiteral("TRANSCEIVER_SAFE_STATE_CHANGED");
     case 35: return QStringLiteral("USB_POWER_OR_RESET_SUSPECTED");
+    case 36: return QStringLiteral("CAN_FRONTEND_PRESESSION_HOLD");
+    case 37: return QStringLiteral("CAN_FRONTEND_SESSION_READY");
+    case 38: return QStringLiteral("CAN_FRONTEND_SESSION_INIT_FAILED");
     default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
     }
 }

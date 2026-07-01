@@ -8,7 +8,7 @@ and lifecycle isolation problem until proven otherwise.
 - USB open/close may only affect CDC/uplink/session state.
 - USB open/close must not replay old payload, enable host TX/control, or reset
   the CAN front-end. A controlled session transition may move the front-end from
-  pre-session safe receive to ACK-observe after quarantine, and must move it back
+  deferred CAN front-end hold to ACK-observe after quarantine/quiet window, and must move it back
   on session close.
 - If firmware suspects USB power/reset disturbance, it must latch and report
   `USB_POWER_OR_RESET_SUSPECTED`.

@@ -25,9 +25,10 @@
   are independently verified.
 - The product target is fixed at two CAN RX buses. A one-bus capability is a
   blocking mismatch, not an accepted passive SKU.
-- USB attach quarantine means CDC/uplink/session cleanup only. The CAN
-  front-end must remain in its pre-session safe receive state during quarantine
-  and may enter ACK-capable observe mode only after the session is stable.
+- USB attach quarantine means CDC/uplink/session cleanup only. Current CSM
+  passive firmware must defer CAN front-end initialization through USB power-up,
+  emit `CAN_FRONTEND_PRESESSION_HOLD`, then emit
+  `CAN_FRONTEND_SESSION_READY` before CAN_RX_SEGMENT evidence is trusted.
 - Typed evidence separation is mandatory: CAN RX, CAN TX audit, voltage raw, board health/event, capability, control ack.
 - Host-requested TX, `CONTROL_ACK`, `CAN_TX_RAW`, and feedback remain separate evidence.
 - Actual CAN TX success requires matching `CAN_TX_RAW`; passive product blocks host TX entirely.
@@ -40,7 +41,8 @@
 - Remove old-flow assumptions that treat debug gateway/control/full instrumentation as normal product behavior.
 - Productize passive diagnostics as `vsm-debug-tap.exe`: a non-owning Core IPC sidecar, distinct from the lab-only COM-owning gateway.
 - Keep build/test verification reproducible and do not claim vehicle passive safety without CSM capability plus hardware safety evidence.
-- Treat CSM `BOARD_HEALTH v7` USB lifecycle/passive readback counters and `BOARD_EVENT` 29..35 as first-class field evidence.
+- Treat CSM `BOARD_HEALTH v7` USB lifecycle/passive readback counters and
+  `BOARD_EVENT` 29..38 as first-class field evidence.
 - Separate ACK-capable observe from host TX/control: Kvaser/PCAN single-node
   transmit tests require the CSM session to be open and ACK-observe enabled, but
   `CAN_TX_RAW`/control/downlink must remain unavailable in Passive Product.

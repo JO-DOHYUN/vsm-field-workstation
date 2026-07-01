@@ -24,8 +24,8 @@ new file names.
 
 | Scenario | Current required behavior | Evidence counter/view | Failure mode if violated |
 | --- | --- | --- | --- |
-| Vehicle CAN connected before USB | CSM starts in pre-session safe receive and does not stage typed payload while host absent | host absent discard counters, host absent gap total | stale CAN payload replayed into next VSM capture or unsafe ACK before session |
-| USB plug | CSM enters uplink/session quarantine; only after quarantine may it enter ACK-observe | USB session open, DTR change, attach quarantine total | unsafe mode change during power/CDC instability |
+| Vehicle CAN connected before USB | CSM holds CAN front-end initialization and does not stage typed payload while host absent | host absent gap total, no CAN_RX_SEGMENT before session ready | stale CAN payload replayed into next VSM capture or unsafe ACK before session |
+| USB plug | CSM enters uplink/session quarantine, emits pre-session hold, waits quiet window, then initializes CAN front-end before ACK-observe | USB session open, DTR change, CAN_FRONTEND_PRESESSION_HOLD, CAN_FRONTEND_SESSION_READY | unsafe mode change during power/CDC instability |
 | USB unplug | CSM discards pending uplink payload and continues host-absent drain | USB session close reported on next open | old segment is emitted after reconnect |
 | VSM connect | Core owns COM read-only and asserts DTR only as declared session gate | runtime profile, transport policy | UI or debug process opens COM directly or write-capable |
 | Log start/stop | Capture writer owns `capture.stream/index`; UI reads views only | capture progress, diagnostics | UI state becomes capture truth owner |

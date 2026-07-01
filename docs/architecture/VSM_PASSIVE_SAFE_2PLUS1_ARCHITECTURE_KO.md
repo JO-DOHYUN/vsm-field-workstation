@@ -96,9 +96,9 @@ VSM은 다음 상태를 분리한다.
 
 ## USB Attach Quarantine
 
-`USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload cleanup이다. CAN front-end
-전체 정지가 아니다. CSM은 quarantine 중 pre-session safe receive 상태를 유지하고,
-quarantine 완료 후에만 ACK-observe로 전환한다.
+`USB_ATTACH_QUARANTINE` is CDC/uplink/session payload cleanup. Current CSM
+passive firmware defers CAN front-end initialization through USB power-up and
+trusts CAN_RX_SEGMENT evidence only after `CAN_FRONTEND_SESSION_READY`.
 
 ## Forbidden Boundaries
 
@@ -120,3 +120,14 @@ quarantine 완료 후에만 ACK-observe로 전환한다.
 - `scripts/check_vsm_boundary_rules.py --mode strict`가 forbidden boundary 재발을
   차단한다.
 - Release build, targeted/full ctest, startup smoke가 통과한다.
+
+## Current Additive Contract: Deferred CAN Front-End Init
+
+Current CSM Passive Product firmware defers MCP/built-in CAN initialization
+through USB power-up. `USB_ATTACH_QUARANTINE` remains CDC/uplink/session cleanup,
+but trusted CAN evidence now starts only after stable CDC/DTR session, stale
+payload clear, `CAN_FRONTEND_PRESESSION_HOLD`, configured quiet window, CAN
+front-end initialization success, `CAN_FRONTEND_SESSION_READY`, and ACK-observe
+armed with host TX/control/downlink still disabled.
+
+VSM passive diagnostics must show board events 29..38 as lifecycle evidence.

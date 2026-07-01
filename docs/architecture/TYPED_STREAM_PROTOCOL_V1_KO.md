@@ -268,14 +268,17 @@ USB lifecycle board events used by passive diagnostics:
 33 MCP_TXREQ_VIOLATION
 34 TRANSCEIVER_SAFE_STATE_CHANGED
 35 USB_POWER_OR_RESET_SUSPECTED
+36 CAN_FRONTEND_PRESESSION_HOLD
+37 CAN_FRONTEND_SESSION_READY
+38 CAN_FRONTEND_SESSION_INIT_FAILED
 ```
 
 `BOARD_HEALTH v7` extends v6 with passive lifecycle counters:
 host-absent discard per bus, host-absent FIFO/MCP errors, host-absent duration,
 MCP passive readback count, readback violation count, TXREQ violation count, and
 USB CDC DTR change count. In the product profile, readback checks the configured
-safe mode: pre-session safe receive before host session, ACK-observe normal mode
-after session quarantine. VSM must treat unexpected mode/TXREQ violation as
+safe mode: no initialized CAN front-end before session-ready, ACK-observe normal mode
+after session quarantine and event 37. VSM must treat unexpected mode/TXREQ violation as
 product-blocking evidence, not as display sampling loss.
 
 ## CAPABILITY v6 Passive Evidence Claims

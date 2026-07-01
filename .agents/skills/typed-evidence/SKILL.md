@@ -28,9 +28,10 @@ description: Use when working on board typed stream parsing, typed capture stora
 - ACK capability is not host TX/control capability. Passive Product may ACK
   after a stable CSM host session while host-originated CAN TX/control/downlink
   remains forbidden.
-- USB attach quarantine is CDC/uplink/session cleanup only. CAN front-end must
-  remain in pre-session safe receive during quarantine and may enter ACK-observe
-  only after session stability.
+- USB attach quarantine is CDC/uplink/session cleanup only. Current CSM passive
+  firmware must defer CAN front-end initialization through USB power-up and may
+  enter ACK-observe only after session stability, quiet window, and
+  `CAN_FRONTEND_SESSION_READY`.
 
 ## Workflow
 1. Read `BRIEF.md`, `docs/architecture/PROJECT_CONSTITUTION_KO.md`, and `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`.

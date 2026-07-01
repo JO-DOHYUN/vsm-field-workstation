@@ -23,7 +23,7 @@ observe state.
   uplink/session payload state, emit capability, USB session event, host-absent
   summary, then board health.
 - USB attach quarantine must not replay old CAN payload or enable host
-  TX/control. It may switch from pre-session safe receive to ACK-observe only
+  TX/control. It may switch from deferred CAN front-end hold to ACK-observe only
   after quarantine completes.
 - Readback guard must latch unexpected MCP mode or TXREQ violations.
 - Capability hardware fields are claims/references and must not be interpreted

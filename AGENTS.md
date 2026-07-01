@@ -44,6 +44,9 @@ workstation을 완성하는 것이다.
   missing/one-bus capability mismatch 경고는 반드시 유지한다.
 - `USB_ATTACH_QUARANTINE`은 CDC/uplink/session payload quarantine이며 CAN
   front-end drain 정지가 아니다.
+- 현재 CSM passive firmware는 USB power-up 동안 CAN front-end initialization을
+  지연하고, `CAN_FRONTEND_PRESESSION_HOLD` 및 `CAN_FRONTEND_SESSION_READY`
+  event로 ACK-observe arm 시점을 증명해야 한다.
 - Passive Product는 host TX/control/downlink를 제공하지 않는다. 단, 안정된
   CSM host session 이후 ACK-capable observe mode는 제품 동작이다. ACK 능력과
   `CAN_TX_RAW`/control 능력을 절대 같은 것으로 취급하지 않는다.
