@@ -1,60 +1,58 @@
-# VSM Core Data/View/Tap Architecture
+# VSM Core Data / View Query / Debug Tap Architecture
 
-## Passive-Safe Runtime Profile
-VSM product default is `passive_product`.
+## Architecture Summary
 
-- UI process: `vsm-ui.exe` / `can_monitor_qml_reboot.exe`
-- Core process: `vsm-capture-core.exe --profile passive_product`
-- Optional debug/tap: default OFF, `vsm-debug-tap.exe` non-owning sidecar
-- Serial open: read-only
-- DTR/RTS: DTR is allowed only as a CSM-declared Arduino CDC session gate; RTS
-  remains no-touch.
-- Host TX/control/lab gateway: disabled
-- `profile_status` is a Core materialized view and exposes this runtime contract.
+VSM 제품 구조는 단순한 파일 분리가 아니라 소유권 분리다.
 
-`full_instrumented` is bench/lab only. It may open serial read/write, touch DTR/RTS,
-send host TX/control, or run a COM-owning gateway, but it must not be used as a
-vehicle passive product acceptance result.
-
-## 목적
-VSM live production 구조의 장기 기준은 단순한 3개 프로세스 분리가 아니라
-`Core-owned Data Plane + View Query Plane + Optional Debug Tap Plane`이다.
-
-물리 실행은 장기적으로 `vsm-capture-core.exe + vsm-ui.exe`를 기본으로 하고,
-debug/gateway/tap은 필요할 때만 붙인다.
-
-## 핵심 원칙
-- `capture.stream`과 `capture.index`만 authoritative truth다.
-- raw ledger, live latest, analysis snapshot, graph bucket은 모두 재생성 가능한 materialized view다.
-- Core만 COM/USB를 소유한다.
-- UI는 raw/typed stream을 직접 받지 않는다.
-- UI는 `ViewChanged` 알림을 받고 필요한 view만 query한다.
-- Core는 이미 만들어진 bounded view만 반환한다. query 중 full scan/replay 계산을 하지 않는다.
-- Debug/Gateway는 production path가 아니라 non-blocking tap이며 기본 OFF다.
+```text
+CSM typed evidence bytes
+  -> Core-owned Data Plane
+       SerialDrainRuntime
+       TypedFrameParserRuntime
+       CaptureWriterRuntime
+       AnalysisRuntime
+       DecodedTailRuntime
+       MaterializedViewStore
+  -> View Query Plane
+       ViewChanged
+       GetView
+       AppController facade
+       QML bounded models
+  -> Optional Debug Tap Plane
+       vsm-debug-tap.exe
+       Core IPC read-only snapshots
+```
 
 ## Core-Owned Data Plane
-`vsm-capture-core.exe` 또는 현재 전환기의 in-process `CaptureCoreRuntime`이 data plane owner다.
 
-책임:
-- USB/serial drain
-- typed SOF/length/CRC/seq 검증
-- append-only `capture.stream/index` 기록과 finalize
-- raw ledger segment/index 기록
-- analysis truth state 계산
-- bounded materialized view 생성
-- host control request와 board evidence audit 보존
+Core is the only owner of COM/USB and authoritative capture truth.
 
-금지:
-- QML 의존
-- AppController 의존
-- UI table/graph model 보유
-- full `TypedRecordList`를 UI/main thread로 fanout
-- debug/profiler 문자열을 hot path에서 생성
+Responsibilities:
+
+- open serial according to `RuntimeProfile`;
+- drain raw typed bytes;
+- validate SOF/length/CRC/typed sequence;
+- append accepted typed frames to `capture.stream/index`;
+- classify parser/storage/drain faults;
+- feed analysis with every accepted CAN RX frame or report `analysis_overrun`;
+- build bounded materialized views;
+- publish cheap `ViewChanged` notifications.
+
+Forbidden:
+
+- QML dependency;
+- AppController dependency;
+- direct UI model mutation;
+- full typed batch fanout to UI/main thread;
+- debug/profiler string generation in the hot path;
+- COM-owning gateway in Passive Product.
 
 ## View Query Plane
-UI는 CoreClient다.
+
+UI is a consumer of views, not a consumer of raw typed stream.
 
 Core push:
+
 ```text
 ViewChanged {
   view_name
@@ -66,6 +64,7 @@ ViewChanged {
 ```
 
 UI pull:
+
 ```text
 GetView {
   view_name
@@ -75,6 +74,7 @@ GetView {
 ```
 
 Core response:
+
 ```text
 ViewSnapshot {
   view_name
@@ -87,62 +87,70 @@ ViewSnapshot {
 }
 ```
 
-View 목록:
+Allowed production views:
+
 - `core_health`
+- `profile_status`
 - `transport_summary`
+- `passive_safety_profile`
+- `passive_usb_lifecycle`
 - `capture_progress`
 - `analysis_snapshot`
 - `live_latest`
-- `raw_ledger_tail`
+- `decoded_can_tail`
 - `graph_bucket`
 - `control_audit`
 - `fatal_diagnostics`
 
+Query must return already materialized bounded data. It must not replay or scan
+the full capture on demand.
+
 ## Optional Debug Tap Plane
-Debug/Gateway는 production capture를 대체하지 않는다.
 
-규칙:
-- normal mode에서는 Core가 COM/USB를 단독 소유한다.
-- gateway mode는 normal production mode와 상호 배타다.
-- tap은 fixed cap과 drop counter를 가진다.
-- tap backpressure는 Core capture data plane으로 전파되면 안 된다.
-- debug artifact PASS는 production `capture.stream/index` PASS를 대체하지 않는다.
+`vsm-debug-tap.exe` is a product diagnostic sidecar.
 
-### Productized Debug Tap Addendum
+- default OFF;
+- connects to Core IPC only;
+- never opens COM/USB;
+- never sends host TX/control;
+- never mutates Core state;
+- bounded output files: `debug_tap_trace.jsonl`, `debug_tap_summary.json`;
+- drop/backpressure affects debug artifact only.
 
-- Passive Product diagnostics uses `vsm-debug-tap.exe`, not the COM-owning
-  gateway.
-- `vsm-debug-tap.exe` is a Core IPC client only. It never opens COM/USB, never
-  sends host TX/control, and never updates Core state.
-- The old `vsm_debug_gateway.py` remains Full/Instrumented lab-only.
-- The tap records bounded Core view snapshots and lifecycle events to
-  `debug_tap_trace.jsonl`; if the tap is slow or stopped, only debug evidence is
-  degraded.
-- The detailed product contract is
-  [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]].
+The old COM-owning gateway remains lab-only and is not a Passive Product
+diagnostic path.
+
+## Data Ownership Table
+
+| Data | Owner | Consumer | Drop policy |
+| --- | --- | --- | --- |
+| Raw USB bytes | Core drain | Parser | Queue full is fatal host-drain overrun |
+| Accepted typed bytes | Capture writer | Replay/import/evidence extraction | Writer overrun invalidates capture |
+| CAN RX analysis input | Analysis runtime | Analysis only | Overrun increments analysis truth loss |
+| Live latest | MaterializedViewStore | UI query, debug tap | Display coalesce/drop allowed |
+| Decoded CAN tail | DecodedTailRuntime | UI query, debug tap | Tail drop is display-only counter |
+| Transport diagnostics | Runtime owners | UI/debug display | Diagnostics do not own runtime state |
+| Debug trace | Debug tap process | Operator/debug tools | Drop with debug counter only |
 
 ## Migration Rule
-Live/capture-core 변경은 [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]의 owner/consumer/drop policy와 금지 경계를 먼저 만족해야 한다.
 
-기능 구현 중 편의를 위해 AppController나 Qt signal 경로에 Core 책임을 임시로 쌓지 않는다.
-새 live/capture 기능은 먼저 data plane owner, view owner, tap 여부를 정하고 들어간다.
+Any live/capture change must:
 
-허용되는 전환 상태:
-- 아직 한 프로세스여도 `CaptureCoreRuntime` API가 process-neutral하면 허용한다.
-- UI가 Core API/query contract만 사용하면 허용한다.
-- legacy in-process fallback은 30s/10m/1h HIL 통과 후 제거 대상으로 표시한다.
+1. define data flow;
+2. define owner/consumer/drop policy;
+3. search existing owner violations;
+4. add boundary DTO/interface;
+5. move the function;
+6. delete old route;
+7. add static/test guard.
 
-금지되는 전환 상태:
-- UI가 raw typed stream consumer가 됨.
-- View query가 즉석 full scan/replay 계산을 수행함.
-- Debug/Gateway writer가 normal live mode에서 실행됨.
-- projection drop을 parser/storage/CAN truth loss처럼 표시함.
+Transitional code is allowed only when bounded, diagnosed, and listed by the
+boundary scan. It must not be claimed as final architecture completion.
 
 ## Acceptance
-- Core-only capture 30s/10m/1h memory plateau.
-- UI connected 상태에서도 Core memory plateau.
-- UI disconnected/frozen 상태에서도 Core capture seq gap 0.
-- raw ledger/capture parity OK.
-- parser CRC/length/seq fault 0.
-- CSM `ring_clear=0`, `segment_enqueue_fail=0`.
-- debug off 상태에서 tap/gateway/profiler writer path 실행 0.
+
+- Core capture continues while UI is slow, frozen, or disconnected.
+- UI receives only view notifications/query responses.
+- Debug Tap ON/OFF does not alter Core capture or vehicle bus.
+- Capture truth can be replayed to rebuild derived views.
+- Memory plateau is proven by 30s/10m/1h HIL when available.

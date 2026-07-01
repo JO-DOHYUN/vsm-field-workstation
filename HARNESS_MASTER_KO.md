@@ -1,7 +1,7 @@
 ---
 kind: master
 scope: harness
-updated: 2026-06-25
+updated: 2026-07-01
 read_when:
   - harness redesign
   - instruction conflict
@@ -10,73 +10,84 @@ read_when:
 ---
 # HARNESS_MASTER_KO
 
-2026-06-30 passive diagnostics 기준: Passive product에서 디버그는 COM-owning gateway가 아니라 `vsm-debug-tap.exe` Core IPC sidecar로만 실행한다. 근거 문서: [[docs/architecture/VSM_PASSIVE_DEBUG_TAP_PRODUCT_ARCHITECTURE_KO]], [[history/decisions/2026-06-30-passive-debug-tap-productization]].
+이 문서는 VSM harness의 상위 구조다. routine 코드 수정 때는 읽지 않고,
+하네스/문서/skill 경계 변경 때만 읽는다.
 
-이 문서는 하네스 구조 변경 전용 상위 목적 문서다.
-routine 코드 수정, 단순 build fix, UI patch에서는 읽지 않는다.
+## Harness Goal
 
-## 1. 목적
-Codex 작업이 긴 이력과 실패 로그에 끌려가지 않고, 현재 기준본과 직접 관련된 문서만 읽고 안정적으로 작업하게 한다.
+Codex 작업이 과거 실패 이력이나 임시 패치 흐름으로 되돌아가지 않도록 현재 제품
+기준을 짧고 명확하게 고정한다. 현재 제품 기준은 Passive-Safe 2+1이다.
 
-하네스는 다음 역할만 가진다.
+## Product Baseline
 
-- 진입 순서 정의
-- skill routing 정의
-- 현재 기준본과 history 분리
-- 검증 ladder와 보고 기준 정의
-- 반복 실패가 난 작업축을 독립 skill로 분리
+- VSM field/product default:
+  `vsm-ui.exe + vsm-capture-core.exe`.
+- Optional debug:
+  `vsm-debug-tap.exe`, default OFF, Core IPC read-only sidecar.
+- CSM target:
+  2-bus RX-only Passive Product firmware.
+- Authoritative evidence:
+  `capture.stream/index`.
+- Hardware PASS:
+  external analyzer/scope/DTC artifact verification required.
 
-## 2. 계층 철학
-- `AGENTS.md`: 짧은 상위 운영 규칙, 읽기 순서, routing, 보고 형식.
-- `BRIEF.md`: 현재 기준본, 보존 기능, 현재 목표, 즉시 다음 작업.
-- `.agents/skills/*`: 반복 가능한 작업별 절차와 불변조건.
-- `docs/`: 설계 근거, runbook, protocol/interface contract.
-- `history/`: 오래된 기준본, 실패 기록, 결정 배경, rollback 조건.
+## Document Roles
 
-## 3. Capture-Core Memory Skill 분리 이유
-VSM 장시간 high-load 멈춤/메모리 폭증은 단순 UI 렌더링 문제가 아니라 live capture hot path의 ownership, copy, queue, Qt event backlog 문제일 수 있다.
+- `AGENTS.md`: stable top-level rules, read order, routing.
+- `START_HERE_KO.md`: current project entry and product identity.
+- `BRIEF.md`: current baseline, must preserve, immediate next work.
+- `INDEX.md`: document hub.
+- `.agents/skills/*`: narrow reusable workflows.
+- `docs/`: architecture, protocol, runbooks, acceptance contracts.
+- `history/`: previous attempts, decisions, rollback notes.
 
-따라서 아래 작업은 기존 `typed-evidence`나 `graph-performance`에 섞지 않고 `capture-core-memory`로 라우팅한다.
+## Skill Routing
 
-- `TypedRecord/QByteArray` live hot path 제거
-- raw byte slab/pool ownership
-- bounded queue와 overrun diagnostics
-- writer/analysis/projection snapshot fanout
-- process memory telemetry
-- 10분/1시간 high-load memory plateau 검증
+- Harness/doc boundary: `harness-maint`.
+- Typed evidence/protocol/control gates: `typed-evidence`.
+- Capture hot path, bounded queue, memory plateau: `capture-core-memory`.
+- Build/test/startup smoke: `qt-build-verify`.
+- Replay source semantics: `replay-semantics`.
+- Graph renderer/performance: `graph-performance`.
 
-`typed-evidence`는 evidence 의미와 protocol 보존을, `graph-performance`는 renderer/graph 의미 보존을 담당한다.
+## Mandatory Refactor Order
 
-## 4. 변경 판단 순서
-하네스를 바꿀 때는 아래 순서로 판단한다.
+For live/capture/process/passive architecture work:
 
-1. 상위 불변조건이면 `AGENTS.md`.
-2. 현재 기준본이면 `BRIEF.md`.
-3. 반복 workflow면 `.agents/skills/`.
-4. 설계 근거면 `docs/`.
-5. 결정 배경과 rollback이면 `history/decisions/`.
+1. define data-flow path;
+2. define owner / consumer / drop policy;
+3. search owner violations;
+4. add boundary DTO/interface;
+5. move function behind the boundary;
+6. delete old route;
+7. add static/test guard.
 
-## 5. 변경 정책
-- 기능 개발과 하네스 변경을 같은 slice에 섞지 않는다.
-- 상위 문서는 짧게 유지하고 세부 절차는 skill로 내린다.
-- skill description은 서로 겹치지 않게 쓴다.
-- 새 skill을 만들면 `AGENTS.md`, `INDEX.md`, 관련 architecture/runbook, decision history를 함께 갱신한다.
-- 문서 링크는 실제 파일 위치와 맞춘다.
+File splitting without ownership closure is not accepted.
 
-## 6. Rollback 기준
-아래 문제가 생기면 이전 하네스 구조 또는 더 작은 scope로 되돌린다.
+## Passive Product Forbidden Patterns
 
-- Codex가 BRIEF를 읽지 않고 과거 이력으로 판단한다.
-- skill trigger가 겹쳐 같은 작업에서 다른 불변조건을 적용한다.
-- build/replay/graph/typed/capture-core 작업에서 필수 invariant가 누락된다.
-- 문서 위치가 실제 파일 구조와 맞지 않아 검색 시간이 늘어난다.
-- capture-core memory 작업이 다시 UI throttle 수준으로 축소된다.
+- Production VSM serial `ReadWrite` open outside `RuntimeProfile`.
+- Passive Product RTS assert, host TX, control cycle, gateway TCP.
+- UI consuming raw typed stream or full live `TypedRecordList`.
+- AppController assembling transport runtime state from diagnostics payload.
+- Debug/gateway/profiler writers running in normal production mode.
+- One-bus passive product/acceptance.
+- Claiming `verified_passive` from CSM capability fields without external proof.
 
-## 7. 연결
-- 현재 기준본: [[BRIEF]]
-- 문서 허브: [[INDEX]]
-- 폴더 가이드: [[docs/PROJECT_FOLDER_GUIDE_KO]]
-- build 검증 정책: [[docs/ai_harness/BUILD_VERIFY_POLICY_KO]]
-- 이번 결정: [[history/decisions/2026-06-25-capture-core-memory-harness-remodel]]
-- 2026-06-26 추가 결정: VSM 장기 live 구조는 Core-owned Data Plane / View Query Plane / Optional Debug Tap Plane 기준으로 판단한다. [[docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO]], [[history/decisions/2026-06-26-core-data-view-tap-architecture]]
-- 2026-06-27 추가 결정: VSM live/capture-core 리팩토링은 owner/data-flow/drop-policy를 먼저 고정하고 `scripts/check_vsm_boundary_rules.py`로 구 경계 재발을 점검한다. [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]], [[history/decisions/2026-06-27-vsm-owner-boundary-harness-refactor]]
+## Rollback Rule
+
+If a harness change causes Codex to ignore current product identity, skip required
+verification, conflate debug evidence with capture truth, or route passive work
+through lab/full-instrumented paths, revert that harness slice and restore this
+contract.
+
+## Current Required Links
+
+- `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`
+- `docs/architecture/PROJECT_CONSTITUTION_KO.md`
+- `docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO.md`
+- `docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO.md`
+- `docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO.md`
+- `docs/reviews/passive_product_boundary_audit.md`
+- `docs/hardware/CSM_PASSIVE_FRONTEND_REQUIREMENTS.md`
+- `docs/hardware/CSM_PASSIVE_FRONTEND_ACCEPTANCE.md`

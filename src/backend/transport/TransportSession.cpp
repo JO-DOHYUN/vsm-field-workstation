@@ -728,6 +728,16 @@ QVariantList TransportSession::rows() const {
                 .arg(m_hostWrittenFrames)
                 .arg(m_hostDroppedFrames),
             m_hostDroppedFrames > 0),
+        row(QStringLiteral("bench_ack_policy"),
+            QStringLiteral("Bench ACK / TX policy"),
+            m_runtimeProfileKey == QStringLiteral("passive_product") ? QStringLiteral("INFO") : QStringLiteral("WARN"),
+            m_runtimeProfileKey == QStringLiteral("passive_product")
+                ? QStringLiteral("passive monitor does not ACK")
+                : QStringLiteral("lab/full profile may ACK or transmit"),
+            m_runtimeProfileKey == QStringLiteral("passive_product")
+                ? QStringLiteral("Kvaser/PCAN single-node transmit tests need another active ACK node or an explicit lab ACK/TX profile; this is separate from vehicle USB hotplug safety.")
+                : QStringLiteral("Do not use ACK/TX-capable lab profile as vehicle passive acceptance evidence."),
+            m_runtimeProfileKey != QStringLiteral("passive_product")),
         row(QStringLiteral("board_health"),
             QStringLiteral("Board health"),
             boardLevel,

@@ -6,7 +6,8 @@
 - CSM firmware workspace is separate; use it only for explicit firmware work.
 - Runtime data root: `replay_data/`.
 - Active model/rules baseline: `data/vms_model_turn77_system_drive_merged_realcan_refresh2_final.json`.
-- Product direction: evidence-first CAN monitor/logger/replay/decode workstation paired with the CSM typed evidence gateway.
+- Product identity: 2-bus Passive-Safe evidence workstation paired with the CSM
+  typed evidence front-end. See `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`.
 
 ## Must Preserve
 - Field/product default is Passive-Safe 2+1: `vsm-ui.exe + vsm-capture-core.exe`, optional debug/tap plane default OFF.
@@ -35,6 +36,8 @@
 - Productize passive diagnostics as `vsm-debug-tap.exe`: a non-owning Core IPC sidecar, distinct from the lab-only COM-owning gateway.
 - Keep build/test verification reproducible and do not claim vehicle passive safety without CSM capability plus hardware safety evidence.
 - Treat CSM `BOARD_HEALTH v7` USB lifecycle/passive readback counters and `BOARD_EVENT` 29..35 as first-class field evidence.
+- Separate Kvaser/PCAN bench ACK/TX testing from vehicle passive monitoring:
+  Passive Product does not ACK and is not a single-node transmitter counterpart.
 
 ## Immediate Next Work
 - Finish code boundary cleanup for Passive Product default.

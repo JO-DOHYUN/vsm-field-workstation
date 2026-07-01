@@ -465,7 +465,7 @@ private slots:
         drainTrace.insert(QStringLiteral("latest_handoff_pending_keys"), QStringLiteral("14"));
         session.updateDrainEventTrace(drainTrace);
         const QVariantList rows = session.rows();
-        QCOMPARE(rows.size(), 17);
+        QCOMPARE(rows.size(), 18);
         QCOMPARE(rows.at(0).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_safety_profile"));
         QCOMPARE(rows.at(0).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
         QCOMPARE(rows.at(1).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("capture_storage"));
@@ -478,8 +478,10 @@ private slots:
         QVERIFY(rows.at(5).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("processed 100")));
         QCOMPARE(rows.at(6).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("host_tx_queue"));
         QCOMPARE(rows.at(6).toMap().value(QStringLiteral("blocking")).toBool(), true);
-        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_health"));
-        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_usb_lifecycle"));
+        QCOMPARE(rows.at(7).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("bench_ack_policy"));
+        QVERIFY(rows.at(7).toMap().value(QStringLiteral("detail")).toString().contains(QStringLiteral("Kvaser/PCAN")));
+        QCOMPARE(rows.at(8).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_health"));
+        QCOMPARE(rows.at(9).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("passive_usb_lifecycle"));
         const QVariantMap csmUplinkRow = rowByKey(rows, QStringLiteral("csm_uplink"));
         QCOMPARE(csmUplinkRow.value(QStringLiteral("level")).toString(), QStringLiteral("WARN"));
         QVERIFY(csmUplinkRow.value(QStringLiteral("detail")).toString().contains(QStringLiteral("large_pool 9/40")));
@@ -505,8 +507,8 @@ private slots:
         QCOMPARE(session.level(), QStringLiteral("ERR"));
         QCOMPARE(rowByKey(session.rows(), QStringLiteral("csm_uplink")).value(QStringLiteral("blocking")).toBool(), true);
 
-        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_events"));
-        QCOMPARE(rows.at(10).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("OK"));
+        QCOMPARE(rows.at(11).toMap().value(QStringLiteral("key")).toString(), QStringLiteral("board_events"));
+        QCOMPARE(rows.at(11).toMap().value(QStringLiteral("level")).toString(), QStringLiteral("OK"));
         session.noteBoardEvent(9, 0x0618, 13, 123456);
         const QVariantList eventRows = session.rows();
         const QVariantMap eventRow = rowByKey(eventRows, QStringLiteral("board_events"));
