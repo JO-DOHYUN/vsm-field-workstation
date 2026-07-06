@@ -271,6 +271,7 @@ USB lifecycle board events used by passive diagnostics:
 36 CAN_FRONTEND_PRESESSION_HOLD
 37 CAN_FRONTEND_SESSION_READY
 38 CAN_FRONTEND_SESSION_INIT_FAILED
+39 CAN_FRONTEND_FAULT_HOLD
 ```
 
 `BOARD_HEALTH v7` extends v6 with passive lifecycle counters:

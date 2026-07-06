@@ -31,6 +31,24 @@ QJsonObject buildInfoJson() {
     return QJsonObject::fromVariantMap(BuildMetadata::toVariantMap(BuildMetadata::current()));
 }
 
+QJsonObject summarizeJsonObject(const QJsonObject& object) {
+    QJsonArray keys;
+    QJsonObject arraySizes;
+    for (auto it = object.constBegin(); it != object.constEnd(); ++it) {
+        keys.append(it.key());
+        if (it.value().isArray()) {
+            arraySizes.insert(it.key(), it.value().toArray().size());
+        } else if (it.value().isObject()) {
+            arraySizes.insert(it.key(), QStringLiteral("object"));
+        }
+    }
+    return QJsonObject{{QStringLiteral("top_level_keys"), keys},
+                       {QStringLiteral("top_level_key_count"), object.size()},
+                       {QStringLiteral("array_sizes"), arraySizes},
+                       {QStringLiteral("approx_compact_bytes"),
+                        int(QJsonDocument(object).toJson(QJsonDocument::Compact).size())}};
+}
+
 void writeStdoutJson(const QJsonObject& object) {
     QTextStream stream(stdout);
     stream << QString::fromUtf8(QJsonDocument(object).toJson(QJsonDocument::Compact)) << Qt::endl;
@@ -219,7 +237,7 @@ private slots:
                                 {QStringLiteral("view_name"), viewName},
                                 {QStringLiteral("changed"), changed},
                                 {QStringLiteral("change"), change},
-                                {QStringLiteral("snapshot"), snapshot}});
+                                {QStringLiteral("snapshot_summary"), summarizeJsonObject(snapshot)}});
     }
 
     void onIpcError(quint64 requestId, const QString& error, const QString& detail) {

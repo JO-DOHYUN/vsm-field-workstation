@@ -309,6 +309,7 @@ QString boardEventCodeText(quint16 code) {
     case 36: return QStringLiteral("CAN_FRONTEND_PRESESSION_HOLD");
     case 37: return QStringLiteral("CAN_FRONTEND_SESSION_READY");
     case 38: return QStringLiteral("CAN_FRONTEND_SESSION_INIT_FAILED");
+    case 39: return QStringLiteral("CAN_FRONTEND_FAULT_HOLD");
     default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
     }
 }
@@ -2869,6 +2870,15 @@ AppController::AppController(QObject* parent) : QObject(parent) {
                     setStatus(active
                         ? QStringLiteral("Typed capture recording: %1").arg(path)
                         : QStringLiteral("Typed capture finalized: %1").arg(path));
+                    if (!active && m_disconnectAfterCaptureFinalize) {
+                        m_disconnectAfterCaptureFinalize = false;
+                        QString stopError;
+                        if (!m_coreProcessClient.stopTransport(&stopError)) {
+                            setStatus(stopError);
+                        } else {
+                            setStatus(QStringLiteral("core transport stop requested after capture finalize"));
+                        }
+                    }
                 }
                 if (progressDue || stateChanged) {
                     m_logRecordedBytes = bytesWritten;
@@ -8748,6 +8758,19 @@ void AppController::connectPort(const QString& portName) {
 
 void AppController::disconnectPort() {
     prepareControlSafeStopForDisconnect(QStringLiteral("operator disconnect safety stop"));
+    if (m_logRecordingActive || m_logStopping) {
+        m_disconnectAfterCaptureFinalize = true;
+        if (m_logRecordingActive) {
+            stopLog();
+        } else {
+            setStatus(QStringLiteral("capture finalize already in progress; transport stop is pending"));
+        }
+        return;
+    }
+    if (m_logSaving) {
+        setStatus(QStringLiteral("log file save is in progress; transport stop is deferred"));
+        return;
+    }
     QString error;
     if (!m_coreProcessClient.stopTransport(&error)) {
         setStatus(error);
@@ -9955,6 +9978,8 @@ void AppController::stopLog() {
                                                                 &error);
         if (!stopQueued) {
             setStatus(error);
+            m_logStopping = false;
+            requestLogStateRefresh(true);
             return;
         }
         setStatus(QStringLiteral("Typed capture finalize requested"));

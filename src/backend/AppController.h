@@ -1110,6 +1110,7 @@ private:
     bool m_logStopping = false;
     bool m_logSaving = false;
     bool m_logTypedSession = false;
+    bool m_disconnectAfterCaptureFinalize = false;
     QString m_logTempPath;
     QString m_logTempMetaPath;
     QString m_logTempModelPath;

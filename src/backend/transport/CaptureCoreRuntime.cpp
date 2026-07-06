@@ -184,6 +184,7 @@ QJsonObject boardEventToJson(const TypedBoardEventRecord& event) {
         case 36: return QStringLiteral("CAN_FRONTEND_PRESESSION_HOLD");
         case 37: return QStringLiteral("CAN_FRONTEND_SESSION_READY");
         case 38: return QStringLiteral("CAN_FRONTEND_SESSION_INIT_FAILED");
+        case 39: return QStringLiteral("CAN_FRONTEND_FAULT_HOLD");
         default: return QStringLiteral("BOARD_EVENT_%1").arg(code);
         }
     };

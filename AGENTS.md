@@ -118,6 +118,7 @@ workstation을 완성하는 것이다.
 핵심 계약 문서:
 
 - `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`
+- `docs/architecture/VSM_CSM_FINAL_PRODUCT_COMPLETION_TARGET_KO.md`
 - `docs/architecture/PROJECT_CONSTITUTION_KO.md`
 - `docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO.md`
 - `shared/protocol/typed_stream_v1.md`

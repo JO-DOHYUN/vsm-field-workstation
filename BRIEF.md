@@ -8,6 +8,7 @@
 - Active model/rules baseline: `data/vms_model_turn77_system_drive_merged_realcan_refresh2_final.json`.
 - Product identity: 2-bus Passive-Safe evidence workstation paired with the CSM
   typed evidence front-end. See `docs/architecture/VSM_CSM_PRODUCT_IDENTITY_KO.md`.
+- Completion target: `docs/architecture/VSM_CSM_FINAL_PRODUCT_COMPLETION_TARGET_KO.md`.
 
 ## Must Preserve
 - Field/product default is Passive-Safe 2+1: `vsm-ui.exe + vsm-capture-core.exe`, optional debug/tap plane default OFF.
@@ -65,6 +66,7 @@
 - [[START_HERE_KO]]
 - [[INDEX]]
 - [[docs/architecture/VSM_PASSIVE_SAFE_2PLUS1_ARCHITECTURE_KO]]
+- [[docs/architecture/VSM_CSM_FINAL_PRODUCT_COMPLETION_TARGET_KO]]
 - [[docs/architecture/VSM_CORE_DATA_VIEW_TAP_ARCHITECTURE_KO]]
 - [[docs/architecture/VSM_DATA_OWNERSHIP_BOUNDARY_RULES_KO]]
 - [[docs/architecture/TYPED_STREAM_PROTOCOL_V1_KO]]

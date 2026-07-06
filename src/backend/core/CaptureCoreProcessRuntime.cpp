@@ -493,6 +493,23 @@ void CaptureCoreProcessRuntime::shutdownCaptureWriterRuntime() {
     if (m_captureWriterRuntime) {
         setPipelineCaptureEnabled(false, Qt::BlockingQueuedConnection);
         drainCaptureQueueSync();
+        CanMonitorTransport::TypedCaptureWriterRuntime::StorageUpdate finalizeUpdate;
+        QMetaObject::invokeMethod(m_captureWriterRuntime,
+                                  [worker = QPointer<CanMonitorTransport::TypedCaptureWriterWorkerRuntime>(m_captureWriterRuntime),
+                                   &finalizeUpdate]() {
+                                      if (worker) {
+                                          finalizeUpdate = worker->finalizeStorageIfActiveSync(
+                                              QJsonObject{{QStringLiteral("finalize_reason"),
+                                                           QStringLiteral("core_capture_writer_shutdown")}});
+                                      }
+                                  },
+                                  Qt::BlockingQueuedConnection);
+        if (finalizeUpdate.stateChanged || finalizeUpdate.progressDue || !finalizeUpdate.ok) {
+            publishCaptureStorageUpdate(0, finalizeUpdate);
+            CanMonitorTransport::TypedCaptureWriterRuntime::Status status;
+            status.active = finalizeUpdate.active;
+            updateCaptureProgressView(status, &finalizeUpdate);
+        }
         QMetaObject::invokeMethod(m_captureWriterRuntime,
                                   &CanMonitorTransport::TypedCaptureWriterWorkerRuntime::resetQueue,
                                   Qt::BlockingQueuedConnection);
