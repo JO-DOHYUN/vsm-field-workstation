@@ -192,21 +192,47 @@ RawLedgerRuntime::Diagnostics RawLedgerRuntime::diagnostics() const {
 
 QByteArray RawLedgerRuntime::makeSegmentPayloadFromFrame(const FrameRecord& frame) {
     QByteArray payload;
-    payload.reserve(int(kTypedCanRxSegmentHeaderSize + kTypedCanRxSegmentEntrySize));
-    const quint64 captureSeq = frame.hasCaptureSeq ? frame.captureSeq : 0;
-    wr64(payload, 0);
-    wr64(payload, captureSeq);
-    wr16(payload, 1);
-    payload.append(char(kTypedCanRxSegmentEntrySize));
-    payload.append(char(frame.hasCaptureSeq ? 0x01 : 0x00));
-    wr32(payload, 0);
-    wr32(payload, 0);
-    wr32(payload, 0);
-    wr64(payload, captureSeq);
-    wr64(payload, frame.tExtUs);
     quint32 canIdFlags = frame.canId & 0x1FFFFFFFu;
     if (frame.ext) canIdFlags |= (1u << 29);
     if (frame.rtr) canIdFlags |= (1u << 30);
+
+    if (!frame.hasCaptureSeq) {
+        payload.reserve(int(kTypedCanRxSegmentLegacyHeaderSize +
+                            kTypedCanRxSegmentLegacyEntrySize));
+        wr64(payload, 0);
+        wr64(payload, 0);
+        wr16(payload, 1);
+        payload.append(char(kTypedCanRxSegmentLegacyEntrySize));
+        payload.append(char(0));
+        wr32(payload, 0);
+        wr32(payload, 0);
+        wr32(payload, 0);
+        wr64(payload, 0);
+        wr64(payload, frame.tExtUs);
+        wr32(payload, canIdFlags);
+        payload.append(char(frame.dlc & 0x0F));
+        payload.append(char(frame.bus));
+        payload.append(reinterpret_cast<const char*>(frame.data), 8);
+        return payload;
+    }
+
+    payload.reserve(int(kTypedCanRxSegmentCompactHeaderSize +
+                        kTypedCanRxSegmentCompactEntrySize));
+    const quint64 captureSeq = frame.captureSeq;
+    wr64(payload, 0);
+    wr64(payload, captureSeq);
+    wr16(payload, 1);
+    payload.append(char(kTypedCanRxSegmentCompactEntrySize));
+    payload.append(char(kTypedCanRxSegmentFlagCaptureSequenceValid |
+                        kTypedCanRxSegmentFlagCompactEntries));
+    wr32(payload, 0);
+    wr32(payload, 0);
+    payload.append(char(kTypedCanRxSegmentCompactSchema));
+    payload.append(char(kTypedCanRxSegmentCompactHeaderSize));
+    wr16(payload, 0);
+    wr64(payload, frame.tExtUs);
+    wr16(payload, 0);
+    wr32(payload, 0);
     wr32(payload, canIdFlags);
     payload.append(char(frame.dlc & 0x0F));
     payload.append(char(frame.bus));
@@ -215,13 +241,19 @@ QByteArray RawLedgerRuntime::makeSegmentPayloadFromFrame(const FrameRecord& fram
 }
 
 QByteArray RawLedgerRuntime::encodeBlock(const QByteArray& segmentPayload, quint16 typedSeq) {
+    TypedRecord segment;
+    segment.header.recordType = static_cast<quint8>(TypedRecordType::CanRxSegment);
+    segment.header.payloadLength = quint16(segmentPayload.size());
+    segment.payload = segmentPayload;
+    const auto decodedHeader = decodeTypedCanRxSegmentHeader(segment);
+
     QByteArray out;
     out.reserve(kRawLedgerBlockHeaderSize + segmentPayload.size());
     wr32(out, kRawLedgerMagic);
     wr16(out, kRawLedgerVersion);
     out.append(char(static_cast<quint8>(TypedRecordType::CanRxSegment)));
     out.append(char(0));
-    wr16(out, quint16(kTypedCanRxSegmentEntrySize));
+    wr16(out, decodedHeader ? quint16(decodedHeader->entrySize) : 0);
     wr16(out, quint16(segmentPayload.size()));
     wr16(out, typedSeq);
     wr16(out, 0);

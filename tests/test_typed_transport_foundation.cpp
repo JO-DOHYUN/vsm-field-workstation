@@ -55,11 +55,11 @@ QByteArray makeCanPayload(quint64 monoUs = 2222, quint8 bus = 0, quint32 total =
 
 QByteArray makeCanRxSegmentPayload() {
     QByteArray payload;
-    payload.reserve(kTypedCanRxSegmentHeaderSize + 2 * kTypedCanRxSegmentEntrySize);
+    payload.reserve(kTypedCanRxSegmentLegacyHeaderSize + 2 * kTypedCanRxSegmentLegacyEntrySize);
     appendU64(payload, 7);
     appendU64(payload, 100);
     appendU16(payload, 2);
-    payload.append(char(kTypedCanRxSegmentEntrySize));
+    payload.append(char(kTypedCanRxSegmentLegacyEntrySize));
     payload.append(char(0));
     appendU32(payload, 0);
     appendU32(payload, 0);
@@ -76,6 +76,40 @@ QByteArray makeCanRxSegmentPayload() {
     };
     appendEntry(100, 10'000, 0, 0x620, QByteArray::fromHex("5000000000000000"));
     appendEntry(101, 10'500, 1, 0x720, QByteArray::fromHex("4B01000000000000"));
+    return payload;
+}
+
+QByteArray makeCompactCanRxSegmentPayload() {
+    QByteArray payload;
+    payload.reserve(kTypedCanRxSegmentCompactHeaderSize + 2 * kTypedCanRxSegmentCompactEntrySize);
+    appendU64(payload, 8);
+    appendU64(payload, 500);
+    appendU16(payload, 2);
+    payload.append(char(kTypedCanRxSegmentCompactEntrySize));
+    payload.append(char(kTypedCanRxSegmentFlagCaptureSequenceValid |
+                        kTypedCanRxSegmentFlagCompactEntries));
+    appendU32(payload, 3);
+    appendU32(payload, 4);
+    payload.append(char(kTypedCanRxSegmentCompactSchema));
+    payload.append(char(kTypedCanRxSegmentCompactHeaderSize));
+    appendU16(payload, 0);
+    appendU64(payload, 100'000);
+
+    auto appendEntry = [&payload](quint16 captureDelta,
+                                  quint32 monoDelta,
+                                  quint8 bus,
+                                  quint32 idFlags,
+                                  const QByteArray& data) {
+        appendU16(payload, captureDelta);
+        appendU32(payload, monoDelta);
+        appendU32(payload, idFlags);
+        payload.append(char(data.size()));
+        payload.append(char(bus));
+        payload.append(data.left(8));
+        payload.append(QByteArray(8 - data.left(8).size(), char(0)));
+    };
+    appendEntry(0, 0, 0, 0x620, QByteArray::fromHex("5000000000000000"));
+    appendEntry(1, 750, 1, (1u << 29) | 0x1ABCDE, QByteArray::fromHex("4B01000000000000"));
     return payload;
 }
 
@@ -249,6 +283,8 @@ private slots:
         QCOMPARE(header->segmentSeq, quint64(7));
         QCOMPARE(header->firstCaptureSeq, quint64(100));
         QCOMPARE(header->frameCount, quint16(2));
+        QCOMPARE(header->schema, kTypedCanRxSegmentLegacySchema);
+        QCOMPARE(header->headerSize, quint8(kTypedCanRxSegmentLegacyHeaderSize));
         QCOMPARE(typedCanRxFrameCount(*record), quint64(2));
 
         const auto first = decodeTypedCanRxSegmentEntry(*record, 0);
@@ -262,6 +298,63 @@ private slots:
         QCOMPARE(second->canId, quint32(0x720));
         QCOMPARE(second->bus, quint8(1));
         QCOMPARE(QByteArray(reinterpret_cast<const char*>(second->data), 8), QByteArray::fromHex("4B01000000000000"));
+    }
+
+    void parsesCompactCanRxSegmentSchema2WithoutTruthLoss() {
+        const QByteArray frame = makeTypedFrame(TypedRecordType::CanRxSegment,
+                                                56,
+                                                makeCompactCanRxSegmentPayload());
+        TypedTransportParser parser;
+        parser.append(frame);
+
+        const auto record = parser.takeOne();
+        QVERIFY(record.has_value());
+        QString error;
+        const auto header = decodeTypedCanRxSegmentHeader(*record, &error);
+        QVERIFY2(header.has_value(), qPrintable(error));
+        QCOMPARE(header->segmentSeq, quint64(8));
+        QCOMPARE(header->firstCaptureSeq, quint64(500));
+        QCOMPARE(header->frameCount, quint16(2));
+        QCOMPARE(header->entrySize, quint8(kTypedCanRxSegmentCompactEntrySize));
+        QCOMPARE(header->schema, kTypedCanRxSegmentCompactSchema);
+        QCOMPARE(header->headerSize, quint8(kTypedCanRxSegmentCompactHeaderSize));
+        QCOMPARE(header->baseMonoUs, quint64(100'000));
+        QCOMPARE(header->droppedBeforeSegment, quint32(3));
+        QCOMPARE(header->fifoBeforeSegment, quint32(4));
+
+        const auto first = decodeTypedCanRxSegmentEntry(*record, 0, &error);
+        QVERIFY2(first.has_value(), qPrintable(error));
+        const auto second = decodeTypedCanRxSegmentEntry(*record, 1, &error);
+        QVERIFY2(second.has_value(), qPrintable(error));
+        QCOMPARE(first->captureSeq, quint64(500));
+        QCOMPARE(first->monoUs, quint64(100'000));
+        QCOMPARE(first->canId, quint32(0x620));
+        QCOMPARE(first->bus, quint8(0));
+        QCOMPARE(second->captureSeq, quint64(501));
+        QCOMPARE(second->monoUs, quint64(100'750));
+        QCOMPARE(second->canId, quint32(0x1ABCDE));
+        QVERIFY(second->extended);
+        QCOMPARE(second->bus, quint8(1));
+        QCOMPARE(QByteArray(reinterpret_cast<const char*>(second->data), 8),
+                 QByteArray::fromHex("4B01000000000000"));
+        QCOMPARE(typedRecordMonoUs(*record), quint64(100'000));
+        QCOMPARE(typedCanRxFrameCount(*record), quint64(2));
+    }
+
+    void rejectsUnknownCanRxSegmentSchemaWithDiagnostic() {
+        QByteArray payload = makeCompactCanRxSegmentPayload();
+        payload[28] = char(9);
+        TypedRecord record;
+        record.header.recordType = static_cast<quint8>(TypedRecordType::CanRxSegment);
+        record.header.payloadLength = quint16(payload.size());
+        record.payload = payload;
+
+        QString error;
+        QVERIFY(!decodeTypedCanRxSegmentHeader(record, &error).has_value());
+        QCOMPARE(error, QStringLiteral("CAN_RX_SEGMENT unsupported schema=9"));
+        QVERIFY(!decodeTypedCanRxSegmentEntry(record, 0, &error).has_value());
+        QCOMPARE(error, QStringLiteral("CAN_RX_SEGMENT unsupported schema=9"));
+        QCOMPARE(typedCanRxFrameCount(record), quint64(0));
     }
 
     void resynchronizesAfterGarbageAndBadCrc() {

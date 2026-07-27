@@ -336,7 +336,7 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
     out.capabilityFirstSeen = result.capabilityFirstSeen;
     out.capabilityElapsedMs = result.capabilityElapsedMs;
     out.capabilityBytes = result.capabilityBytes;
-    out.errors = result.errors;
+    out.errors += result.errors;
     out.typedStatusDue = result.statusDue;
     out.typedStatus = result.status;
     updateStatusViews(out, out);
@@ -346,6 +346,24 @@ CaptureCoreRuntime::Result CaptureCoreRuntime::ingestBlocks(const QVector<DrainB
 void CaptureCoreRuntime::ingestRecordForViews(const TypedRecord& record,
                                               QVector<CanRxLite>& liveLatestFrames,
                                               Result& result) {
+    if (record.isType(TypedRecordType::CanRxSegment)) {
+        QString segmentError;
+        const auto segmentHeader = decodeTypedCanRxSegmentHeader(record, &segmentError);
+        if (!segmentHeader) {
+            result.errors.push_back(QStringLiteral("CAN_RX_SEGMENT rejected: %1").arg(segmentError));
+            return;
+        }
+        for (qsizetype index = 0; index < segmentHeader->frameCount; ++index) {
+            if (!decodeTypedCanRxSegmentEntry(record, index, &segmentError)) {
+                result.errors.push_back(
+                    QStringLiteral("CAN_RX_SEGMENT rejected at entry %1: %2")
+                        .arg(index)
+                        .arg(segmentError));
+                return;
+            }
+        }
+    }
+
     if (m_options.emitCanRxFrames) {
         const qsizetype before = result.analysisFrames.frames.size();
         appendCanRxFrames(record, result.analysisFrames.frames);

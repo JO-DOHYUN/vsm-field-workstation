@@ -1,6 +1,7 @@
 #include "TypedRecords.h"
 
 #include <cstring>
+#include <limits>
 
 namespace {
 
@@ -14,6 +15,10 @@ QByteArray typedPayloadView(const TypedRecord& record) {
         return record.frameBytes.mid(9, payloadLength);
     }
     return record.payload;
+}
+
+void setSegmentDecodeError(QString* error, const QString& message) {
+    if (error) *error = message;
 }
 
 } // namespace
@@ -89,10 +94,18 @@ std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record) {
     return out;
 }
 
-std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record) {
-    if (!record.isType(TypedRecordType::CanRxSegment)) return std::nullopt;
+std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record,
+                                                                    QString* error) {
+    if (error) error->clear();
+    if (!record.isType(TypedRecordType::CanRxSegment)) {
+        setSegmentDecodeError(error, QStringLiteral("record is not CAN_RX_SEGMENT"));
+        return std::nullopt;
+    }
     const QByteArray payload = typedPayloadView(record);
-    if (payload.size() < kTypedCanRxSegmentHeaderSize) return std::nullopt;
+    if (payload.size() < kTypedCanRxSegmentLegacyHeaderSize) {
+        setSegmentDecodeError(error, QStringLiteral("CAN_RX_SEGMENT header truncated"));
+        return std::nullopt;
+    }
 
     const auto* p = reinterpret_cast<const quint8*>(payload.constData());
     TypedCanRxSegmentHeader out;
@@ -103,32 +116,123 @@ std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const Typed
     out.flags = p[19];
     out.droppedBeforeSegment = typedReadU32Le(p + 20);
     out.fifoBeforeSegment = typedReadU32Le(p + 24);
-    if (out.entrySize < kTypedCanRxSegmentEntrySize) return std::nullopt;
-    const qsizetype needed = kTypedCanRxSegmentHeaderSize + qsizetype(out.frameCount) * qsizetype(out.entrySize);
-    if (needed > payload.size()) return std::nullopt;
+
+    out.schema = p[28];
+    if (out.schema == kTypedCanRxSegmentLegacySchema) {
+        out.headerSize = quint8(kTypedCanRxSegmentLegacyHeaderSize);
+        if (out.entrySize != kTypedCanRxSegmentLegacyEntrySize) {
+            setSegmentDecodeError(error,
+                                  QStringLiteral("CAN_RX_SEGMENT legacy entry_size=%1, expected %2")
+                                      .arg(out.entrySize)
+                                      .arg(kTypedCanRxSegmentLegacyEntrySize));
+            return std::nullopt;
+        }
+    } else if (out.schema == kTypedCanRxSegmentCompactSchema) {
+        if (payload.size() < kTypedCanRxSegmentCompactHeaderSize) {
+            setSegmentDecodeError(error, QStringLiteral("CAN_RX_SEGMENT compact header truncated"));
+            return std::nullopt;
+        }
+        const quint8 requiredFlags = kTypedCanRxSegmentFlagCaptureSequenceValid |
+            kTypedCanRxSegmentFlagCompactEntries;
+        if ((out.flags & requiredFlags) != requiredFlags) {
+            setSegmentDecodeError(error,
+                                  QStringLiteral("CAN_RX_SEGMENT schema 2 flags=0x%1 missing 0x%2")
+                                      .arg(out.flags, 2, 16, QLatin1Char('0'))
+                                      .arg(requiredFlags, 2, 16, QLatin1Char('0')));
+            return std::nullopt;
+        }
+        out.headerSize = p[29];
+        if (out.headerSize != kTypedCanRxSegmentCompactHeaderSize) {
+            setSegmentDecodeError(error,
+                                  QStringLiteral("CAN_RX_SEGMENT schema 2 header_size=%1, expected %2")
+                                      .arg(out.headerSize)
+                                      .arg(kTypedCanRxSegmentCompactHeaderSize));
+            return std::nullopt;
+        }
+        if (out.entrySize != kTypedCanRxSegmentCompactEntrySize) {
+            setSegmentDecodeError(error,
+                                  QStringLiteral("CAN_RX_SEGMENT schema 2 entry_size=%1, expected %2")
+                                      .arg(out.entrySize)
+                                      .arg(kTypedCanRxSegmentCompactEntrySize));
+            return std::nullopt;
+        }
+        if (out.frameCount > kTypedCanRxSegmentCompactMaxFrames) {
+            setSegmentDecodeError(error,
+                                  QStringLiteral("CAN_RX_SEGMENT schema 2 frame_count=%1 exceeds %2")
+                                      .arg(out.frameCount)
+                                      .arg(kTypedCanRxSegmentCompactMaxFrames));
+            return std::nullopt;
+        }
+        out.baseMonoUs = typedReadU64Le(p + 32);
+    } else {
+        setSegmentDecodeError(error,
+                              QStringLiteral("CAN_RX_SEGMENT unsupported schema=%1").arg(out.schema));
+        return std::nullopt;
+    }
+
+    const qsizetype needed = qsizetype(out.headerSize) +
+        qsizetype(out.frameCount) * qsizetype(out.entrySize);
+    if (needed != payload.size()) {
+        setSegmentDecodeError(error,
+                              QStringLiteral("CAN_RX_SEGMENT payload_size=%1, expected %2")
+                                  .arg(payload.size())
+                                  .arg(needed));
+        return std::nullopt;
+    }
     return out;
 }
 
-std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record, qsizetype frameIndex) {
-    const auto header = decodeTypedCanRxSegmentHeader(record);
-    if (!header || frameIndex < 0 || frameIndex >= header->frameCount) return std::nullopt;
+std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record,
+                                                                  qsizetype frameIndex,
+                                                                  QString* error) {
+    if (error) error->clear();
+    const auto header = decodeTypedCanRxSegmentHeader(record, error);
+    if (!header) return std::nullopt;
+    if (frameIndex < 0 || frameIndex >= header->frameCount) {
+        setSegmentDecodeError(error,
+                              QStringLiteral("CAN_RX_SEGMENT frame_index=%1 out of range").arg(frameIndex));
+        return std::nullopt;
+    }
 
-    const qsizetype offset = kTypedCanRxSegmentHeaderSize + frameIndex * qsizetype(header->entrySize);
+    const qsizetype offset = qsizetype(header->headerSize) + frameIndex * qsizetype(header->entrySize);
     const QByteArray payload = typedPayloadView(record);
-    if (offset + kTypedCanRxSegmentEntrySize > payload.size()) return std::nullopt;
+    if (offset + header->entrySize > payload.size()) {
+        setSegmentDecodeError(error, QStringLiteral("CAN_RX_SEGMENT entry truncated"));
+        return std::nullopt;
+    }
     const auto* p = reinterpret_cast<const quint8*>(payload.constData() + offset);
 
     TypedCanRxSegmentEntry out;
-    out.captureSeq = typedReadU64Le(p + 0);
-    out.monoUs = typedReadU64Le(p + 8);
-    out.canIdFlags = typedReadU32Le(p + 16);
+    if (header->schema == kTypedCanRxSegmentLegacySchema) {
+        out.captureSeq = typedReadU64Le(p + 0);
+        out.monoUs = typedReadU64Le(p + 8);
+        out.canIdFlags = typedReadU32Le(p + 16);
+        out.dlc = p[20] & 0x0F;
+        out.bus = p[21];
+        std::memcpy(out.data, p + 22, 8);
+    } else {
+        const quint64 captureDelta = typedReadU16Le(p + 0);
+        const quint64 monoDelta = typedReadU32Le(p + 2);
+        if (captureDelta > std::numeric_limits<quint64>::max() - header->firstCaptureSeq ||
+            monoDelta > std::numeric_limits<quint64>::max() - header->baseMonoUs) {
+            setSegmentDecodeError(error, QStringLiteral("CAN_RX_SEGMENT schema 2 delta overflow"));
+            return std::nullopt;
+        }
+        out.captureSeq = header->firstCaptureSeq + captureDelta;
+        out.monoUs = header->baseMonoUs + monoDelta;
+        out.canIdFlags = typedReadU32Le(p + 6);
+        out.dlc = p[10] & 0x0F;
+        out.bus = p[11];
+        std::memcpy(out.data, p + 12, 8);
+    }
     out.canId = out.canIdFlags & 0x1FFFFFFFu;
     out.extended = ((out.canIdFlags >> 29) & 0x01u) != 0;
     out.rtr = ((out.canIdFlags >> 30) & 0x01u) != 0;
-    out.dlc = p[20] & 0x0F;
-    if (out.dlc > 8) return std::nullopt;
-    out.bus = p[21];
-    std::memcpy(out.data, p + 22, 8);
+    if (out.dlc > 8) {
+        setSegmentDecodeError(error,
+                              QStringLiteral("CAN_RX_SEGMENT dlc=%1 exceeds 8").arg(out.dlc));
+        return std::nullopt;
+    }
     return out;
 }
 

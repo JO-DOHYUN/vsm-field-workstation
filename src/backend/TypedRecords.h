@@ -14,8 +14,15 @@ inline constexpr qsizetype kTypedTransportHeaderSize = 7;
 inline constexpr qsizetype kTypedTransportFrameOverhead = 2 + kTypedTransportHeaderSize + 2;
 inline constexpr quint16 kTypedTransportMaxPayloadLength = 4096;
 inline constexpr qsizetype kTypedCanRawPayloadSize = 30;
-inline constexpr qsizetype kTypedCanRxSegmentHeaderSize = 32;
-inline constexpr qsizetype kTypedCanRxSegmentEntrySize = 30;
+inline constexpr quint8 kTypedCanRxSegmentLegacySchema = 0;
+inline constexpr qsizetype kTypedCanRxSegmentLegacyHeaderSize = 32;
+inline constexpr qsizetype kTypedCanRxSegmentLegacyEntrySize = 30;
+inline constexpr quint8 kTypedCanRxSegmentCompactSchema = 2;
+inline constexpr qsizetype kTypedCanRxSegmentCompactHeaderSize = 40;
+inline constexpr qsizetype kTypedCanRxSegmentCompactEntrySize = 20;
+inline constexpr quint16 kTypedCanRxSegmentCompactMaxFrames = 23;
+inline constexpr quint8 kTypedCanRxSegmentFlagCaptureSequenceValid = (1u << 0);
+inline constexpr quint8 kTypedCanRxSegmentFlagCompactEntries = (1u << 1);
 inline constexpr qsizetype kTypedAdcSamplePayloadSize = 44;
 inline constexpr qsizetype kTypedControlAckPayloadSize = 28;
 inline constexpr qsizetype kTypedBoardEventPayloadSize = 16;
@@ -101,6 +108,9 @@ struct TypedCanRxSegmentHeader {
     quint8 flags = 0;
     quint32 droppedBeforeSegment = 0;
     quint32 fifoBeforeSegment = 0;
+    quint8 schema = kTypedCanRxSegmentLegacySchema;
+    quint8 headerSize = quint8(kTypedCanRxSegmentLegacyHeaderSize);
+    quint64 baseMonoUs = 0;
 };
 
 struct TypedCanRxSegmentEntry {
@@ -297,8 +307,11 @@ QString typedRecordTypeName(quint8 recordType);
 quint64 typedRecordMonoUs(const TypedRecord& record);
 
 std::optional<TypedCanRawRecord> decodeTypedCanRaw(const TypedRecord& record);
-std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record);
-std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record, qsizetype frameIndex);
+std::optional<TypedCanRxSegmentHeader> decodeTypedCanRxSegmentHeader(const TypedRecord& record,
+                                                                    QString* error = nullptr);
+std::optional<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntry(const TypedRecord& record,
+                                                                  qsizetype frameIndex,
+                                                                  QString* error = nullptr);
 QVector<TypedCanRxSegmentEntry> decodeTypedCanRxSegmentEntries(const TypedRecord& record);
 quint64 typedCanRxFrameCount(const TypedRecord& record);
 std::optional<TypedAdcSampleRecord> decodeTypedAdcSample(const TypedRecord& record);

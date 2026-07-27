@@ -648,7 +648,7 @@ void SerialWorker::queueRawLedgerFrames(const FrameRecordList& frames) {
     if (frames.isEmpty()) return;
     CanMonitorPerf::ScopedProbe probe("ledger.queue_frames", frames.size(), 2000);
 
-    const quint64 incomingBytes = quint64(frames.size()) * quint64(kTypedCanRxSegmentHeaderSize + kTypedCanRxSegmentEntrySize + kTypedTransportFrameOverhead);
+    const quint64 incomingBytes = quint64(frames.size()) * quint64(sizeof(FrameRecord));
     if (m_pendingRawLedgerBytes + incomingBytes > kRawLedgerHandoffMaxBytes) {
         m_rawLedgerHandoffOverrunBytes += incomingBytes;
         m_drainEventTelemetry.rawLedgerHandoffOverrunBytes = m_rawLedgerHandoffOverrunBytes;
@@ -683,7 +683,7 @@ void SerialWorker::flushQueuedRawLedgerRecords(bool force) {
     FrameRecordList out;
     const int takeCount = std::min<int>(m_pendingRawLedgerFrames.size(), kRawLedgerMaxRecordsPerFlush);
     out.reserve(takeCount);
-    const quint64 bytes = quint64(takeCount) * quint64(kTypedCanRxSegmentHeaderSize + kTypedCanRxSegmentEntrySize + kTypedTransportFrameOverhead);
+    const quint64 bytes = quint64(takeCount) * quint64(sizeof(FrameRecord));
     for (int index = 0; index < takeCount; ++index) out.push_back(m_pendingRawLedgerFrames.at(index));
     m_pendingRawLedgerFrames.erase(m_pendingRawLedgerFrames.begin(), m_pendingRawLedgerFrames.begin() + takeCount);
     m_pendingRawLedgerBytes = bytes > m_pendingRawLedgerBytes ? 0 : m_pendingRawLedgerBytes - bytes;

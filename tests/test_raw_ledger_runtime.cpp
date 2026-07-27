@@ -36,7 +36,7 @@ TypedRecord makeSegmentRecord() {
     appendU64(payload, 3);
     appendU64(payload, 900);
     appendU16(payload, 2);
-    payload.append(char(kTypedCanRxSegmentEntrySize));
+    payload.append(char(kTypedCanRxSegmentLegacyEntrySize));
     payload.append(char(0x01));
     appendU32(payload, 0);
     appendU32(payload, 0);

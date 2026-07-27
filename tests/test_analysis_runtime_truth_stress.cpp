@@ -137,7 +137,7 @@ TypedRecord makeSegmentRecord(quint16 seq, const FrameRecordList& frames) {
     appendU64(payload, seq);
     appendU64(payload, frames.isEmpty() ? 0 : frames.first().captureSeq);
     appendU16(payload, quint16(frames.size()));
-    payload.append(char(kTypedCanRxSegmentEntrySize));
+    payload.append(char(kTypedCanRxSegmentLegacyEntrySize));
     payload.append(char(0x01));
     appendU32(payload, 0);
     appendU32(payload, 0);
