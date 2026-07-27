@@ -7,6 +7,11 @@ on:
     paths:
       - 'tools/tablet-usb-diagnostic/**'
       - '.github/workflows/build-tablet-usb-diagnostic.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tools/tablet-usb-diagnostic/**'
+      - '.github/workflows/build-tablet-usb-diagnostic.yml'
   workflow_dispatch:
 
 permissions:
