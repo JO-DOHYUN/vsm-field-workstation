@@ -1,8 +1,9 @@
 name: Build Tablet USB Diagnostic APK
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - 'codex/tablet-usb-diagnostic-apk'
     paths:
       - 'tools/tablet-usb-diagnostic/**'
       - '.github/workflows/build-tablet-usb-diagnostic.yml'
